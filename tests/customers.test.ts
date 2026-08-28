@@ -6,44 +6,28 @@ import { TenantContext } from '../src/types/contracts';
 
 class MemoryCustomerRepository implements CustomerRepository {
   private readonly items = new Map<string, Customer>();
-
-  listByTenant(tenantId: string): Promise<Customer[]> {
-    return Promise.resolve([...this.items.values()].filter((item) => item.tenantId === tenantId));
-  }
-
-  findById(tenantId: string, id: string): Promise<Customer | null> {
-    const item = this.items.get(id);
-    return Promise.resolve(item?.tenantId === tenantId ? item : null);
-  }
-
+  listByTenant(tenantId: string): Promise<Customer[]> { return Promise.resolve([...this.items.values()].filter((item) => item.tenantId === tenantId)); }
+  findById(tenantId: string, id: string): Promise<Customer | null> { const item = this.items.get(id); return Promise.resolve(item?.tenantId === tenantId ? item : null); }
   findByExternalIdentity(tenantId: string, identity: ExternalIdentity): Promise<Customer | null> {
     const source = identity.source.toLowerCase();
     const value = identity.value.toLowerCase();
     return Promise.resolve([...this.items.values()].find((item) => item.tenantId === tenantId && item.externalIdentities.some((candidate) => candidate.source.toLowerCase() === source && candidate.value.toLowerCase() === value)) ?? null);
   }
-
   create(customer: Customer): Promise<Customer> { this.items.set(customer.id, customer); return Promise.resolve(customer); }
   update(customer: Customer): Promise<Customer> { this.items.set(customer.id, customer); return Promise.resolve(customer); }
 }
 
 class MemoryCustomerMemoryRepository implements CustomerMemoryRepository {
   private readonly memories = new Map<string, CustomerMemory>();
-  findByCustomer(tenantId: string, customerId: string): Promise<CustomerMemory | null> {
-    return Promise.resolve(this.memories.get(`${tenantId}:${customerId}`) ?? null);
-  }
-  upsert(memory: CustomerMemory): Promise<CustomerMemory> {
-    this.memories.set(`${memory.tenantId}:${memory.customerId}`, memory);
-    return Promise.resolve(memory);
-  }
+  findByCustomer(tenantId: string, customerId: string): Promise<CustomerMemory | null> { return Promise.resolve(this.memories.get(`${tenantId}:${customerId}`) ?? null); }
+  upsert(memory: CustomerMemory): Promise<CustomerMemory> { this.memories.set(`${memory.tenantId}:${memory.customerId}`, memory); return Promise.resolve(memory); }
 }
 
 function context(tenantId: string): TenantContext {
   return { tenantId, userId: `user-${tenantId}`, role: 'OWNER', requestId: `req-${tenantId}` };
 }
 
-function service() {
-  return new CustomerService(new MemoryCustomerRepository(), new MemoryCustomerMemoryRepository());
-}
+function service() { return new CustomerService(new MemoryCustomerRepository(), new MemoryCustomerMemoryRepository()); }
 
 describe('BLK-050: Customers', () => {
   it('creates and lists customers only inside the current tenant', async () => {
@@ -73,10 +57,10 @@ describe('BLK-050: Customers', () => {
     const customers = service();
     const created = await customers.create(context('tenant-a'), { name: 'Cliente' });
     const memory = await customers.updateMemory(context('tenant-a'), created.id, {
-      summary: 'Interessado em automação comercial.',
+      summary: 'Interested in commercial automation.',
       interests: ['WhatsApp', 'WhatsApp', 'CRM'],
       productIds: ['prod-1'],
-      objections: ['Preço'],
+      objections: ['price'],
       lastContactAt: '2026-08-28T18:00:00-03:00',
     });
     expect(memory.customerId).toBe(created.id);
@@ -88,8 +72,8 @@ describe('BLK-050: Customers', () => {
 
   it('validates minimized contact data and memory limits', async () => {
     const customers = service();
-    expect(() => customers.create(context('tenant-a'), { name: 'A', phone: 'abc' })).toThrowError();
-    expect(() => customers.create(context('tenant-a'), { name: 'A', email: 'invalid' })).toThrowError();
+    await expect(customers.create(context('tenant-a'), { name: 'A', phone: 'abc' })).rejects.toMatchObject({ code: 'CUSTOMER_PHONE_INVALID' });
+    await expect(customers.create(context('tenant-a'), { name: 'A', email: 'invalid' })).rejects.toMatchObject({ code: 'CUSTOMER_EMAIL_INVALID' });
     const created = await customers.create(context('tenant-a'), { name: 'A' });
     await expect(customers.updateMemory(context('tenant-a'), created.id, { summary: 'x'.repeat(4001) })).rejects.toMatchObject({ code: 'CUSTOMER_MEMORY_SUMMARY_INVALID' });
   });
