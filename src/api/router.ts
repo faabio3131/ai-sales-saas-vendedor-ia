@@ -1,18 +1,21 @@
 import { Router } from 'express';
+import { authenticationMiddleware } from '../auth/middleware';
 import { createAuthRouter } from '../auth/routes';
+import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
+import { createTenancyRouter } from '../tenancy/routes';
 import { healthCheckHandler } from './routes/health';
-import { tenantContextMiddleware } from './middleware/tenantContext';
 
 export function createApiRouter(): Router {
   const router = Router();
 
-  // Authentication is identity-scoped only in BLK-020. Tenant authorization begins in BLK-030.
+  // Public identity/session endpoints.
   router.use('/auth', createAuthRouter());
 
-  // Preliminary tenant context boundary; grants no authority until BLK-030.
-  router.use(tenantContextMiddleware);
-
+  // Public operational health endpoint.
   router.get('/health', healthCheckHandler);
+
+  // BLK-030 protected boundary: authenticated identity + verified tenant membership.
+  router.use('/tenancy', authenticationMiddleware, tenantAuthorizationMiddleware, createTenancyRouter());
 
   return router;
 }
