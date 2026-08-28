@@ -24,7 +24,7 @@ interface HealthStatus {
   governance: {
     canonicalDocs: string;
     authority: string;
-    multitenancyGuaranteed: boolean;
+    tenantBoundaryPrepared: boolean;
     secretsServerSideOnly: boolean;
   };
   system?: {
@@ -78,7 +78,6 @@ export const FoundationView: React.FC = () => {
 
   return (
     <div id="foundation-view" className="max-w-6xl mx-auto px-4 py-8 space-y-8">
-      {/* Header */}
       <header id="foundation-header" className="border-b border-slate-800 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
@@ -106,7 +105,6 @@ export const FoundationView: React.FC = () => {
         </div>
       </header>
 
-      {/* Health Check Status Card */}
       <section id="system-status-card" className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -143,9 +141,9 @@ export const FoundationView: React.FC = () => {
                 </span>
               </div>
               <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
-                <span className="text-xs text-slate-500 block">Multitenancy Guarantee</span>
+                <span className="text-xs text-slate-500 block">Tenant Boundary</span>
                 <span className="text-sky-400 font-semibold text-base mt-0.5 block">
-                  {health.governance.multitenancyGuaranteed ? 'TenantContext Enforced' : 'Unchecked'}
+                  {health.governance.tenantBoundaryPrepared ? 'TenantContext Prepared' : 'Unchecked'}
                 </span>
               </div>
               <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
@@ -171,9 +169,7 @@ export const FoundationView: React.FC = () => {
         )}
       </section>
 
-      {/* Architectural Layers & Directory Structure */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Architecture Layers */}
         <section id="architecture-layers" className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Layers className="w-5 h-5 text-indigo-400" />
@@ -194,7 +190,6 @@ export const FoundationView: React.FC = () => {
           </div>
         </section>
 
-        {/* Governance Matrix */}
         <section id="governance-matrix" className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-amber-400" />
@@ -221,13 +216,12 @@ export const FoundationView: React.FC = () => {
               Hierarquia de Decisão:
             </p>
             <p className="mt-1 text-slate-400">
-              1. Diretor Humano &rarr; 2. Arquiteto/Engenheiro Sênior &rarr; 3. Executor Técnico (Google AI Studio Build).
+              1. Diretor Humano &rarr; 2. ChatGPT Arquiteto/Engenheiro/Executor &rarr; 3. GitHub como fonte canônica do código.
             </p>
           </div>
         </section>
       </div>
 
-      {/* Operational Protocol & Definition of Done */}
       <footer id="foundation-footer" className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-5 text-xs text-slate-400 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Cpu className="w-4 h-4 text-slate-400" />
