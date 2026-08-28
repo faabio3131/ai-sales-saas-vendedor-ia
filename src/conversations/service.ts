@@ -123,6 +123,8 @@ export class ConversationService {
       const existing = await this.messages.findByExternalMessageId(conversation.tenantId, externalMessageId);
       if (existing) return existing;
     }
+
+    const priorMessages = await this.messages.listByConversation(conversation.tenantId, conversation.id);
     const occurredAt = normalizeTimestamp(input.occurredAt);
     const message = await this.messages.create({
       id: randomUUID(),
@@ -138,9 +140,12 @@ export class ConversationService {
       occurredAt,
       idempotencyKey: input.idempotencyKey?.trim() || undefined,
     });
+    const lastMessageAt = priorMessages.length === 0
+      ? occurredAt
+      : (occurredAt > conversation.lastMessageAt ? occurredAt : conversation.lastMessageAt);
     await this.conversations.update({
       ...conversation,
-      lastMessageAt: occurredAt > conversation.lastMessageAt ? occurredAt : conversation.lastMessageAt,
+      lastMessageAt,
       updatedAt: new Date().toISOString(),
     });
     return message;
