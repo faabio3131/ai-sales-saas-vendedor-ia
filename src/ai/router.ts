@@ -34,7 +34,17 @@ export class AIRouter implements AIRouterInterface {
     }
 
     const resolved = await this.resolveProvider(input.capability);
-    if (!resolved.ok || !resolved.data) return resolved as Result<AIResponse>;
+    if (!resolved.ok || !resolved.data) {
+      return {
+        ok: false,
+        error: resolved.error ?? {
+          category: 'PROVIDER',
+          code: 'AI_PROVIDER_UNAVAILABLE',
+          message: 'AI provider is unavailable.',
+          retryable: false,
+        },
+      };
+    }
     const provider = this.providers.get(resolved.data);
     if (!provider) return providerFailure('AI_PROVIDER_UNAVAILABLE', 'AI provider is unavailable.');
 
