@@ -2,23 +2,23 @@ import { describe, it, expect, vi } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
 import { TenantContext, Result, AppErrorCategory } from '../src/types/contracts';
 import { loadServerConfig } from '../src/infrastructure/config';
-import { 
-  ApplicationError, 
-  mapCategoryToStatusCode, 
-  createSuccessResult, 
-  createErrorResult 
+import {
+  ApplicationError,
+  mapCategoryToStatusCode,
+  createSuccessResult,
+  createErrorResult,
 } from '../src/infrastructure/errors';
 import { isValidTenantContext, createTenantContext } from '../src/tenancy/context';
 import { errorHandler } from '../src/api/middleware/errorHandler';
 import { healthCheckHandler } from '../src/api/routes/health';
 
-describe('BLK-010: Application Foundation Tests', () => {
+describe('Application Foundation regression tests', () => {
   describe('Server Configuration Module', () => {
     it('should parse default configuration safely when no env variables are set', () => {
       const config = loadServerConfig({});
       expect(config.port).toBe(3000);
       expect(config.nodeEnv).toBe('development');
-      expect(config.block).toBe('BLK-020');
+      expect(config.block).toBe('BLK-030');
       expect(config.serviceName).toContain('Vendedor IA');
     });
 
@@ -128,7 +128,7 @@ describe('BLK-010: Application Foundation Tests', () => {
       expect(created.requestId).toBe('req-custom');
     });
 
-    it('should expose tenant boundary preparation without claiming guaranteed multitenancy', () => {
+    it('should report enforced tenant isolation without reviving obsolete claims', () => {
       const json = vi.fn();
       const status = vi.fn(() => ({ json }));
       const res = { status } as unknown as Response;
@@ -141,6 +141,7 @@ describe('BLK-010: Application Foundation Tests', () => {
       };
 
       expect(payload.governance.tenantBoundaryPrepared).toBe(true);
+      expect(payload.governance.tenantIsolationEnforced).toBe(true);
       expect(payload.governance).not.toHaveProperty('multitenancyGuaranteed');
     });
   });
