@@ -1,5 +1,5 @@
 /**
- * Tenancy Layer placeholder — Tenant isolation & TenantContext enforcement.
- * Reserved for future authorized blocks (BLK-030+).
+ * Tenancy Layer — Tenant Context models, boundaries and helpers.
  */
 export * from '../types/contracts';
+export * from './context';

@@ -1,33 +1,23 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { createApiRouter } from './src/api/router';
+import { errorHandler } from './src/api/middleware/errorHandler';
+import { serverConfig } from './src/infrastructure/config';
 
-async function startServer() {
+export async function createApp() {
   const app = express();
-  const PORT = 3000;
 
   app.use(express.json());
 
-  // Technical Health Check & Foundation status endpoint
-  app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({
-      status: 'ok',
-      block: 'BLK-000',
-      foundation: 'REPOSITORY_GOVERNANCE_FOUNDATION',
-      service: 'AI Sales SaaS — Vendedor IA Engine',
-      environment: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString(),
-      governance: {
-        canonicalDocs: '/docs',
-        authority: '00_AUTHORITY_AND_EXECUTION_RULES.md',
-        multitenancyGuaranteed: true,
-        secretsServerSideOnly: true,
-      },
-    });
-  });
+  // Mount central API router
+  app.use('/api', createApiRouter());
+
+  // Error handling middleware for API routes
+  app.use(errorHandler);
 
   // Vite development middleware or static production serving
-  if (process.env.NODE_ENV !== 'production') {
+  if (serverConfig.nodeEnv !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -41,9 +31,21 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[BLK-000] Foundation Server running on http://0.0.0.0:${PORT}`);
-  });
+  return app;
 }
 
-startServer();
+export async function startServer() {
+  const app = await createApp();
+  const PORT = serverConfig.port;
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[${serverConfig.block}] Application Foundation Server running on http://0.0.0.0:${PORT}`);
+  });
+
+  return server;
+}
+
+// Auto-start when executed directly
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}

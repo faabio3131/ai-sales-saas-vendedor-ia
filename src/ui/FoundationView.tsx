@@ -8,7 +8,8 @@ import {
   Cpu, 
   Activity,
   AlertTriangle,
-  BookOpen
+  BookOpen,
+  Server
 } from 'lucide-react';
 
 interface HealthStatus {
@@ -16,13 +17,19 @@ interface HealthStatus {
   block: string;
   foundation: string;
   service: string;
+  version: string;
   environment: string;
+  uptimeSeconds?: number;
   timestamp: string;
   governance: {
     canonicalDocs: string;
     authority: string;
     multitenancyGuaranteed: boolean;
     secretsServerSideOnly: boolean;
+  };
+  system?: {
+    nodeVersion: string;
+    rssMemoryMb: number;
   };
 }
 
@@ -49,12 +56,12 @@ export const FoundationView: React.FC = () => {
 
   const architectureLayers = [
     { name: '1. Presentation Layer', desc: 'Web App / PWA Mobile First UI (React + Tailwind)', status: 'Foundation Active' },
-    { name: '2. Application Layer', desc: 'Use Cases, Orquestração e Handlers', status: 'Ready for BLK-010' },
-    { name: '3. Domain Layer', desc: 'Regras Comerciais, Entidades e State Machines', status: 'Ready for BLK-010' },
+    { name: '2. Application Layer', desc: 'Use Cases, Orquestração e Handlers', status: 'Ready for BLK-020' },
+    { name: '3. Domain Layer', desc: 'Regras Comerciais, Entidades e State Machines', status: 'Contracts Defined' },
     { name: '4. AI Layer', desc: 'Universal AI Provider Interface & AI Router', status: 'Contracts Defined' },
     { name: '5. Automation Layer', desc: 'Events, Jobs, Timers, Follow-ups e Recovery', status: 'Planned' },
     { name: '6. Integration Layer', desc: 'WhatsApp, Pagamentos (Pix), Canais e Webhooks', status: 'Planned' },
-    { name: '7. Infrastructure Layer', desc: 'Node.js server-side, Repositories, Security & Secrets', status: 'Foundation Active' },
+    { name: '7. Infrastructure Layer', desc: 'Node.js server-side, Config, Error Handler & Telemetry', status: 'Foundation Active' },
   ];
 
   const governanceDocuments = [
@@ -77,7 +84,7 @@ export const FoundationView: React.FC = () => {
           <div className="flex items-center gap-3">
             <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              BLK-000 Foundation Active
+              BLK-010 Application Foundation Active
             </span>
             <span className="text-slate-400 text-xs tracking-wide uppercase font-mono">v1.0 Ready</span>
           </div>
@@ -85,7 +92,7 @@ export const FoundationView: React.FC = () => {
             AI Sales SaaS — Vendedor IA
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Repositório e Fundação Técnica de Governança
+            Application Foundation & Repositório Estruturado
           </p>
         </div>
 
@@ -127,25 +134,39 @@ export const FoundationView: React.FC = () => {
         )}
 
         {health && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-mono">
-            <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
-              <span className="text-xs text-slate-500 block">Service Status</span>
-              <span className="text-emerald-400 font-semibold text-base mt-0.5 block flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" /> {health.status.toUpperCase()} ({health.block})
-              </span>
+          <div className="space-y-4 font-mono">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
+                <span className="text-xs text-slate-500 block">Service Status</span>
+                <span className="text-emerald-400 font-semibold text-base mt-0.5 block flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" /> {health.status.toUpperCase()} ({health.block})
+                </span>
+              </div>
+              <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
+                <span className="text-xs text-slate-500 block">Multitenancy Guarantee</span>
+                <span className="text-sky-400 font-semibold text-base mt-0.5 block">
+                  {health.governance.multitenancyGuaranteed ? 'TenantContext Enforced' : 'Unchecked'}
+                </span>
+              </div>
+              <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
+                <span className="text-xs text-slate-500 block">Secrets Security</span>
+                <span className="text-amber-400 font-semibold text-base mt-0.5 block">
+                  {health.governance.secretsServerSideOnly ? 'Server-Side Only' : 'Exposed'}
+                </span>
+              </div>
             </div>
-            <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
-              <span className="text-xs text-slate-500 block">Multitenancy Guarantee</span>
-              <span className="text-sky-400 font-semibold text-base mt-0.5 block">
-                {health.governance.multitenancyGuaranteed ? 'TenantContext Enforced' : 'Unchecked'}
-              </span>
-            </div>
-            <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg">
-              <span className="text-xs text-slate-500 block">Secrets Security</span>
-              <span className="text-amber-400 font-semibold text-base mt-0.5 block">
-                {health.governance.secretsServerSideOnly ? 'Server-Side Only' : 'Exposed'}
-              </span>
-            </div>
+
+            {health.system && (
+              <div className="bg-slate-950/50 border border-slate-800/60 p-3 rounded-lg flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
+                <span className="flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-slate-500" />
+                  Node: <strong className="text-slate-300">{health.system.nodeVersion}</strong>
+                </span>
+                <span>Uptime: <strong className="text-slate-300">{health.uptimeSeconds}s</strong></span>
+                <span>Memória RSS: <strong className="text-slate-300">{health.system.rssMemoryMb} MB</strong></span>
+                <span>Ambiente: <strong className="text-slate-300">{health.environment}</strong></span>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -210,7 +231,7 @@ export const FoundationView: React.FC = () => {
       <footer id="foundation-footer" className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-5 text-xs text-slate-400 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Cpu className="w-4 h-4 text-slate-400" />
-          <span>Status do Bloco: <strong>BLK-000 — Repository & Governance Foundation Concluído</strong></span>
+          <span>Status do Bloco: <strong>BLK-010 — Application Foundation Consolidado</strong></span>
         </div>
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <span>TypeScript: Estrito</span>

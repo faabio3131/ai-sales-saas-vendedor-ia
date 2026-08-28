@@ -1,4 +1,5 @@
 /**
- * Infrastructure Layer placeholder — Server runtime, secrets management & telemetry.
+ * Infrastructure Layer — Server runtime, environment config, error mappings & base utilities.
  */
-export const INFRASTRUCTURE_LAYER_INITIALIZED = true;
+export * from './config';
+export * from './errors';

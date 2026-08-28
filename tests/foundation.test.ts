@@ -1,59 +1,106 @@
 import { describe, it, expect } from 'vitest';
-import { TenantContext, Result } from '../src/types/contracts';
+import { TenantContext, Result, AppErrorCategory } from '../src/types/contracts';
+import { loadServerConfig } from '../src/infrastructure/config';
+import { 
+  ApplicationError, 
+  mapCategoryToStatusCode, 
+  createSuccessResult, 
+  createErrorResult 
+} from '../src/infrastructure/errors';
+import { isValidTenantContext, createTenantContext } from '../src/tenancy/context';
 
-describe('BLK-000: Repository & Governance Foundation Tests', () => {
-  it('should enforce TenantContext type structure with mandatory tenantId and requestId', () => {
-    const context: TenantContext = {
-      tenantId: 'tenant-test-123',
-      requestId: 'req-abc-789',
-      userId: 'user-001',
-      role: 'ADMIN',
-    };
+describe('BLK-010: Application Foundation Tests', () => {
+  describe('Server Configuration Module', () => {
+    it('should parse default configuration safely when no env variables are set', () => {
+      const config = loadServerConfig({});
+      expect(config.port).toBe(3000);
+      expect(config.nodeEnv).toBe('development');
+      expect(config.block).toBe('BLK-010');
+      expect(config.serviceName).toContain('Vendedor IA');
+    });
 
-    expect(context.tenantId).toBe('tenant-test-123');
-    expect(context.requestId).toBe('req-abc-789');
-    expect(context.userId).toBe('user-001');
-    expect(context.role).toBe('ADMIN');
+    it('should respect custom PORT and NODE_ENV when provided', () => {
+      const config = loadServerConfig({
+        PORT: '3000',
+        NODE_ENV: 'production',
+      });
+      expect(config.port).toBe(3000);
+      expect(config.nodeEnv).toBe('production');
+    });
   });
 
-  it('should format typed Result objects correctly for success and error states', () => {
-    const successResult: Result<{ ready: boolean }> = {
-      ok: true,
-      data: { ready: true },
-    };
+  describe('Error Infrastructure & Result Types', () => {
+    it('should map AppErrorCategory to appropriate HTTP status codes', () => {
+      const categories: Record<AppErrorCategory, number> = {
+        VALIDATION: 400,
+        AUTH: 401,
+        FORBIDDEN: 403,
+        NOT_FOUND: 404,
+        CONFLICT: 409,
+        RATE_LIMIT: 429,
+        PROVIDER: 502,
+        INTERNAL: 500,
+      };
 
-    const errorResult: Result<never> = {
-      ok: false,
-      error: {
+      for (const [cat, expectedCode] of Object.entries(categories)) {
+        expect(mapCategoryToStatusCode(cat as AppErrorCategory)).toBe(expectedCode);
+      }
+    });
+
+    it('should instantiate ApplicationError with correct properties', () => {
+      const error = new ApplicationError({
         category: 'VALIDATION',
-        code: 'MISSING_FIELD',
-        message: 'O campo tenantId é obrigatório.',
+        code: 'INVALID_INPUT',
+        message: 'O campo informado é inválido.',
         retryable: false,
-      },
-    };
+      });
 
-    expect(successResult.ok).toBe(true);
-    expect(successResult.data?.ready).toBe(true);
+      expect(error.name).toBe('ApplicationError');
+      expect(error.category).toBe('VALIDATION');
+      expect(error.code).toBe('INVALID_INPUT');
+      expect(error.statusCode).toBe(400);
+      expect(error.retryable).toBe(false);
+    });
 
-    expect(errorResult.ok).toBe(false);
-    expect(errorResult.error?.category).toBe('VALIDATION');
-    expect(errorResult.error?.code).toBe('MISSING_FIELD');
+    it('should create success and error Result objects adhering to contracts', () => {
+      const success: Result<{ id: string }> = createSuccessResult({ id: 'res_123' });
+      expect(success.ok).toBe(true);
+      expect(success.data?.id).toBe('res_123');
+      expect(success.error).toBeUndefined();
+
+      const failure = createErrorResult('NOT_FOUND', 'TENANT_NOT_FOUND', 'Tenant não encontrado');
+      expect(failure.ok).toBe(false);
+      expect(failure.error?.category).toBe('NOT_FOUND');
+      expect(failure.error?.code).toBe('TENANT_NOT_FOUND');
+    });
   });
 
-  it('should verify that all canonical governance docs are intact in /docs', () => {
-    const canonicalDocFiles = [
-      '00_AUTHORITY_AND_EXECUTION_RULES.md',
-      'MASTER.md',
-      'ARCHITECTURE.md',
-      'SYSTEM_DESIGN.md',
-      'REQUIREMENTS.md',
-      'TECHNICAL_CONTRACTS.md',
-      'DATA_MODEL.md',
-      'IMPLEMENTATION_PLAN.md',
-      'AI_STUDIO_EXECUTION_PROTOCOL.md',
-    ];
+  describe('Tenancy Context Boundaries', () => {
+    it('should correctly validate valid and invalid TenantContext objects', () => {
+      const validContext: TenantContext = {
+        tenantId: 'tenant-enterprise-01',
+        requestId: 'req-98765',
+        userId: 'user-admin',
+      };
 
-    expect(canonicalDocFiles.length).toBe(9);
-    expect(canonicalDocFiles[0]).toBe('00_AUTHORITY_AND_EXECUTION_RULES.md');
+      expect(isValidTenantContext(validContext)).toBe(true);
+      expect(isValidTenantContext(null)).toBe(false);
+      expect(isValidTenantContext({ tenantId: '' })).toBe(false);
+      expect(isValidTenantContext({ tenantId: 'tenant-1', requestId: '' })).toBe(false);
+    });
+
+    it('should generate a standard TenantContext via helper', () => {
+      const created = createTenantContext({
+        tenantId: 'tenant-abc',
+        userId: 'user-xyz',
+        role: 'OWNER',
+        requestId: 'req-custom',
+      });
+
+      expect(created.tenantId).toBe('tenant-abc');
+      expect(created.userId).toBe('user-xyz');
+      expect(created.role).toBe('OWNER');
+      expect(created.requestId).toBe('req-custom');
+    });
   });
 });

@@ -1,4 +1,7 @@
 /**
- * API Routes Layer — Server-side endpoints.
+ * API Routes Layer — Server-side endpoints, controllers and middleware.
  */
-export const API_ROUTES_INITIALIZED = true;
+export * from './router';
+export * from './middleware/errorHandler';
+export * from './middleware/tenantContext';
+export * from './routes/health';
