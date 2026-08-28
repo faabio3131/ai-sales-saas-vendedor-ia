@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticationMiddleware } from '../auth/middleware';
 import { createAuthRouter } from '../auth/routes';
 import { createCatalogRouter } from '../catalog/routes';
+import { createConversationRouter } from '../conversations/routes';
 import { createCustomersRouter } from '../customers/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
 import { createTenancyRouter } from '../tenancy/routes';
@@ -20,6 +21,7 @@ export function createApiRouter(): Router {
   router.use('/tenancy', authenticationMiddleware, tenantAuthorizationMiddleware, createTenancyRouter());
   router.use('/catalog', authenticationMiddleware, tenantAuthorizationMiddleware, createCatalogRouter());
   router.use('/customers', authenticationMiddleware, tenantAuthorizationMiddleware, createCustomersRouter());
+  router.use('/conversations', authenticationMiddleware, tenantAuthorizationMiddleware, createConversationRouter());
 
   return router;
 }
