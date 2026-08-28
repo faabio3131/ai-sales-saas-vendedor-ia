@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NextFunction, Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthProviderInterface } from '../src/auth/contracts';
 import { buildAuthHandlers } from '../src/auth/routes';
 import {
