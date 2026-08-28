@@ -24,14 +24,15 @@ export function errorHandler(
     return;
   }
 
-  // Unhandled / generic exceptions
-  const message = err instanceof Error ? err.message : 'Internal Server Error';
+  // Unknown/unhandled exceptions are always sanitized at the HTTP boundary.
+  // Raw exception details may be handled by future server-side observability,
+  // but they must never be returned to clients.
   res.status(500).json({
     ok: false,
     error: {
       category: 'INTERNAL',
       code: 'UNHANDLED_EXCEPTION',
-      message: process.env.NODE_ENV === 'production' ? 'Internal server error' : message,
+      message: 'Internal server error',
       retryable: false,
     },
   });
