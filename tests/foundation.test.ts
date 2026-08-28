@@ -18,7 +18,7 @@ describe('BLK-010: Application Foundation Tests', () => {
       const config = loadServerConfig({});
       expect(config.port).toBe(3000);
       expect(config.nodeEnv).toBe('development');
-      expect(config.block).toBe('BLK-010');
+      expect(config.block).toBe('BLK-020');
       expect(config.serviceName).toContain('Vendedor IA');
     });
 
