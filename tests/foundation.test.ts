@@ -18,7 +18,7 @@ describe('Application Foundation regression tests', () => {
       const config = loadServerConfig({});
       expect(config.port).toBe(3000);
       expect(config.nodeEnv).toBe('development');
-      expect(config.block).toBe('BLK-030');
+      expect(config.block).toBe('BLK-040');
       expect(config.serviceName).toContain('Vendedor IA');
     });
 
