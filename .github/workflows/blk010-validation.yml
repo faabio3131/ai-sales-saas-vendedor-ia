@@ -33,7 +33,7 @@ jobs:
       - name: Tests
         run: npm test
 
-      - name: Runtime foundation and auth boundary
+      - name: Runtime security boundaries
         env:
           NODE_ENV: production
           PORT: 3000
@@ -49,8 +49,11 @@ jobs:
             sleep 1
           done
           cat /tmp/health.json
-          node -e "const fs=require('fs'); const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(h.status!=='ok') throw new Error('health status not ok'); if(h.governance?.tenantBoundaryPrepared!==true) throw new Error('tenantBoundaryPrepared missing'); if(Object.prototype.hasOwnProperty.call(h.governance||{},'multitenancyGuaranteed')) throw new Error('obsolete multitenancyGuaranteed present');"
-          STATUS=$(curl --silent --output /tmp/auth.json --write-out '%{http_code}' http://127.0.0.1:3000/api/auth/session)
+          node -e "const fs=require('fs'); const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(h.status!=='ok') throw new Error('health status not ok'); if(h.block!=='BLK-030') throw new Error('runtime block is not BLK-030'); if(h.governance?.tenantIsolationEnforced!==true) throw new Error('tenant isolation flag missing'); if(Object.prototype.hasOwnProperty.call(h.governance||{},'multitenancyGuaranteed')) throw new Error('obsolete multitenancyGuaranteed present');"
+          AUTH_STATUS=$(curl --silent --output /tmp/auth.json --write-out '%{http_code}' http://127.0.0.1:3000/api/auth/session)
           cat /tmp/auth.json
-          test "$STATUS" = "401"
-          node -e "const fs=require('fs'); const a=JSON.parse(fs.readFileSync('/tmp/auth.json','utf8')); if(a?.error?.code!=='SESSION_REQUIRED') throw new Error('auth session boundary not enforced');"
+          test "$AUTH_STATUS" = "401"
+          TENANT_STATUS=$(curl --silent --output /tmp/tenant.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/tenancy/context)
+          cat /tmp/tenant.json
+          test "$TENANT_STATUS" = "401"
+          node -e "const fs=require('fs'); const t=JSON.parse(fs.readFileSync('/tmp/tenant.json','utf8')); if(t?.error?.code!=='SESSION_REQUIRED') throw new Error('tenant route accepted unauthenticated request');"
