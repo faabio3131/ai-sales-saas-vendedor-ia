@@ -1,0 +1,53 @@
+name: BLK-010 Validation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Runtime health check
+        env:
+          NODE_ENV: production
+          PORT: 3000
+        run: |
+          npm start > /tmp/vendedor-ia.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          for i in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/health.json; then
+              break
+            fi
+            sleep 1
+          done
+          cat /tmp/health.json
+          node -e "const fs=require('fs'); const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(h.status!=='ok') throw new Error('health status not ok'); if(h.governance?.tenantBoundaryPrepared!==true) throw new Error('tenantBoundaryPrepared missing'); if(Object.prototype.hasOwnProperty.call(h.governance||{},'multitenancyGuaranteed')) throw new Error('obsolete multitenancyGuaranteed present');"
