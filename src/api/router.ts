@@ -4,6 +4,7 @@ import { createAuthRouter } from '../auth/routes';
 import { createCatalogRouter } from '../catalog/routes';
 import { createConversationRouter } from '../conversations/routes';
 import { createCustomersRouter } from '../customers/routes';
+import { createFollowUpsRouter } from '../followups/routes';
 import { createLeadsRouter } from '../leads/routes';
 import { createSalesRouter } from '../sales/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
@@ -22,6 +23,7 @@ export function createApiRouter(): Router {
   router.use('/conversations', authenticationMiddleware, tenantAuthorizationMiddleware, createConversationRouter());
   router.use('/leads', authenticationMiddleware, tenantAuthorizationMiddleware, createLeadsRouter());
   router.use('/sales', authenticationMiddleware, tenantAuthorizationMiddleware, createSalesRouter());
+  router.use('/followups', authenticationMiddleware, tenantAuthorizationMiddleware, createFollowUpsRouter());
 
   return router;
 }
