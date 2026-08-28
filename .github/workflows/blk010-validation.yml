@@ -49,12 +49,14 @@ jobs:
             sleep 1
           done
           cat /tmp/health.json
-          node -e "const fs=require('fs'); const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(h.status!=='ok') throw new Error('health status not ok'); if(h.block!=='BLK-040') throw new Error('runtime block is not BLK-040'); if(h.governance?.tenantIsolationEnforced!==true) throw new Error('tenant isolation flag missing'); if(Object.prototype.hasOwnProperty.call(h.governance||{},'multitenancyGuaranteed')) throw new Error('obsolete multitenancyGuaranteed present');"
+          node -e "const fs=require('fs'); const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(h.status!=='ok') throw new Error('health status not ok'); if(h.block!=='BLK-050') throw new Error('runtime block is not BLK-050'); if(h.governance?.tenantIsolationEnforced!==true) throw new Error('tenant isolation flag missing'); if(Object.prototype.hasOwnProperty.call(h.governance||{},'multitenancyGuaranteed')) throw new Error('obsolete multitenancyGuaranteed present');"
           AUTH_STATUS=$(curl --silent --output /tmp/auth.json --write-out '%{http_code}' http://127.0.0.1:3000/api/auth/session)
           test "$AUTH_STATUS" = "401"
           TENANT_STATUS=$(curl --silent --output /tmp/tenant.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/tenancy/context)
           test "$TENANT_STATUS" = "401"
           CATALOG_STATUS=$(curl --silent --output /tmp/catalog.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/catalog)
-          cat /tmp/catalog.json
           test "$CATALOG_STATUS" = "401"
-          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('/tmp/catalog.json','utf8')); if(c?.error?.code!=='SESSION_REQUIRED') throw new Error('catalog route accepted unauthenticated request');"
+          CUSTOMER_STATUS=$(curl --silent --output /tmp/customers.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/customers)
+          cat /tmp/customers.json
+          test "$CUSTOMER_STATUS" = "401"
+          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('/tmp/customers.json','utf8')); if(c?.error?.code!=='SESSION_REQUIRED') throw new Error('customer route accepted unauthenticated request');"
