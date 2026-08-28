@@ -1,0 +1,8 @@
+{
+  "name": "AI Sales SaaS",
+  "description": "Plataforma comercial de IA para atendimento, vendas, follow-up e recuperação de oportunidades.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
