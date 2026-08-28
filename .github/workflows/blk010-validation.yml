@@ -1,4 +1,4 @@
-name: BLK-010 Validation
+name: Project Validation
 
 on:
   push:
@@ -33,10 +33,11 @@ jobs:
       - name: Tests
         run: npm test
 
-      - name: Runtime health check
+      - name: Runtime foundation and auth boundary
         env:
           NODE_ENV: production
           PORT: 3000
+          SESSION_SECRET: ci-only-session-secret-0123456789abcdef0123456789
         run: |
           npm start > /tmp/vendedor-ia.log 2>&1 &
           SERVER_PID=$!
@@ -49,3 +50,7 @@ jobs:
           done
           cat /tmp/health.json
           node -e "const fs=require('fs'); const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(h.status!=='ok') throw new Error('health status not ok'); if(h.governance?.tenantBoundaryPrepared!==true) throw new Error('tenantBoundaryPrepared missing'); if(Object.prototype.hasOwnProperty.call(h.governance||{},'multitenancyGuaranteed')) throw new Error('obsolete multitenancyGuaranteed present');"
+          STATUS=$(curl --silent --output /tmp/auth.json --write-out '%{http_code}' http://127.0.0.1:3000/api/auth/session)
+          cat /tmp/auth.json
+          test "$STATUS" = "401"
+          node -e "const fs=require('fs'); const a=JSON.parse(fs.readFileSync('/tmp/auth.json','utf8')); if(a?.error?.code!=='SESSION_REQUIRED') throw new Error('auth session boundary not enforced');"
