@@ -75,18 +75,18 @@ describe('BLK-040: Catalog', () => {
     expect((await service.get(context('tenant-a'), item.id)).name).toBe('Consultoria');
   });
 
-  it('stores money as non-negative integer minor units', async () => {
+  it('stores money as non-negative integer minor units', () => {
     const service = new CatalogService(new MemoryCatalogRepository());
-    await expect(service.create(context('tenant-a'), {
+    expect(() => service.create(context('tenant-a'), {
       type: 'PRODUCT',
       name: 'Preço inválido',
       priceMinor: 10.5,
-    })).rejects.toMatchObject({ code: 'CATALOG_PRICE_INVALID' });
-    await expect(service.create(context('tenant-a'), {
+    })).toThrowError(/price is invalid/i);
+    expect(() => service.create(context('tenant-a'), {
       type: 'PRODUCT',
       name: 'Preço negativo',
       priceMinor: -1,
-    })).rejects.toMatchObject({ code: 'CATALOG_PRICE_INVALID' });
+    })).toThrowError(/price is invalid/i);
   });
 
   it('supports activation and safe basic updates without changing tenant ownership', async () => {
