@@ -20,7 +20,7 @@ export function healthCheckHandler(_req: Request, res: Response): void {
     governance: {
       canonicalDocs: '/docs',
       authority: '00_AUTHORITY_AND_EXECUTION_RULES.md',
-      multitenancyGuaranteed: true,
+      tenantBoundaryPrepared: true,
       secretsServerSideOnly: true,
     },
     system: {
