@@ -21,7 +21,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     nodeEnv,
     serviceName: 'AI Sales SaaS — Vendedor IA Engine',
     version: '0.1.0',
-    block: 'BLK-010',
+    block: 'BLK-020',
   };
 }
 
