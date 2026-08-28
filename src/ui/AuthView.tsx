@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { LogIn, LogOut, ShieldCheck, UserPlus } from 'lucide-react';
 import { loginWithEmail, logout, registerWithEmail } from '../auth/client';
 import { AuthPrincipal } from '../auth/contracts';
