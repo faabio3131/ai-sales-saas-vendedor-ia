@@ -21,6 +21,7 @@ export function healthCheckHandler(_req: Request, res: Response): void {
       canonicalDocs: '/docs',
       authority: '00_AUTHORITY_AND_EXECUTION_RULES.md',
       tenantBoundaryPrepared: true,
+      tenantIsolationEnforced: true,
       secretsServerSideOnly: true,
     },
     system: {
