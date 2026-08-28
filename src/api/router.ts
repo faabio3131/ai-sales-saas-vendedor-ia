@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticationMiddleware } from '../auth/middleware';
 import { createAuthRouter } from '../auth/routes';
 import { createCatalogRouter } from '../catalog/routes';
+import { createChannelsRouter } from '../channels/routes';
 import { createConversationRouter } from '../conversations/routes';
 import { createCustomersRouter } from '../customers/routes';
 import { createFollowUpsRouter } from '../followups/routes';
@@ -26,6 +27,7 @@ export function createApiRouter(): Router {
   router.use('/sales', authenticationMiddleware, tenantAuthorizationMiddleware, createSalesRouter());
   router.use('/followups', authenticationMiddleware, tenantAuthorizationMiddleware, createFollowUpsRouter());
   router.use('/recovery', authenticationMiddleware, tenantAuthorizationMiddleware, createRecoveryRouter());
+  router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());
 
   return router;
 }
