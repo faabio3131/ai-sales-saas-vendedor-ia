@@ -1,8 +1,17 @@
 import { NextFunction, Request, Response } from 'express';
 import { ApplicationError } from '../infrastructure/errors';
+import { TenantContext } from '../types/contracts';
 import { createTenantContext } from './context';
 import { TenantMembershipRepository } from './contracts';
 import { FirestoreTenantMembershipRepository } from './firebaseMembershipRepository';
+
+declare global {
+  namespace Express {
+    interface Request {
+      tenantContext?: TenantContext;
+    }
+  }
+}
 
 export function createTenantAuthorizationMiddleware(repository: TenantMembershipRepository) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
