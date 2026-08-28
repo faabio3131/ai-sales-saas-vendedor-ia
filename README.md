@@ -4,27 +4,35 @@ Plataforma comercial de IA para atendimento, vendas, follow-up, recuperação de
 
 ## Status
 
-Projeto em início de construção. A arquitetura, requisitos, contratos, modelo de dados e plano de implementação já foram definidos antes da programação.
+Projeto em construção incremental. A arquitetura, requisitos, contratos, modelo de dados e plano de implementação foram definidos antes da programação. Os blocos BLK-000 e BLK-010 estabeleceram a fundação técnica; o avanço seguinte depende de autorização explícita do Diretor.
 
 ## Governança
 
 A documentação operacional obrigatória está em [`/docs`](./docs/README.md).
 
-Qualquer agente de IA ou desenvolvedor deve ler `docs/README.md` e seguir a ordem de leitura definida ali antes de modificar o projeto.
+Qualquer agente, ferramenta ou desenvolvedor deve ler `docs/README.md` e seguir a ordem de autoridade definida ali antes de modificar o projeto.
 
 ### Hierarquia
 
-1. Diretor/Proprietário — autoridade final.
-2. Arquiteto/Engenheiro Sênior — arquitetura, especificação e auditoria.
-3. Executor técnico — implementa somente tarefas autorizadas.
+1. Diretor/Proprietário — autoridade humana final.
+2. ChatGPT — Arquiteto/Engenheiro Sênior/Executor técnico dentro do escopo autorizado.
+3. Ferramentas auxiliares — sem autoridade sobre arquitetura ou produto.
 
-## Primeira etapa
+O GitHub é a fonte canônica operacional do código e do histórico técnico.
 
-O primeiro bloco previsto é **BLK-000 — Repository & Governance Foundation**. Seu prompt oficial está em:
+Google AI Studio / Antigravity não integra mais o fluxo oficial de desenvolvimento deste projeto.
 
-[`docs/prompts/BLK-000_REPOSITORY_GOVERNANCE_FOUNDATION.md`](./docs/prompts/BLK-000_REPOSITORY_GOVERNANCE_FOUNDATION.md)
+## Protocolo de execução
 
-**Não avançar para blocos comerciais sem autorização explícita.**
+O protocolo vigente está em:
+
+[`docs/EXECUTION_PROTOCOL.md`](./docs/EXECUTION_PROTOCOL.md)
+
+O desenvolvimento segue o ciclo:
+
+`READ → PLAN → IMPLEMENT → BUILD → TEST → REVIEW → FIX → VALIDATE → REPORT`
+
+Nenhum resultado é declarado como testado ou validado sem evidência real.
 
 ## Arquitetura-alvo V1
 
