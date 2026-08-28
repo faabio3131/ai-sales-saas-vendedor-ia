@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticationMiddleware } from '../auth/middleware';
 import { createAuthRouter } from '../auth/routes';
+import { createCatalogRouter } from '../catalog/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
 import { createTenancyRouter } from '../tenancy/routes';
 import { healthCheckHandler } from './routes/health';
@@ -14,8 +15,9 @@ export function createApiRouter(): Router {
   // Public operational health endpoint.
   router.get('/health', healthCheckHandler);
 
-  // BLK-030 protected boundary: authenticated identity + verified tenant membership.
+  // Protected boundaries: authenticated identity + verified tenant membership.
   router.use('/tenancy', authenticationMiddleware, tenantAuthorizationMiddleware, createTenancyRouter());
+  router.use('/catalog', authenticationMiddleware, tenantAuthorizationMiddleware, createCatalogRouter());
 
   return router;
 }
