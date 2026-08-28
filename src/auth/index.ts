@@ -1,5 +1,4 @@
-/**
- * Auth Layer placeholder — Authentication & Session abstractions.
- * Reserved for future authorized blocks (BLK-020+).
- */
-export const AUTH_LAYER_INITIALIZED = true;
+export * from './contracts';
+export * from './session';
+export * from './firebaseProvider';
+export * from './routes';
