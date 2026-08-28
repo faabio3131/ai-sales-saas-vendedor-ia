@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { Request, Response, NextFunction } from 'express';
 import { TenantContext, Result, AppErrorCategory } from '../src/types/contracts';
 import { loadServerConfig } from '../src/infrastructure/config';
 import { 
@@ -8,6 +9,8 @@ import {
   createErrorResult 
 } from '../src/infrastructure/errors';
 import { isValidTenantContext, createTenantContext } from '../src/tenancy/context';
+import { errorHandler } from '../src/api/middleware/errorHandler';
+import { healthCheckHandler } from '../src/api/routes/health';
 
 describe('BLK-010: Application Foundation Tests', () => {
   describe('Server Configuration Module', () => {
@@ -73,6 +76,28 @@ describe('BLK-010: Application Foundation Tests', () => {
       expect(failure.error?.category).toBe('NOT_FOUND');
       expect(failure.error?.code).toBe('TENANT_NOT_FOUND');
     });
+
+    it('should always sanitize unknown errors at the HTTP boundary', () => {
+      const json = vi.fn();
+      const status = vi.fn(() => ({ json }));
+      const res = { status } as unknown as Response;
+      const next = vi.fn() as unknown as NextFunction;
+      const internalMessage = 'database password leaked here';
+
+      errorHandler(new Error(internalMessage), {} as Request, res, next);
+
+      expect(status).toHaveBeenCalledWith(500);
+      expect(json).toHaveBeenCalledWith({
+        ok: false,
+        error: {
+          category: 'INTERNAL',
+          code: 'UNHANDLED_EXCEPTION',
+          message: 'Internal server error',
+          retryable: false,
+        },
+      });
+      expect(JSON.stringify(json.mock.calls)).not.toContain(internalMessage);
+    });
   });
 
   describe('Tenancy Context Boundaries', () => {
@@ -101,6 +126,22 @@ describe('BLK-010: Application Foundation Tests', () => {
       expect(created.userId).toBe('user-xyz');
       expect(created.role).toBe('OWNER');
       expect(created.requestId).toBe('req-custom');
+    });
+
+    it('should expose tenant boundary preparation without claiming guaranteed multitenancy', () => {
+      const json = vi.fn();
+      const status = vi.fn(() => ({ json }));
+      const res = { status } as unknown as Response;
+
+      healthCheckHandler({} as Request, res);
+
+      expect(status).toHaveBeenCalledWith(200);
+      const payload = json.mock.calls[0][0] as {
+        governance: Record<string, unknown>;
+      };
+
+      expect(payload.governance.tenantBoundaryPrepared).toBe(true);
+      expect(payload.governance).not.toHaveProperty('multitenancyGuaranteed');
     });
   });
 });
