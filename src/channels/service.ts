@@ -33,7 +33,12 @@ export class ChannelService {
     if (!adapter) return createErrorResult('PROVIDER','CHANNEL_UNAVAILABLE','Channel is unavailable.',false);
     try {
       const valid = await adapter.validateWebhook(input);
-      if (!valid.ok) return valid as Result<NormalizedInboundMessage[]>;
+      if (!valid.ok) {
+        return {
+          ok: false,
+          error: valid.error ?? { category: 'PROVIDER', code: 'CHANNEL_WEBHOOK_VALIDATION_FAILED', message: 'Webhook validation failed.', retryable: false },
+        };
+      }
       if (!valid.data) return createErrorResult('FORBIDDEN','CHANNEL_WEBHOOK_INVALID','Webhook validation failed.',false);
       return await adapter.normalizeInbound({ ...input, tenantId: input.tenantId.trim() });
     } catch {
