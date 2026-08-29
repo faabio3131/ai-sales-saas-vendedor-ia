@@ -13,6 +13,7 @@ import { createPilotRouter } from '../pilot/routes';
 import { createPlansRouter } from '../plans/routes';
 import { createQuotesRouter } from '../quotes/routes';
 import { createRecoveryRouter } from '../recovery/routes';
+import { createReleaseRouter } from '../release/routes';
 import { createRevenueExpansionRouter } from '../revenueExpansion/routes';
 import { createSalesRouter } from '../sales/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
@@ -38,5 +39,6 @@ export function createApiRouter(): Router {
   router.use('/revenue-expansion', authenticationMiddleware, tenantAuthorizationMiddleware, createRevenueExpansionRouter());
   router.use('/plans', authenticationMiddleware, tenantAuthorizationMiddleware, createPlansRouter());
   router.use('/pilot', authenticationMiddleware, tenantAuthorizationMiddleware, createPilotRouter());
+  router.use('/release', authenticationMiddleware, tenantAuthorizationMiddleware, createReleaseRouter());
   return router;
 }
