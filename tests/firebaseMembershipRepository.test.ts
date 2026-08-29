@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { selectActiveMembership } from '../src/tenancy/firebaseMembershipRepository';
+import { listActiveMembershipsFromDocuments, selectActiveMembership } from '../src/tenancy/firebaseMembershipRepository';
 
-describe('OP-020: Firebase tenant membership selection', () => {
+describe('OP-020/OP-030: Firebase tenant membership selection', () => {
   it('finds the requested active tenant and trims stored string values', () => {
     const membership = selectActiveMembership('auth-1', 'tenant-a', [
       {
@@ -64,5 +64,19 @@ describe('OP-020: Firebase tenant membership selection', () => {
         },
       },
     ])).toBeNull();
+  });
+
+  it('lists only active memberships belonging to the authenticated principal', () => {
+    const memberships = listActiveMembershipsFromDocuments('auth-1', [
+      { id: 'a', data: { authUserId: 'auth-1', tenantId: 'tenant-a', role: 'OWNER', status: 'ACTIVE' } },
+      { id: 'b', data: { authUserId: 'auth-1', tenantId: 'tenant-b', role: 'AGENT', status: 'ACTIVE' } },
+      { id: 'inactive', data: { authUserId: 'auth-1', tenantId: 'tenant-c', role: 'OWNER', status: 'INACTIVE' } },
+      { id: 'other', data: { authUserId: 'auth-2', tenantId: 'tenant-z', role: 'OWNER', status: 'ACTIVE' } },
+    ]);
+
+    expect(memberships.map(({ tenantId, role }) => ({ tenantId, role }))).toEqual([
+      { tenantId: 'tenant-a', role: 'OWNER' },
+      { tenantId: 'tenant-b', role: 'AGENT' },
+    ]);
   });
 });
