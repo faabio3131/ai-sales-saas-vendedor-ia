@@ -2,33 +2,31 @@
 
 ## Estado em 2026-08-29
 
-A OP-030 — Product Workspace Activation foi iniciada.
+A OP-030 — Product Workspace Activation está em execução.
 
-## Último CI verificado
+## Correção concluída
+O bloqueio de TypeScript identificado no CI anterior foi corrigido:
+- `InMemoryTenantMembershipRepository` passou a implementar `listActiveMemberships`;
+- a implementação filtra por principal autenticado, status `ACTIVE` e role não vazia;
+- `findActiveMembership` reutiliza a mesma regra de descoberta;
+- teste de regressão foi adicionado para garantir que memberships de outro usuário, inativas ou sem role não sejam retornadas.
+
+## CI de validação
 Workflow: Project Validation
-Run ID: 33270774317
-Job: validate
-Status final: FAILURE
+Run ID: 33281035867
+Head SHA: 8facda1a10e2ff57ced00c135768c98e3a86663d
+Status final: SUCCESS
 
 ### Resultado por etapa
 - Build: PASS
-- Typecheck: FAIL
-- Tests: não executados
-- Runtime security boundaries: não executado
-- Production Docker smoke test: não executado
+- Typecheck: PASS
+- Tests: PASS
+- Runtime security boundaries: PASS
+- Production Docker smoke test: PASS
 
-## Erro bloqueador atual
-O TypeScript falhou porque `TenantMembershipRepository` passou a exigir o método `listActiveMemberships`, mas `InMemoryTenantMembershipRepository` ainda não implementa esse método.
+## Commits da correção
+- `023a06670848bb5452ea9b765c80dff3f703b0d8` — implementação in-memory de membership discovery;
+- `8facda1a10e2ff57ced00c135768c98e3a86663d` — cobertura de teste para descoberta de memberships ativas.
 
-Erros observados:
-- `src/tenancy/repository.ts`: classe `InMemoryTenantMembershipRepository` não implementa completamente `TenantMembershipRepository`;
-- `tests/tenancy.test.ts`: instâncias da implementação in-memory deixaram de ser compatíveis pelo mesmo motivo.
-
-## Próxima ação exata ao retomar
-1. implementar `listActiveMemberships` em `InMemoryTenantMembershipRepository`;
-2. ajustar/adicionar testes unitários necessários para a implementação in-memory;
-3. executar novo CI completo;
-4. só declarar a entrega validada se Build, Typecheck, Tests, Runtime security boundaries e Production Docker smoke test passarem.
-
-## Observação
-A falha é localizada na implementação in-memory usada por testes/desenvolvimento. Não há evidência de regressão na arquitetura, no Firebase real ou na validação externa já concluída da OP-020.
+## Próximo ponto
+O bloqueio técnico deste checkpoint está resolvido. A OP-030 ainda não deve ser declarada fechada automaticamente; a próxima tarefa deve continuar o escopo planejado de Product Workspace Activation e passar novamente pelos gates obrigatórios antes do fechamento formal.
