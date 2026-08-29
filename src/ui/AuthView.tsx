@@ -1,12 +1,31 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { LogIn, LogOut, ShieldCheck, UserPlus } from 'lucide-react';
-import { loginWithEmail, logout, registerWithEmail } from '../auth/client';
+import { AuthClientError, loginWithEmail, logout, registerWithEmail } from '../auth/client';
 import { AuthPrincipal } from '../auth/contracts';
 import { FoundationView } from './FoundationView';
 
 interface SessionResponse {
   ok: boolean;
   data?: { authenticated: true; user: AuthPrincipal };
+}
+
+function authErrorMessage(error: unknown): string {
+  const code = error instanceof AuthClientError ? error.publicCode : 'UNKNOWN';
+  const messages: Record<string, string> = {
+    'auth/email-already-in-use': 'Esta conta já existe. Use a opção Entrar.',
+    'auth/invalid-credential': 'E-mail ou senha inválidos.',
+    'auth/invalid-email': 'O e-mail informado não é válido.',
+    'auth/operation-not-allowed': 'Login por e-mail e senha não está habilitado no Firebase.',
+    'auth/unauthorized-domain': 'Este domínio do Cloud Run ainda não está autorizado no Firebase Authentication.',
+    'auth/weak-password': 'A senha não atende aos requisitos mínimos do Firebase.',
+    'auth/network-request-failed': 'Falha de rede ao acessar o Firebase Authentication.',
+    'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'A chave pública do Firebase Web está inválida ou não foi aplicada corretamente.',
+    FIREBASE_WEB_CONFIG_UNAVAILABLE: 'A configuração pública do Firebase não está disponível neste ambiente.',
+    FIREBASE_WEB_CONFIG_INVALID: 'A configuração pública do Firebase está incompleta ou inválida.',
+    SERVER_SESSION_FAILED: 'O Firebase autenticou o usuário, mas o backend não conseguiu criar a sessão segura.',
+    FIREBASE_AUTH_FAILED: 'O Firebase Authentication rejeitou a solicitação. Código técnico: FIREBASE_AUTH_FAILED.',
+  };
+  return messages[code] ?? 'Não foi possível autenticar. Confira os dados e tente novamente.';
 }
 
 export function AuthView() {
@@ -45,8 +64,8 @@ export function AuthView() {
       else await registerWithEmail(email.trim(), password);
       await refreshSession();
       setPassword('');
-    } catch {
-      setError('Não foi possível autenticar. Confira os dados e tente novamente.');
+    } catch (caught) {
+      setError(authErrorMessage(caught));
     } finally {
       setBusy(false);
     }
