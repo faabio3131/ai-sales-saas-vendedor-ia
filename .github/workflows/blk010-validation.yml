@@ -35,10 +35,22 @@ jobs:
           trap 'kill $SERVER_PID || true' EXIT
           for i in {1..20}; do if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/health.json; then break; fi; sleep 1; done
           cat /tmp/health.json
-          node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));if(h.status!=='ok'||h.block!=='BLK-170'||h.governance?.tenantIsolationEnforced!==true)throw new Error('runtime governance failed');"
+          node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));if(h.status!=='ok'||h.block!=='BLK-180'||h.governance?.tenantIsolationEnforced!==true)throw new Error('runtime governance failed');"
+          curl --silent --dump-header /tmp/headers.txt --output /dev/null http://127.0.0.1:3000/api/health
+          grep -qi '^x-content-type-options: nosniff' /tmp/headers.txt
+          grep -qi '^x-frame-options: DENY' /tmp/headers.txt
+          grep -qi '^x-request-id:' /tmp/headers.txt
+          if grep -qi '^x-powered-by:' /tmp/headers.txt; then exit 1; fi
           for PATHNAME in tenancy/context catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan; do
             STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
             test "$STATUS" = "401"
           done
           STATUS=$(curl --silent --output /tmp/sales.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"leadId":"spoofed"}' http://127.0.0.1:3000/api/sales/decision)
           test "$STATUS" = "401"
+          python - <<'PY' > /tmp/large.json
+          import json
+          print(json.dumps({'data':'x'*270000}))
+          PY
+          STATUS=$(curl --silent --output /tmp/large-response.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @/tmp/large.json http://127.0.0.1:3000/api/auth/login)
+          test "$STATUS" = "413"
+          node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('/tmp/large-response.json','utf8'));if(r?.error?.code!=='PAYLOAD_TOO_LARGE')throw new Error('payload limit not normalized');"
