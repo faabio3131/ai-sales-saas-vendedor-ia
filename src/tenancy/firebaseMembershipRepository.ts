@@ -22,39 +22,42 @@ export function readMembershipStringField(data: Record<string, unknown>, expecte
   return '';
 }
 
-export function selectActiveMembership(
+export function listActiveMembershipsFromDocuments(
   authUserId: string,
-  tenantId: string,
   documents: MembershipDocument[],
-): TenantMembership | null {
-  for (const document of documents) {
+): TenantMembership[] {
+  return documents.flatMap((document) => {
     const data = document.data;
     const storedAuthUserId = readMembershipStringField(data, 'authUserId');
     const storedTenantId = readMembershipStringField(data, 'tenantId');
     const status = readMembershipStringField(data, 'status');
     const role = readMembershipStringField(data, 'role');
 
-    if (
-      storedAuthUserId === authUserId &&
-      storedTenantId === tenantId &&
-      status === 'ACTIVE' &&
-      role
-    ) {
-      return {
-        tenantId: storedTenantId,
-        authUserId: storedAuthUserId,
-        userId: document.id,
-        role,
-        status: 'ACTIVE',
-      };
+    if (storedAuthUserId !== authUserId || !storedTenantId || status !== 'ACTIVE' || !role) {
+      return [];
     }
-  }
 
-  return null;
+    return [{
+      tenantId: storedTenantId,
+      authUserId: storedAuthUserId,
+      userId: document.id,
+      role,
+      status: 'ACTIVE' as const,
+    }];
+  });
+}
+
+export function selectActiveMembership(
+  authUserId: string,
+  tenantId: string,
+  documents: MembershipDocument[],
+): TenantMembership | null {
+  return listActiveMembershipsFromDocuments(authUserId, documents)
+    .find((membership) => membership.tenantId === tenantId) ?? null;
 }
 
 export class FirestoreTenantMembershipRepository implements TenantMembershipRepository {
-  async findActiveMembership(authUserId: string, tenantId: string): Promise<TenantMembership | null> {
+  private async readMembershipDocuments(authUserId: string): Promise<MembershipDocument[]> {
     try {
       const app = ensureFirebaseAdminApp();
       const snapshot = await getFirestore(app)
@@ -73,11 +76,7 @@ export class FirestoreTenantMembershipRepository implements TenantMembershipRepo
         });
       }
 
-      return selectActiveMembership(
-        authUserId,
-        tenantId,
-        snapshot.docs.map((document) => ({ id: document.id, data: document.data() })),
-      );
+      return snapshot.docs.map((document) => ({ id: document.id, data: document.data() }));
     } catch (error) {
       if (error instanceof ApplicationError) throw error;
       throw new ApplicationError({
@@ -88,5 +87,15 @@ export class FirestoreTenantMembershipRepository implements TenantMembershipRepo
         retryable: true,
       });
     }
+  }
+
+  async listActiveMemberships(authUserId: string): Promise<TenantMembership[]> {
+    const documents = await this.readMembershipDocuments(authUserId);
+    return listActiveMembershipsFromDocuments(authUserId, documents);
+  }
+
+  async findActiveMembership(authUserId: string, tenantId: string): Promise<TenantMembership | null> {
+    const memberships = await this.listActiveMemberships(authUserId);
+    return memberships.find((membership) => membership.tenantId === tenantId) ?? null;
   }
 }
