@@ -8,4 +8,5 @@ export interface TenantMembership {
 
 export interface TenantMembershipRepository {
   findActiveMembership(authUserId: string, tenantId: string): Promise<TenantMembership | null>;
+  listActiveMemberships(authUserId: string): Promise<TenantMembership[]>;
 }
