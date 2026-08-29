@@ -64,7 +64,6 @@ describe('BLK-140 Quotes', () => {
   });
 
   it('valida vínculo opportunity/customer', async () => {
-    const { service } = fixture();
     const badOpportunities = { async findById() { return { id:'o2', tenantId:'tenant-a', customerId:'other', stage:'QUALIFICADO', currency:'BRL' }; } } as unknown as OpportunityRepository;
     const base = fixture();
     const custom = new QuoteService((base as any).service['quotes'], (base as any).service['quoteItems'], (base as any).service['catalog'], (base as any).service['customers'], badOpportunities);
