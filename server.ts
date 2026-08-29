@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { createApiRouter } from './src/api/router';
 import { errorHandler } from './src/api/middleware/errorHandler';
 import { createRateLimiter, requestContext, securityHeaders } from './src/api/middleware/hardening';
@@ -18,6 +17,9 @@ export async function createApp() {
   app.use(errorHandler);
 
   if (serverConfig.nodeEnv !== 'production') {
+    // Vite is a development-only dependency. Load it lazily so the production
+    // runtime image (npm install --omit=dev) never attempts to resolve it.
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
