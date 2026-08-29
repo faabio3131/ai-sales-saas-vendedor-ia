@@ -55,7 +55,11 @@ export class DashboardService {
         opportunityId: item.opportunityId,
         reason: item.reason,
       })),
-    ].sort((a, b) => (a.dueAt ?? nowIso).localeCompare(b.dueAt ?? nowIso));
+    ].sort((a, b) => {
+      const aDueAt = 'dueAt' in a && a.dueAt ? a.dueAt : nowIso;
+      const bDueAt = 'dueAt' in b && b.dueAt ? b.dueAt : nowIso;
+      return aDueAt.localeCompare(bDueAt);
+    });
 
     const funnel: DashboardSnapshot['metrics']['funnel'] = {};
     for (const stage of FUNNEL_STAGES) {
