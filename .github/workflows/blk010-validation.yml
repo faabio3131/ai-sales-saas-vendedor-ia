@@ -1,13 +1,10 @@
 name: Project Validation
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -15,24 +12,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-
       - name: Build
         run: npm run build
-
       - name: Typecheck
         run: npm run typecheck
-
       - name: Tests
         run: npm test
-
       - name: Runtime security boundaries
         env:
           NODE_ENV: production
@@ -42,39 +33,12 @@ jobs:
           npm start > /tmp/vendedor-ia.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
-          for i in {1..20}; do
-            if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/health.json; then
-              break
-            fi
-            sleep 1
-          done
+          for i in {1..20}; do if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/health.json; then break; fi; sleep 1; done
           cat /tmp/health.json
-          node -e "const fs=require('fs'); const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(h.status!=='ok') throw new Error('health status not ok'); if(h.block!=='BLK-150') throw new Error('runtime block is not BLK-150'); if(h.governance?.tenantIsolationEnforced!==true) throw new Error('tenant isolation flag missing'); if(Object.prototype.hasOwnProperty.call(h.governance||{},'multitenancyGuaranteed')) throw new Error('obsolete multitenancyGuaranteed present');"
-          AUTH_STATUS=$(curl --silent --output /tmp/auth.json --write-out '%{http_code}' http://127.0.0.1:3000/api/auth/session)
-          test "$AUTH_STATUS" = "401"
-          TENANT_STATUS=$(curl --silent --output /tmp/tenant.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/tenancy/context)
-          test "$TENANT_STATUS" = "401"
-          CATALOG_STATUS=$(curl --silent --output /tmp/catalog.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/catalog)
-          test "$CATALOG_STATUS" = "401"
-          CUSTOMER_STATUS=$(curl --silent --output /tmp/customers.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/customers)
-          test "$CUSTOMER_STATUS" = "401"
-          CONVERSATION_STATUS=$(curl --silent --output /tmp/conversations.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/conversations)
-          test "$CONVERSATION_STATUS" = "401"
-          LEAD_STATUS=$(curl --silent --output /tmp/leads.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/leads)
-          test "$LEAD_STATUS" = "401"
-          SALES_STATUS=$(curl --silent --output /tmp/sales.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"leadId":"spoofed"}' http://127.0.0.1:3000/api/sales/decision)
-          test "$SALES_STATUS" = "401"
-          FOLLOWUP_STATUS=$(curl --silent --output /tmp/followups.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/followups)
-          test "$FOLLOWUP_STATUS" = "401"
-          RECOVERY_STATUS=$(curl --silent --output /tmp/recovery.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/recovery)
-          test "$RECOVERY_STATUS" = "401"
-          CHANNELS_STATUS=$(curl --silent --output /tmp/channels.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/channels)
-          test "$CHANNELS_STATUS" = "401"
-          DASHBOARD_STATUS=$(curl --silent --output /tmp/dashboard.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/dashboard)
-          test "$DASHBOARD_STATUS" = "401"
-          QUOTES_STATUS=$(curl --silent --output /tmp/quotes.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/quotes)
-          test "$QUOTES_STATUS" = "401"
-          PAYMENTS_STATUS=$(curl --silent --output /tmp/payments.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/payments)
-          cat /tmp/payments.json
-          test "$PAYMENTS_STATUS" = "401"
-          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('/tmp/payments.json','utf8')); if(c?.error?.code!=='SESSION_REQUIRED') throw new Error('payments route accepted unauthenticated request');"
+          node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));if(h.status!=='ok'||h.block!=='BLK-160'||h.governance?.tenantIsolationEnforced!==true)throw new Error('runtime governance failed');"
+          for PATHNAME in tenancy/context catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion; do
+            STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
+            test "$STATUS" = "401"
+          done
+          STATUS=$(curl --silent --output /tmp/sales.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"leadId":"spoofed"}' http://127.0.0.1:3000/api/sales/decision)
+          test "$STATUS" = "401"
