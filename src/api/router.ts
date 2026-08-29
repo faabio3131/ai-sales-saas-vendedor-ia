@@ -19,7 +19,7 @@ import { createRevenueExpansionRouter } from '../revenueExpansion/routes';
 import { firebaseWebRuntimeConfigHandler } from '../runtimeConfig/firebaseWeb';
 import { createSalesRouter } from '../sales/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
-import { createTenancyRouter } from '../tenancy/routes';
+import { activeTenantMembershipsHandler, createTenancyRouter } from '../tenancy/routes';
 import { healthCheckHandler } from './routes/health';
 
 export function createApiRouter(): Router {
@@ -29,6 +29,9 @@ export function createApiRouter(): Router {
   router.get('/runtime/firebase-web', firebaseWebRuntimeConfigHandler);
   router.get('/operations/firebase-readiness', (req, res, next) => {
     firebaseRealReadinessHandler(req, res).catch(next);
+  });
+  router.get('/tenancy/memberships', authenticationMiddleware, (req, res, next) => {
+    activeTenantMembershipsHandler(req, res).catch(next);
   });
   router.use('/tenancy', authenticationMiddleware, tenantAuthorizationMiddleware, createTenancyRouter());
   router.use('/catalog', authenticationMiddleware, tenantAuthorizationMiddleware, createCatalogRouter());
