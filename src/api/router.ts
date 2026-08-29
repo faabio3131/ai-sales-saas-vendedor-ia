@@ -8,6 +8,7 @@ import { createCustomersRouter } from '../customers/routes';
 import { createDashboardRouter } from '../dashboard/routes';
 import { createFollowUpsRouter } from '../followups/routes';
 import { createLeadsRouter } from '../leads/routes';
+import { createQuotesRouter } from '../quotes/routes';
 import { createRecoveryRouter } from '../recovery/routes';
 import { createSalesRouter } from '../sales/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
@@ -30,6 +31,7 @@ export function createApiRouter(): Router {
   router.use('/recovery', authenticationMiddleware, tenantAuthorizationMiddleware, createRecoveryRouter());
   router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());
   router.use('/dashboard', authenticationMiddleware, tenantAuthorizationMiddleware, createDashboardRouter());
+  router.use('/quotes', authenticationMiddleware, tenantAuthorizationMiddleware, createQuotesRouter());
 
   return router;
 }
