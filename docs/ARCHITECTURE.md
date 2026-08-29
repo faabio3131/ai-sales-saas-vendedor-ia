@@ -15,16 +15,13 @@ Construir um vendedor/assistente comercial de IA simples para pequenas e médias
 - construção incremental, testada e versionada.
 
 ## Arquitetura macro
-
 `Cliente → WhatsApp/Web → Channel Layer → Conversation Engine → Lead Intelligence → Sales Engine → Follow-up/Recovery/Upsell → Quote/Cart → Payment Engine → Sale Closed → Revenue Attribution`
 
 IA transversal:
-
 `Application/Domain → AI Service → Universal AI Provider Interface → AI Router → Provider Adapter`
 
 Infraestrutura:
-
-`Google AI Studio ↔ GitHub → Cloud Deployment → Auth / Database / Backend / Observability`
+`GitHub → CI/Validation → Cloud Deployment → Auth / Database / Backend / Observability`
 
 ## Camadas
 1. Presentation — Web/PWA responsiva.
@@ -50,7 +47,6 @@ Extrair dados estruturados como nome, interesse, produtos/serviços, intenção,
 Coração comercial. Responsável por identificar oportunidade, classificar cliente, acompanhar negociação, acionar follow-up, recuperação, upsell, proposta, pagamento e fechamento.
 
 Funil inicial:
-
 `NOVO → CONVERSANDO → QUALIFICADO → PROPOSTA → AGUARDANDO_CLIENTE → FECHADO`
 
 Estados adicionais: `RECUPERACAO`, `PERDIDO`.
@@ -143,4 +139,4 @@ Monitorar erros, latência, custo de IA, integrações, webhooks, jobs, convers�
 - MVP 2: billing, pagamentos/Pix, orçamento, upsell, cross-sell, Revenue Attribution.
 
 ## Regra final
-O Google AI Studio é ambiente de execução, não autoridade arquitetural. O produto deve sobreviver à substituição de AI Studio, Gemini, Firebase, provedor de pagamento ou canal por meio de interfaces/adapters.
+GitHub e a documentação canônica do projeto são a autoridade durável de código e arquitetura. Ambientes externos do ecossistema Google podem ser usados futuramente para publicação, deploy ou infraestrutura quando aprovados, mas não possuem autoridade para alterar arquitetura, código ou escopo autonomamente. O produto deve sobreviver à substituição de qualquer provedor de IA, Firebase, provedor de pagamento, canal ou plataforma de deploy por meio de interfaces/adapters.
