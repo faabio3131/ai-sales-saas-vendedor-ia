@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { LogIn, LogOut, ShieldCheck, UserPlus } from 'lucide-react';
 import { AuthClientError, loginWithEmail, logout, registerWithEmail } from '../auth/client';
 import { AuthPrincipal } from '../auth/contracts';
-import { FoundationView } from './FoundationView';
+import { ProductWorkspaceView } from './ProductWorkspaceView';
 
 interface SessionResponse {
   ok: boolean;
@@ -85,9 +85,9 @@ export function AuthView() {
   if (user) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-100">
-        <div className="max-w-6xl mx-auto px-4 pt-4 flex items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pt-4">
           <div className="text-xs text-slate-400">
-            Sessão autenticada: <strong className="text-slate-200">{user.email ?? user.authUserId}</strong>
+            Vendedor IA • <strong className="text-slate-200">{user.email ?? user.authUserId}</strong>
           </div>
           <button
             type="button"
@@ -98,7 +98,7 @@ export function AuthView() {
             <LogOut className="w-4 h-4" /> Sair
           </button>
         </div>
-        <FoundationView />
+        <ProductWorkspaceView />
       </main>
     );
   }
@@ -112,7 +112,7 @@ export function AuthView() {
           </div>
           <div>
             <h1 className="text-xl font-bold">Vendedor IA</h1>
-            <p className="text-sm text-slate-400">Acesso seguro ao seu ambiente comercial</p>
+            <p className="text-sm text-slate-400">Pare de perder vendas no WhatsApp.</p>
           </div>
         </div>
 
@@ -139,7 +139,7 @@ export function AuthView() {
           </button>
         </form>
 
-        <p className="mt-5 text-xs leading-relaxed text-slate-500">BLK-020 autentica a identidade do usuário. Empresa, tenant e permissões serão vinculados somente no BLK-030.</p>
+        <p className="mt-5 text-xs leading-relaxed text-slate-500">Acesso seguro com Firebase Authentication e sessão protegida no backend.</p>
       </section>
     </main>
   );
