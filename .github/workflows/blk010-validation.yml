@@ -35,8 +35,8 @@ jobs:
           trap 'kill $SERVER_PID || true' EXIT
           for i in {1..20}; do if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/health.json; then break; fi; sleep 1; done
           cat /tmp/health.json
-          node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));if(h.status!=='ok'||h.block!=='BLK-160'||h.governance?.tenantIsolationEnforced!==true)throw new Error('runtime governance failed');"
-          for PATHNAME in tenancy/context catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion; do
+          node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));if(h.status!=='ok'||h.block!=='BLK-170'||h.governance?.tenantIsolationEnforced!==true)throw new Error('runtime governance failed');"
+          for PATHNAME in tenancy/context catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan; do
             STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
             test "$STATUS" = "401"
           done
