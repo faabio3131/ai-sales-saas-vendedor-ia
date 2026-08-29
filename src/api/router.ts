@@ -8,6 +8,7 @@ import { createCustomersRouter } from '../customers/routes';
 import { createDashboardRouter } from '../dashboard/routes';
 import { createFollowUpsRouter } from '../followups/routes';
 import { createLeadsRouter } from '../leads/routes';
+import { firebaseRealReadinessHandler } from '../operations/firebaseRealReadinessRoute';
 import { createPaymentsRouter } from '../payments/routes';
 import { createPilotRouter } from '../pilot/routes';
 import { createPlansRouter } from '../plans/routes';
@@ -26,6 +27,9 @@ export function createApiRouter(): Router {
   router.use('/auth', createAuthRouter());
   router.get('/health', healthCheckHandler);
   router.get('/runtime/firebase-web', firebaseWebRuntimeConfigHandler);
+  router.get('/operations/firebase-readiness', (req, res, next) => {
+    firebaseRealReadinessHandler(req, res).catch(next);
+  });
   router.use('/tenancy', authenticationMiddleware, tenantAuthorizationMiddleware, createTenancyRouter());
   router.use('/catalog', authenticationMiddleware, tenantAuthorizationMiddleware, createCatalogRouter());
   router.use('/customers', authenticationMiddleware, tenantAuthorizationMiddleware, createCustomersRouter());
