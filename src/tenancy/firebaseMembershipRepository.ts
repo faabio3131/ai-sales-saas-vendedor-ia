@@ -49,13 +49,23 @@ export class FirestoreTenantMembershipRepository implements TenantMembershipRepo
         .limit(25)
         .get();
 
+      if (snapshot.empty) {
+        throw new ApplicationError({
+          category: 'FORBIDDEN',
+          code: 'TENANT_PRINCIPAL_MEMBERSHIP_NOT_FOUND',
+          message: 'No tenant membership is registered for the authenticated principal.',
+          statusCode: 403,
+          retryable: false,
+        });
+      }
+
       return selectActiveMembership(
         authUserId,
         tenantId,
         snapshot.docs.map((document) => ({ id: document.id, data: document.data() })),
       );
     } catch (error) {
-      if (error instanceof ApplicationError && error.code === 'FIREBASE_NOT_CONFIGURED') throw error;
+      if (error instanceof ApplicationError) throw error;
       throw new ApplicationError({
         category: 'INTERNAL',
         code: 'TENANT_MEMBERSHIP_UNAVAILABLE',
