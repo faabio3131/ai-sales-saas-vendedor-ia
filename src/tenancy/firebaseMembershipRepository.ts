@@ -3,6 +3,42 @@ import { ApplicationError } from '../infrastructure/errors';
 import { ensureFirebaseAdminApp } from '../infrastructure/firebaseAdmin';
 import { TenantMembership, TenantMembershipRepository } from './contracts';
 
+interface MembershipDocument {
+  id: string;
+  data: Record<string, unknown>;
+}
+
+export function selectActiveMembership(
+  authUserId: string,
+  tenantId: string,
+  documents: MembershipDocument[],
+): TenantMembership | null {
+  for (const document of documents) {
+    const data = document.data;
+    const storedAuthUserId = typeof data.authUserId === 'string' ? data.authUserId.trim() : '';
+    const storedTenantId = typeof data.tenantId === 'string' ? data.tenantId.trim() : '';
+    const status = typeof data.status === 'string' ? data.status.trim() : '';
+    const role = typeof data.role === 'string' ? data.role.trim() : '';
+
+    if (
+      storedAuthUserId === authUserId &&
+      storedTenantId === tenantId &&
+      status === 'ACTIVE' &&
+      role
+    ) {
+      return {
+        tenantId: storedTenantId,
+        authUserId: storedAuthUserId,
+        userId: document.id,
+        role,
+        status: 'ACTIVE',
+      };
+    }
+  }
+
+  return null;
+}
+
 export class FirestoreTenantMembershipRepository implements TenantMembershipRepository {
   async findActiveMembership(authUserId: string, tenantId: string): Promise<TenantMembership | null> {
     try {
@@ -10,25 +46,14 @@ export class FirestoreTenantMembershipRepository implements TenantMembershipRepo
       const snapshot = await getFirestore(app)
         .collection('users')
         .where('authUserId', '==', authUserId)
-        .where('tenantId', '==', tenantId)
-        .where('status', '==', 'ACTIVE')
-        .limit(1)
+        .limit(25)
         .get();
 
-      if (snapshot.empty) return null;
-
-      const document = snapshot.docs[0];
-      const data = document.data();
-      const role = typeof data.role === 'string' ? data.role.trim() : '';
-      if (!role) return null;
-
-      return {
-        tenantId,
+      return selectActiveMembership(
         authUserId,
-        userId: document.id,
-        role,
-        status: 'ACTIVE',
-      };
+        tenantId,
+        snapshot.docs.map((document) => ({ id: document.id, data: document.data() })),
+      );
     } catch (error) {
       if (error instanceof ApplicationError && error.code === 'FIREBASE_NOT_CONFIGURED') throw error;
       throw new ApplicationError({
