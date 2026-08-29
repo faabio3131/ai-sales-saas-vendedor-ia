@@ -1,14 +1,16 @@
-import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { ensureFirebaseAdminApp } from '../infrastructure/firebaseAdmin';
 import { CatalogRepository } from './contracts';
 import { CatalogItem } from './model';
 
 function db() {
-  if (!getApps().length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    initializeApp(projectId ? { projectId } : undefined);
-  }
-  return getFirestore();
+  return getFirestore(ensureFirebaseAdminApp());
+}
+
+function toFirestoreCatalogDocument(item: CatalogItem): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(item).filter(([, value]) => value !== undefined),
+  );
 }
 
 export class FirestoreCatalogRepository implements CatalogRepository {
@@ -25,12 +27,12 @@ export class FirestoreCatalogRepository implements CatalogRepository {
   }
 
   async create(item: CatalogItem): Promise<CatalogItem> {
-    await db().collection('catalogItems').doc(item.id).create(item);
+    await db().collection('catalogItems').doc(item.id).create(toFirestoreCatalogDocument(item));
     return item;
   }
 
   async update(item: CatalogItem): Promise<CatalogItem> {
-    await db().collection('catalogItems').doc(item.id).set(item, { merge: false });
+    await db().collection('catalogItems').doc(item.id).set(toFirestoreCatalogDocument(item), { merge: false });
     return item;
   }
 }
