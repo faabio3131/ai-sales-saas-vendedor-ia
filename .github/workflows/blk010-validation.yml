@@ -8,7 +8,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,3 +54,29 @@ jobs:
           STATUS=$(curl --silent --output /tmp/large-response.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @/tmp/large.json http://127.0.0.1:3000/api/auth/login)
           test "$STATUS" = "413"
           node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('/tmp/large-response.json','utf8'));if(r?.error?.code!=='PAYLOAD_TOO_LARGE')throw new Error('payload limit not normalized');"
+      - name: Production Docker smoke test
+        run: |
+          docker build -t vendedor-ia-ci .
+          docker run --rm -d --name vendedor-ia-ci \
+            -e PORT=8080 \
+            -e NODE_ENV=production \
+            -e SESSION_SECRET=ci-only-session-secret-0123456789abcdef0123456789 \
+            -e FIREBASE_PROJECT_ID=ci-project \
+            -p 18080:8080 vendedor-ia-ci
+          cleanup() { docker logs vendedor-ia-ci || true; docker rm -f vendedor-ia-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/api/health > /tmp/docker-health.json; then
+              cat /tmp/docker-health.json
+              exit 0
+            fi
+            if ! docker inspect -f '{{.State.Running}}' vendedor-ia-ci 2>/dev/null | grep -q true; then
+              echo 'Production container exited before health became ready.'
+              docker logs vendedor-ia-ci || true
+              exit 1
+            fi
+            sleep 1
+          done
+          echo 'Production container did not become healthy in time.'
+          docker logs vendedor-ia-ci || true
+          exit 1
