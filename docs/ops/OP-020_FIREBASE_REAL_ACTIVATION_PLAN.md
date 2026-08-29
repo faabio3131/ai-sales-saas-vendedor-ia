@@ -1,49 +1,40 @@
 # OP-020 — Firebase/Auth/Firestore Real Activation
 
 ## Estado
-EM EXECUÇÃO — infraestrutura Firebase real, autenticação funcional, sessão e isolamento multi-tenant já validados em produção. Falta apenas concluir e registrar o smoke test tenant-scoped de leitura/escrita Firestore antes do fechamento operacional.
+VALIDADO EXTERNAMENTE / FECHADO OPERACIONALMENTE.
 
 ## Objetivo
 Ativar de forma governada o caminho real de Firebase Authentication e Firestore já abstraído no produto, sem versionar segredos e sem confundir prontidão estrutural com validação externa.
 
-## Escopo
-- auditar o adapter Firebase Auth e o repositório Firestore de membership;
-- centralizar bootstrap do Firebase Admin para impedir inicializações divergentes;
-- falhar fechado quando produção não possuir `FIREBASE_PROJECT_ID`;
-- preparar verificação segura de conectividade real;
-- documentar criação/configuração mínima do projeto Firebase;
-- preservar isolamento multi-tenant e interfaces existentes;
-- adicionar testes sem dependência de credenciais reais.
+## Escopo concluído
+- bootstrap Firebase Admin centralizado com Application Default Credentials;
+- Firebase Authentication real habilitado e alcançável em produção;
+- Firestore real criado e alcançável em produção;
+- autenticação funcional de usuário real validada;
+- sessão provider-neutral HttpOnly validada;
+- membership real em Firestore validada;
+- isolamento multi-tenant real validado com tenant autorizado e tenant não autorizado;
+- leitura e escrita Firestore reais validadas por API tenant-scoped;
+- correções de regressão aplicadas para resolução de membership e persistência do catálogo;
+- diagnósticos temporários removidos após a investigação;
+- nenhuma credencial ou segredo versionado no repositório.
 
 ## Evidência externa obtida
 
 ### Readiness Firebase real
-Ambiente real de produção respondeu ao probe seguro `/api/operations/firebase-readiness` com:
-
-```json
-{"ok":true,"data":{"status":"READY","projectConfigured":true,"authReachable":true,"firestoreReachable":true,"secretsExposed":false}}
-```
-
-Validado:
-- projeto Firebase configurado no runtime;
-- Firebase Authentication alcançável pelo backend em produção;
-- Firestore alcançável pelo backend em produção;
-- endpoint de readiness sem exposição de segredos.
+O ambiente real de produção respondeu ao probe seguro `/api/operations/firebase-readiness` com estado `READY`, confirmando projeto configurado, Auth alcançável, Firestore alcançável e ausência de exposição de segredos.
 
 ### Autenticação funcional e sessão real
-Usuário de teste autenticado pelo frontend Firebase Auth e sessão provider-neutral HttpOnly emitida pelo backend. `GET /api/auth/session` confirmou sessão autenticada e UID Firebase real, sem uso ou exposição de senha.
+Usuário de teste autenticado pelo frontend Firebase Auth. O backend validou o token real e emitiu sessão HttpOnly. `GET /api/auth/session` confirmou sessão autenticada sem uso ou exposição de senha.
 
-Status: VALIDADO EXTERNAMENTE.
+Status: PASS / VALIDADO EXTERNAMENTE.
 
 ### Membership Firestore real
-Foi criada membership controlada na coleção `users` para o usuário de teste, tenant `tenant-op020-a`, status `ACTIVE` e role `OWNER`. O backend localizou o registro real no Firestore e o `GET /api/tenancy/context` retornou:
+Membership controlada criada na coleção `users` para o usuário de teste, tenant `tenant-op020-a`, status `ACTIVE` e role `OWNER`.
 
-- HTTP `200`;
-- `tenantId = tenant-op020-a`;
-- `userId = op020-user-test`;
-- `role = OWNER`.
+`GET /api/tenancy/context` com `x-tenant-id: tenant-op020-a` retornou HTTP `200`, `tenantId = tenant-op020-a`, `userId = op020-user-test` e `role = OWNER`.
 
-Status: VALIDADO EXTERNAMENTE.
+Status: PASS / VALIDADO EXTERNAMENTE.
 
 ### Isolamento tenant A/B real
 Com a mesma sessão autenticada:
@@ -51,26 +42,41 @@ Com a mesma sessão autenticada:
 - `x-tenant-id: tenant-op020-a` → HTTP `200`, acesso permitido;
 - `x-tenant-id: tenant-op020-b` → HTTP `403`, `TENANT_ACCESS_DENIED`.
 
-Status: VALIDADO EXTERNAMENTE. Cross-tenant fail-closed confirmado em produção.
+Status: PASS / cross-tenant fail-closed confirmado em produção.
 
-## Incidente encontrado e correção
-A validação externa encontrou um `403 TENANT_ACCESS_DENIED` inesperado para o Tenant A. A investigação comprovou que Auth, sessão e Firestore estavam funcionais, mas a resolução da membership precisava de diagnóstico e normalização mais robustos. Foram adicionados probes autenticados temporários, testes de regressão e normalização segura da leitura de campos, preservando fail-closed. Após a correção, o Tenant A retornou `200` com `OWNER` e o Tenant B permaneceu bloqueado com `403`.
+### Escrita Firestore real via API tenant-scoped
+`POST /api/catalog` sob `x-tenant-id: tenant-op020-a` retornou HTTP `201` e persistiu o item de smoke test com ID `fa2ffd03-a162-4279-a221-66eb1840f895`, `tenantId = tenant-op020-a`, `type = PRODUCT`, `priceMinor = 100` e `currency = BRL`.
 
-## Fora de escopo desta etapa estrutural
-- inventar ou versionar service-account JSON;
-- criar dados de clientes reais;
-- liberar tráfego comercial;
-- declarar piloto comercial validado.
+Status: PASS / escrita real validada.
 
-## Gate externo para fechamento operacional
+### Leitura Firestore real via API tenant-scoped
+`GET /api/catalog/fa2ffd03-a162-4279-a221-66eb1840f895` sob o mesmo contexto retornou HTTP `200` com o mesmo objeto persistido e o mesmo `tenantId`.
+
+Status: PASS / leitura persistida validada.
+
+## Incidentes encontrados e resolvidos
+
+### Resolução de membership
+Durante a validação externa, o Tenant A inicialmente retornou `403 TENANT_ACCESS_DENIED`. A investigação comprovou que Auth, sessão e Firestore estavam funcionais. A resolução de membership foi endurecida com normalização segura de campos e testes de regressão, preservando fail-closed. Após a correção, Tenant A retornou `200 / OWNER` e Tenant B permaneceu bloqueado com `403`.
+
+### Escrita de catálogo
+O primeiro POST tenant-scoped retornou `500` porque o objeto de catálogo podia conter propriedades opcionais com valor `undefined`, que o Firestore rejeita por padrão. O repositório foi corrigido para reutilizar o bootstrap Firebase central e remover valores `undefined` antes da persistência. O teste de regressão e o teste real de produção passaram.
+
+## Gate externo de fechamento operacional
 1. projeto Firebase real identificado — PASS;
-2. credencial de workload/service account injetada fora do Git — PASS;
+2. workload/service account fora do Git — PASS;
 3. Firebase Auth habilitado — PASS;
 4. Firestore criado no projeto correto — PASS;
-5. smoke test real de token Firebase aprovado — PASS;
-6. leitura/escrita controlada em Firestore aprovada — PENDENTE;
-7. teste real de tenant A não acessar tenant B aprovado — PASS;
-8. evidências registradas sem segredos — PASS PARCIAL; falta anexar o resultado do smoke tenant-scoped final.
+5. token Firebase real e sessão backend — PASS;
+6. membership Firestore real — PASS;
+7. tenant A autorizado — PASS;
+8. tenant B não autorizado bloqueado — PASS;
+9. escrita Firestore tenant-scoped — PASS;
+10. leitura Firestore tenant-scoped — PASS;
+11. evidências registradas sem segredos — PASS;
+12. diagnósticos temporários removidos — PASS.
 
-## Próxima execução autorizada
-Executar uma operação tenant-scoped existente no catálogo para provar leitura e escrita reais no Firestore sob o contexto autorizado. Se o POST e o GET passarem e o objeto persistido voltar vinculado exclusivamente a `tenant-op020-a`, registrar a evidência, remover/fechar qualquer diagnóstico temporário que não deva permanecer exposto e fechar formalmente a OP-020 como VALIDADA EXTERNAMENTE.
+## Resultado final
+OP-020 — Firebase/Auth/Firestore Real Activation: VALIDADO EXTERNAMENTE / FECHADO OPERACIONALMENTE.
+
+Este fechamento não declara piloto comercial validado, não ativa flags de release e não substitui gates futuros de hardening, observabilidade, menor privilégio IAM ou validação comercial.
