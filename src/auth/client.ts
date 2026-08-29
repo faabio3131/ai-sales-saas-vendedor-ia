@@ -6,25 +6,59 @@ import {
   signOut,
 } from 'firebase/auth';
 
+interface FirebaseClientConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  appId: string;
+}
+
 function env(): Record<string, string | undefined> {
   return (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
 }
 
-function getClientAuth() {
+function buildTimeConfig(): FirebaseClientConfig | null {
   const e = env();
-  const config = {
-    apiKey: e.VITE_FIREBASE_API_KEY,
-    authDomain: e.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: e.VITE_FIREBASE_PROJECT_ID,
-    appId: e.VITE_FIREBASE_APP_ID,
-  };
+  const apiKey = e.VITE_FIREBASE_API_KEY?.trim();
+  const authDomain = e.VITE_FIREBASE_AUTH_DOMAIN?.trim();
+  const projectId = e.VITE_FIREBASE_PROJECT_ID?.trim();
+  const appId = e.VITE_FIREBASE_APP_ID?.trim();
+  if (!apiKey || !authDomain || !projectId || !appId) return null;
+  return { apiKey, authDomain, projectId, appId };
+}
 
-  if (!config.apiKey || !config.authDomain || !config.projectId || !config.appId) {
+async function runtimeConfig(): Promise<FirebaseClientConfig> {
+  const response = await fetch('/api/runtime/firebase-web', {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error('Authentication is not configured for this environment.');
+
+  const payload = (await response.json()) as { ok?: boolean; data?: Partial<FirebaseClientConfig> };
+  const data = payload.data;
+  if (
+    !payload.ok ||
+    !data?.apiKey ||
+    !data.authDomain ||
+    !data.projectId ||
+    !data.appId
+  ) {
     throw new Error('Authentication is not configured for this environment.');
   }
 
-  const app = getApps().length ? getApp() : initializeApp(config);
-  return getAuth(app);
+  return {
+    apiKey: data.apiKey,
+    authDomain: data.authDomain,
+    projectId: data.projectId,
+    appId: data.appId,
+  };
+}
+
+async function getClientAuth() {
+  if (getApps().length) return getAuth(getApp());
+  const config = buildTimeConfig() ?? (await runtimeConfig());
+  return getAuth(initializeApp(config));
 }
 
 async function establishServerSession(idToken: string): Promise<void> {
@@ -38,19 +72,19 @@ async function establishServerSession(idToken: string): Promise<void> {
 }
 
 export async function loginWithEmail(email: string, password: string): Promise<void> {
-  const credential = await signInWithEmailAndPassword(getClientAuth(), email, password);
+  const credential = await signInWithEmailAndPassword(await getClientAuth(), email, password);
   await establishServerSession(await credential.user.getIdToken());
 }
 
 export async function registerWithEmail(email: string, password: string): Promise<void> {
-  const credential = await createUserWithEmailAndPassword(getClientAuth(), email, password);
+  const credential = await createUserWithEmailAndPassword(await getClientAuth(), email, password);
   await establishServerSession(await credential.user.getIdToken());
 }
 
 export async function logout(): Promise<void> {
   await fetch('/api/auth/session', { method: 'DELETE', credentials: 'same-origin' });
   try {
-    await signOut(getClientAuth());
+    await signOut(await getClientAuth());
   } catch {
     // Server session is the application authority; Firebase client cleanup is best-effort.
   }
