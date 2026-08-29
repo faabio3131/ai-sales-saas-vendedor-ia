@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+import { CatalogRepository } from '../src/catalog/contracts';
+import { CatalogItem } from '../src/catalog/model';
+import { PaymentRepository } from '../src/payments/contracts';
+import { Payment } from '../src/payments/model';
+import { RevenueExpansionRepository } from '../src/revenueExpansion/contracts';
+import { RevenueExpansion } from '../src/revenueExpansion/model';
+import { RevenueExpansionService } from '../src/revenueExpansion/service';
+import { TenantContext } from '../src/types/contracts';
+
+class ExpRepo implements RevenueExpansionRepository { rows:RevenueExpansion[]=[]; async listByTenant(t:string){return this.rows.filter(x=>x.tenantId===t)} async findById(t:string,id:string){return this.rows.find(x=>x.tenantId===t&&x.id===id)??null} async findByPaymentId(t:string,p:string){return this.rows.find(x=>x.tenantId===t&&x.attributedPaymentId===p)??null} async create(x:RevenueExpansion){this.rows.push(x);return x} async update(x:RevenueExpansion){this.rows=this.rows.map(v=>v.id===x.id?x:v);return x} }
+class CatRepo implements CatalogRepository { constructor(public rows:CatalogItem[]){} async listByTenant(t:string){return this.rows.filter(x=>x.tenantId===t)} async findById(t:string,id:string){return this.rows.find(x=>x.tenantId===t&&x.id===id)??null} async create(x:CatalogItem){this.rows.push(x);return x} async update(x:CatalogItem){return x} }
+class PayRepo implements PaymentRepository { constructor(public rows:Payment[]){} async listByTenant(t:string){return this.rows.filter(x=>x.tenantId===t)} async findById(t:string,id:string){return this.rows.find(x=>x.tenantId===t&&x.id===id)??null} async findByIdempotencyKey(){return null} async findByProviderPaymentId(){return null} async create(x:Payment){this.rows.push(x);return x} async update(x:Payment){return x} }
+const ctx=(tenantId:string):TenantContext=>({tenantId,requestId:'r'});
+const item:CatalogItem={id:'cat1',tenantId:'t1',type:'PRODUCT',name:'Premium',active:true,priceMinor:2500,currency:'BRL',createdAt:'x',updatedAt:'x'};
+const payment:Payment={id:'pay1',tenantId:'t1',customerId:'c1',quoteId:'q1',provider:'STRUCTURAL',method:'PIX',status:'CONFIRMED',amountMinor:2500,currency:'BRL',idempotencyKey:'k',createdAt:'x',updatedAt:'x'};
+
+describe('BLK-160 Revenue Expansion',()=>{
+ it('creates upsell from real active priced catalog and requires approval in safe default ASSIST',async()=>{const r=new ExpRepo();const s=new RevenueExpansionService(r,new CatRepo([item]),new PayRepo([]));const x=await s.suggest(ctx('t1'),{customerId:'c1',type:'UPSELL',catalogItemId:'cat1'});expect(x.suggestedAmountMinor).toBe(2500);expect(x.status).toBe('APPROVAL_REQUIRED');});
+ it('supports cross-sell through governed policy path',async()=>{const s=new RevenueExpansionService(new ExpRepo(),new CatRepo([item]),new PayRepo([]));const x=await s.suggest(ctx('t1'),{customerId:'c1',type:'CROSS_SELL',catalogItemId:'cat1'});expect(x.type).toBe('CROSS_SELL');expect(x.policyReasonCode).toContain('ASSIST');});
+ it('rejects inactive or cross-tenant catalog items',async()=>{const s=new RevenueExpansionService(new ExpRepo(),new CatRepo([{...item,active:false}]),new PayRepo([]));await expect(s.suggest(ctx('t1'),{customerId:'c1',type:'UPSELL',catalogItemId:'cat1'})).rejects.toMatchObject({code:'EXPANSION_CATALOG_ITEM_UNAVAILABLE'});await expect(new RevenueExpansionService(new ExpRepo(),new CatRepo([item]),new PayRepo([])).suggest(ctx('t2'),{customerId:'c1',type:'UPSELL',catalogItemId:'cat1'})).rejects.toMatchObject({code:'EXPANSION_CATALOG_ITEM_UNAVAILABLE'});});
+ it('attributes only confirmed same-tenant same-customer payment after approval',async()=>{const r=new ExpRepo();const s=new RevenueExpansionService(r,new CatRepo([item]),new PayRepo([payment]),undefined,undefined,()=> '2026-01-01T00:00:00.000Z');let x=await s.suggest(ctx('t1'),{customerId:'c1',type:'UPSELL',catalogItemId:'cat1'});x=await s.approve(ctx('t1'),x.id);x=await s.attribute(ctx('t1'),x.id,'pay1');expect(x.status).toBe('ATTRIBUTED');expect(x.attributedRevenueMinor).toBe(2500);});
+ it('does not attribute pending payment or invent revenue',async()=>{const r=new ExpRepo();const pending={...payment,status:'PENDING' as const};const s=new RevenueExpansionService(r,new CatRepo([item]),new PayRepo([pending]));let x=await s.suggest(ctx('t1'),{customerId:'c1',type:'UPSELL',catalogItemId:'cat1'});x=await s.approve(ctx('t1'),x.id);await expect(s.attribute(ctx('t1'),x.id,'pay1')).rejects.toMatchObject({code:'PAYMENT_NOT_CONFIRMED'});});
+ it('is idempotent for the same attributed expansion/payment and tenant isolated',async()=>{const r=new ExpRepo();const s=new RevenueExpansionService(r,new CatRepo([item]),new PayRepo([payment]));let x=await s.suggest(ctx('t1'),{customerId:'c1',type:'UPSELL',catalogItemId:'cat1'});x=await s.approve(ctx('t1'),x.id);const first=await s.attribute(ctx('t1'),x.id,'pay1');const second=await s.attribute(ctx('t1'),x.id,'pay1');expect(second).toEqual(first);await expect(s.attribute(ctx('t2'),x.id,'pay1')).rejects.toMatchObject({code:'EXPANSION_NOT_FOUND'});});
+});
