@@ -8,6 +8,20 @@ interface MembershipDocument {
   data: Record<string, unknown>;
 }
 
+export function readMembershipStringField(data: Record<string, unknown>, expectedKey: string): string {
+  const direct = data[expectedKey];
+  if (typeof direct === 'string') return direct.trim();
+
+  const normalizedExpected = expectedKey.trim().toLowerCase();
+  for (const [key, value] of Object.entries(data)) {
+    if (key.trim().toLowerCase() === normalizedExpected && typeof value === 'string') {
+      return value.trim();
+    }
+  }
+
+  return '';
+}
+
 export function selectActiveMembership(
   authUserId: string,
   tenantId: string,
@@ -15,10 +29,10 @@ export function selectActiveMembership(
 ): TenantMembership | null {
   for (const document of documents) {
     const data = document.data;
-    const storedAuthUserId = typeof data.authUserId === 'string' ? data.authUserId.trim() : '';
-    const storedTenantId = typeof data.tenantId === 'string' ? data.tenantId.trim() : '';
-    const status = typeof data.status === 'string' ? data.status.trim() : '';
-    const role = typeof data.role === 'string' ? data.role.trim() : '';
+    const storedAuthUserId = readMembershipStringField(data, 'authUserId');
+    const storedTenantId = readMembershipStringField(data, 'tenantId');
+    const status = readMembershipStringField(data, 'status');
+    const role = readMembershipStringField(data, 'role');
 
     if (
       storedAuthUserId === authUserId &&
