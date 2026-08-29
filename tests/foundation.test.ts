@@ -7,7 +7,7 @@ import { isValidTenantContext, createTenantContext } from '../src/tenancy/contex
 import { errorHandler } from '../src/api/middleware/errorHandler';
 import { healthCheckHandler } from '../src/api/routes/health';
 describe('Application Foundation regression tests', () => {
- it('parses safe default server configuration',()=>{const c=loadServerConfig({});expect(c.port).toBe(3000);expect(c.nodeEnv).toBe('development');expect(c.block).toBe('BLK-190');expect(c.serviceName).toContain('Vendedor IA');});
+ it('parses safe default server configuration',()=>{const c=loadServerConfig({});expect(c.port).toBe(3000);expect(c.nodeEnv).toBe('development');expect(c.block).toBe('BLK-200');expect(c.serviceName).toContain('Vendedor IA');});
  it('respects supported runtime configuration',()=>{const c=loadServerConfig({PORT:'3000',NODE_ENV:'production'});expect(c.port).toBe(3000);expect(c.nodeEnv).toBe('production');});
  it('maps application error categories to HTTP status codes',()=>{const categories:Record<AppErrorCategory,number>={VALIDATION:400,AUTH:401,FORBIDDEN:403,NOT_FOUND:404,CONFLICT:409,RATE_LIMIT:429,PROVIDER:502,INTERNAL:500};for(const [k,v] of Object.entries(categories))expect(mapCategoryToStatusCode(k as AppErrorCategory)).toBe(v);});
  it('instantiates ApplicationError with the normalized contract',()=>{const e=new ApplicationError({category:'VALIDATION',code:'INVALID_INPUT',message:'Invalid input.',retryable:false});expect(e.name).toBe('ApplicationError');expect(e.category).toBe('VALIDATION');expect(e.code).toBe('INVALID_INPUT');expect(e.statusCode).toBe(400);expect(e.retryable).toBe(false);});
