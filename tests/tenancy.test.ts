@@ -27,6 +27,13 @@ const memberships: TenantMembership[] = [
     role: 'VIEWER',
     status: 'INACTIVE',
   },
+  {
+    tenantId: 'tenant-d',
+    authUserId: 'auth-user-1',
+    userId: 'user-d-1',
+    role: '   ',
+    status: 'ACTIVE',
+  },
 ];
 
 function requestFor(authUserId: string | undefined, tenantId: string): Request {
@@ -41,6 +48,20 @@ function requestFor(authUserId: string | undefined, tenantId: string): Request {
 }
 
 describe('BLK-030: Tenancy', () => {
+  it('lists only active memberships owned by the authenticated principal', async () => {
+    const repository = new InMemoryTenantMembershipRepository(memberships);
+
+    await expect(repository.listActiveMemberships('auth-user-1')).resolves.toEqual([
+      {
+        tenantId: 'tenant-a',
+        authUserId: 'auth-user-1',
+        userId: 'user-a-1',
+        role: 'OWNER',
+        status: 'ACTIVE',
+      },
+    ]);
+  });
+
   it('creates TenantContext only after verified active membership', async () => {
     const repository = new InMemoryTenantMembershipRepository(memberships);
     const middleware = createTenantAuthorizationMiddleware(repository);
