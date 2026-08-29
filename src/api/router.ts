@@ -15,6 +15,7 @@ import { createQuotesRouter } from '../quotes/routes';
 import { createRecoveryRouter } from '../recovery/routes';
 import { createReleaseRouter } from '../release/routes';
 import { createRevenueExpansionRouter } from '../revenueExpansion/routes';
+import { firebaseWebRuntimeConfigHandler } from '../runtimeConfig/firebaseWeb';
 import { createSalesRouter } from '../sales/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
 import { createTenancyRouter } from '../tenancy/routes';
@@ -24,6 +25,7 @@ export function createApiRouter(): Router {
   const router = Router();
   router.use('/auth', createAuthRouter());
   router.get('/health', healthCheckHandler);
+  router.get('/runtime/firebase-web', firebaseWebRuntimeConfigHandler);
   router.use('/tenancy', authenticationMiddleware, tenantAuthorizationMiddleware, createTenancyRouter());
   router.use('/catalog', authenticationMiddleware, tenantAuthorizationMiddleware, createCatalogRouter());
   router.use('/customers', authenticationMiddleware, tenantAuthorizationMiddleware, createCustomersRouter());
