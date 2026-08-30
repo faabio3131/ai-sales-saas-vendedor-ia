@@ -164,7 +164,6 @@ export function ProductWorkspaceView() {
           <span className="rounded-full border border-slate-800 px-2.5 py-1">Perfil: <strong className="text-slate-300">{selectedMembership.role}</strong></span>
           <span className="rounded-full border border-slate-800 px-2.5 py-1">Tenant protegido</span>
         </div>
-      )}
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {cards.map(({ label, value, icon: Icon }) => (
