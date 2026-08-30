@@ -11,12 +11,19 @@ O primeiro provedor real será Gemini por meio da Gemini API, encapsulada atrás
 
 A integração runtime será feita por HTTP/REST dentro do adapter/transport. Nenhum módulo de negócio poderá chamar a API Gemini diretamente.
 
+Para a ativação nova, o transporte real usa a **Interactions API estável v1**, e não `generateContent`. A decisão acompanha a direção atual do provedor: Interactions tornou-se a interface padrão em junho de 2026 e `generateContent` passou a ser considerado legado, embora ainda suportado.
+
+A geração é stateless com `store=false`. O boundary interno continua sendo `GeminiTransport`, de modo que mudanças futuras do protocolo externo não contaminem aplicação, domínio ou roteador de IA.
+
+Parâmetros de sampling legados/depreciados não são enviados pelo transporte real. O limite de saída continua sendo aplicado por `generation_config.max_output_tokens`.
+
 ## Cadeia obrigatória
 `Business/Application → AIRouterInterface → AIRouter → AIProviderInterface → GeminiAdapter → GeminiHttpTransport → Gemini API`
 
 ## Escopo autorizado
 - implementar transporte HTTP real do Gemini atrás do boundary existente;
 - ler `GEMINI_API_KEY` apenas do runtime/Secret Manager;
+- usar authorization key do Gemini vinculada a service account para a ativação de produção, evitando standard key em processo de descontinuação;
 - tornar o modelo configurável por `GEMINI_MODEL`;
 - não hardcodar segredo;
 - adicionar readiness real do provedor;
