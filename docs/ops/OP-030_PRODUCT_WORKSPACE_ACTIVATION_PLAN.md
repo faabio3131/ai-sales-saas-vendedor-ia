@@ -53,5 +53,11 @@ A OP-030 só poderá ser fechada quando:
 - ausência de membership falhar fechado;
 - nenhuma métrica comercial fictícia for apresentada.
 
+## Hardening interno adicional
+- descoberta de memberships falha fechado com HTTP 403 quando o usuário autenticado não possui membership ativa;
+- o handler de descoberta aceita repositório injetável para teste determinístico sem Firebase real;
+- testes cobrem: principal autenticado, filtragem de memberships e ausência de membership ativa;
+- o gate de runtime inclui `/api/tenancy/memberships` entre as rotas que devem rejeitar acesso sem sessão.
+
 ## Próxima validação externa
 Após CI verde e deploy da `main`, abrir a aplicação de produção, autenticar com o usuário de teste já validado e confirmar que o workspace carrega automaticamente o tenant autorizado e o dashboard comercial.
