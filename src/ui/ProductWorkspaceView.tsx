@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Bot, Boxes, MessageCircle, RefreshCw, Target, Users } from 'lucide-react';
-
-interface Membership {
-  tenantId: string;
-  userId: string;
-  role: string;
-  status: 'ACTIVE';
-}
+import { Activity, Bot, Boxes, LockKeyhole, MessageCircle, RefreshCw, Target, Users } from 'lucide-react';
+import { resolveWorkspaceMemberships, WorkspaceMembership } from './workspaceAccess';
 
 interface AttentionItem {
   kind: string;
@@ -34,11 +28,12 @@ function money(minor: number): string {
 }
 
 export function ProductWorkspaceView() {
-  const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
   const [tenantId, setTenantId] = useState('');
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessBlocked, setAccessBlocked] = useState(false);
 
   const selectedMembership = useMemo(
     () => memberships.find((membership) => membership.tenantId === tenantId) ?? null,
@@ -51,13 +46,31 @@ export function ProductWorkspaceView() {
       setError(null);
       try {
         const response = await fetch('/api/tenancy/memberships', { credentials: 'same-origin' });
-        if (!response.ok) throw new Error('Não foi possível carregar sua empresa.');
-        const payload = await response.json() as { ok: boolean; data: Membership[] };
-        const active = payload.data ?? [];
-        setMemberships(active);
-        const remembered = localStorage.getItem('vendedor-ia:tenant-id');
-        const initial = active.find((item) => item.tenantId === remembered)?.tenantId ?? active[0]?.tenantId ?? '';
-        setTenantId(initial);
+        const payload = response.ok
+          ? await response.json() as { ok: boolean; data: WorkspaceMembership[] }
+          : { ok: false, data: [] as WorkspaceMembership[] };
+        const resolution = resolveWorkspaceMemberships({
+          responseStatus: response.status,
+          memberships: payload.data,
+          rememberedTenantId: localStorage.getItem('vendedor-ia:tenant-id'),
+        });
+
+        if (resolution.kind === 'BLOCKED') {
+          localStorage.removeItem('vendedor-ia:tenant-id');
+          setMemberships([]);
+          setTenantId('');
+          setDashboard(null);
+          setAccessBlocked(true);
+          return;
+        }
+
+        if (resolution.kind === 'ERROR') {
+          throw new Error('Não foi possível carregar sua empresa.');
+        }
+
+        setAccessBlocked(false);
+        setMemberships(resolution.memberships);
+        setTenantId(resolution.tenantId);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : 'Falha ao iniciar o ambiente comercial.');
       } finally {
@@ -99,6 +112,23 @@ export function ProductWorkspaceView() {
     { label: 'Recuperações', value: dashboard.metrics.recoveryOpen, icon: MessageCircle },
   ] : [];
 
+  if (accessBlocked) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:py-16">
+        <section className="rounded-3xl border border-amber-500/20 bg-slate-900/70 p-6 text-center sm:p-10">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/10">
+            <LockKeyhole className="h-6 w-6 text-amber-300" />
+          </div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">Acesso comercial bloqueado</div>
+          <h1 className="mt-3 text-2xl font-bold text-white">Nenhuma empresa autorizada para esta conta.</h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400">
+            Sua autenticação foi reconhecida, mas esta conta não possui membership ativa em nenhuma empresa. Nenhum tenant, dashboard ou módulo comercial foi liberado.
+          </p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
       <section className="mb-6 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-slate-900 to-slate-950 p-5 sm:p-7">
@@ -129,6 +159,7 @@ export function ProductWorkspaceView() {
       {loading && <div className="mb-5 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-400">Atualizando seu ambiente comercial...</div>}
 
       {selectedMembership && (
+        <>
         <div className="mb-5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
           <span className="rounded-full border border-slate-800 px-2.5 py-1">Perfil: <strong className="text-slate-300">{selectedMembership.role}</strong></span>
           <span className="rounded-full border border-slate-800 px-2.5 py-1">Tenant protegido</span>
@@ -176,6 +207,8 @@ export function ProductWorkspaceView() {
           </div>
         </article>
       </section>
+        </>
+      )}
     </div>
   );
 }
