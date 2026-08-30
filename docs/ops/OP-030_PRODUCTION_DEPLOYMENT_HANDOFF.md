@@ -1,7 +1,7 @@
 # OP-030 — Production Deployment Handoff
 
 ## Estado
-DEPLOY E SMOKE CONCLUÍDOS / WORKSPACE E DASHBOARD VALIDADOS / AGUARDANDO PROVA EXTERNA DE FAIL-CLOSED SEM MEMBERSHIP.
+VALIDAÇÃO EXTERNA CONCLUÍDA / OP-030 FECHADA OPERACIONALMENTE.
 
 ## Fonte validada
 Branch: `main`
@@ -109,3 +109,19 @@ Executado em 2026-08-30 após CI verde da correção de UX/segurança para usuá
 - objetivo: garantir que usuário autenticado sem membership ativa veja somente estado explícito de acesso bloqueado, sem tenant, dashboard, cards ou módulos comerciais.
 
 Próxima evidência obrigatória: repetir login com usuário temporário sem membership e validar visualmente o estado fail-closed em produção.
+
+
+## Evidência final fail-closed
+Validação concluída em produção em 2026-08-30 com usuário autenticado sem membership ativa.
+
+Resultado observado:
+- autenticação reconhecida;
+- nenhum tenant autorizado;
+- nenhum dashboard liberado;
+- nenhum card comercial liberado;
+- nenhum módulo comercial liberado;
+- interface exibiu `ACESSO COMERCIAL BLOQUEADO`;
+- mensagem exibida: `Nenhuma empresa autorizada para esta conta.`.
+
+Documento de fechamento:
+`docs/ops/OP-030_CLOSURE.md`.
