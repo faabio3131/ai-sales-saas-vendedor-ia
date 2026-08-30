@@ -35,7 +35,6 @@ export async function aiRealSmokeHandler(req: Request, res: Response): Promise<v
     capability: 'FAST_CHAT',
     systemInstructions: 'This is a production provider connectivity smoke test. Follow the requested output exactly.',
     input: 'Return exactly: VENDEDOR_IA_AI_OK',
-    temperature: 0,
     maxOutputTokens: 32,
     metadata: {
       purpose: 'OP-040_REAL_AI_SMOKE',
