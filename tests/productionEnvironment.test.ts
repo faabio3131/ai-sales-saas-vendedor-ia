@@ -21,6 +21,30 @@ describe('OP-010 Production Environment', () => {
     expect(report.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(['REQUIRED', 'TOO_SHORT', 'HTTPS_REQUIRED']));
   });
 
+  it('rejects partial Gemini real-provider configuration', () => {
+    const report = validateProductionEnvironment({
+      SESSION_SECRET: '0123456789abcdef0123456789abcdef',
+      FIREBASE_PROJECT_ID: 'real-project-id',
+      PUBLIC_APP_URL: 'https://app.example.com',
+      GEMINI_API_KEY: 'secret-gemini-key',
+    });
+    expect(report.valid).toBe(false);
+    expect(report.issues).toContainEqual(expect.objectContaining({ key: 'GEMINI_REAL_PROVIDER', code: 'PARTIAL_CONFIGURATION' }));
+    expect(JSON.stringify(report)).not.toContain('secret-gemini-key');
+  });
+
+  it('accepts paired Gemini configuration without exposing it', () => {
+    const report = validateProductionEnvironment({
+      SESSION_SECRET: '0123456789abcdef0123456789abcdef',
+      FIREBASE_PROJECT_ID: 'real-project-id',
+      PUBLIC_APP_URL: 'https://app.example.com',
+      GEMINI_API_KEY: 'secret-gemini-key',
+      GEMINI_MODEL: 'gemini-test',
+    });
+    expect(report.valid).toBe(true);
+    expect(JSON.stringify(report)).not.toContain('secret-gemini-key');
+  });
+
   it('rejects partial WhatsApp real-provider configuration', () => {
     const report = validateProductionEnvironment({
       SESSION_SECRET: '0123456789abcdef0123456789abcdef',
