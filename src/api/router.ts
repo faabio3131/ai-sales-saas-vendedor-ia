@@ -8,6 +8,7 @@ import { createCustomersRouter } from '../customers/routes';
 import { createDashboardRouter } from '../dashboard/routes';
 import { createFollowUpsRouter } from '../followups/routes';
 import { createLeadsRouter } from '../leads/routes';
+import { aiRealReadinessHandler, aiRealSmokeHandler } from '../operations/aiRealRoutes';
 import { firebaseRealReadinessHandler } from '../operations/firebaseRealReadinessRoute';
 import { createPaymentsRouter } from '../payments/routes';
 import { createPilotRouter } from '../pilot/routes';
@@ -29,6 +30,12 @@ export function createApiRouter(): Router {
   router.get('/runtime/firebase-web', firebaseWebRuntimeConfigHandler);
   router.get('/operations/firebase-readiness', (req, res, next) => {
     firebaseRealReadinessHandler(req, res).catch(next);
+  });
+  router.get('/operations/ai-readiness', authenticationMiddleware, tenantAuthorizationMiddleware, (req, res, next) => {
+    aiRealReadinessHandler(req, res).catch(next);
+  });
+  router.post('/operations/ai-smoke', authenticationMiddleware, tenantAuthorizationMiddleware, (req, res, next) => {
+    aiRealSmokeHandler(req, res).catch(next);
   });
   router.get('/tenancy/memberships', authenticationMiddleware, (req, res, next) => {
     activeTenantMembershipsHandler(req, res).catch(next);
