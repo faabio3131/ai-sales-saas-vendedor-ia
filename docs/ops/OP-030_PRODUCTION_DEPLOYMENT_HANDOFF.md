@@ -1,7 +1,7 @@
 # OP-030 — Production Deployment Handoff
 
 ## Estado
-DEPLOY EXTERNO EXECUTADO / AGUARDANDO SMOKE E VALIDAÇÃO FUNCIONAL.
+DEPLOY E SMOKE CONCLUÍDOS / WORKSPACE E DASHBOARD VALIDADOS / AGUARDANDO PROVA EXTERNA DE FAIL-CLOSED SEM MEMBERSHIP.
 
 ## Fonte validada
 Branch: `main`
@@ -75,5 +75,25 @@ Resultado observado:
 - `tenantIsolationEnforced: true`;
 - `secretsServerSideOnly: true`.
 
+## Evidência funcional externa
+Validação visual em produção concluída em 2026-08-30:
+
+- sessão autenticada reconhecida;
+- workspace de produto carregado como superfície principal;
+- tenant autorizado `tenant-op020-a` descoberto automaticamente;
+- perfil `OWNER` exibido;
+- nenhuma manipulação manual de `x-tenant-id` foi necessária pelo usuário;
+- dashboard tenant-scoped carregou sem erro;
+- cards comerciais retornaram valores reais do tenant (ambiente de teste sem dados comerciais: zeros);
+- módulos comerciais foram apresentados na superfície de produto.
+
+Durante a validação, o dashboard inicialmente falhou porque não existia índice composto para a consulta de `followUps`. Foi criado no Firestore o índice composto:
+- collection group: `followUps`;
+- `tenantId ASCENDING`;
+- `scheduledAt ASCENDING`;
+- estado observado: `READY`.
+
+Após o índice ficar `READY`, o dashboard carregou corretamente sem novo deploy.
+
 ## Próximo gate
-Validar externamente login → descoberta automática de tenant → workspace → dashboard comercial. A OP-030 permanece aberta até essa evidência funcional.
+Executar prova externa de fail-closed com um usuário autenticado sem membership ativa. A OP-030 permanece aberta até confirmar em produção que esse usuário não obtém workspace comercial/tenant e recebe bloqueio seguro.
