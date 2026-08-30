@@ -1,7 +1,7 @@
 # OP-030 — Production Deployment Handoff
 
 ## Estado
-PRONTO PARA DEPLOY EXTERNO / AGUARDANDO EXECUÇÃO AUTENTICADA NO GOOGLE CLOUD.
+DEPLOY EXTERNO EXECUTADO / AGUARDANDO SMOKE E VALIDAÇÃO FUNCIONAL.
 
 ## Fonte validada
 Branch: `main`
@@ -49,5 +49,17 @@ Esperado:
 6. confirmar que ausência de membership ativa falha fechado;
 7. não declarar OP-030 fechada antes dessa evidência.
 
-## Limite operacional atual
-O repositório está pronto e validado, mas a promoção da revisão para Cloud Run exige uma sessão autenticada no Google Cloud. Nenhum segredo deve ser criado ou exposto apenas para contornar essa exigência.
+## Evidência de deploy externo
+Executado em 2026-08-29 a partir da cópia local em `C:\ai-sales-saas-vendedor-ia`.
+
+- branch: `main`;
+- HEAD implantado: `6f975509d35a50c2e3026d5e7ba898ac6ca63a8d`;
+- projeto: `ai-sales-saas-vendedor-ia-prod`;
+- região: `southamerica-east1`;
+- revisão criada: `ai-sales-saas-vendedor-ia-00040-cqt`;
+- tráfego: 100% na nova revisão;
+- service URL informado pelo Cloud Run: `https://ai-sales-saas-vendedor-ia-1005722045740.southamerica-east1.run.app`;
+- build, criação da revisão, roteamento de tráfego e IAM: concluídos com sucesso.
+
+## Próximo gate
+Executar smoke externo de `/api/health` e, em seguida, validar login → descoberta automática de tenant → workspace → dashboard. A OP-030 permanece aberta até essas evidências.
