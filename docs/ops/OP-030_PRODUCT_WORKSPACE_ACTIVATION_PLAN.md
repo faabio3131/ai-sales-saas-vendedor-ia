@@ -1,7 +1,7 @@
 # OP-030 — Product Workspace Activation
 
 ## Estado
-EM EXECUÇÃO.
+VALIDADO EXTERNAMENTE / FECHADO OPERACIONALMENTE.
 
 ## Objetivo
 Substituir a antiga interface técnica de fundação por uma superfície real de produto, mobile-first e tenant-aware, capaz de levar um usuário autenticado ao seu ambiente comercial sem exigir conhecimento técnico de headers, IDs ou endpoints.
@@ -59,5 +59,12 @@ A OP-030 só poderá ser fechada quando:
 - testes cobrem: principal autenticado, filtragem de memberships e ausência de membership ativa;
 - o gate de runtime inclui `/api/tenancy/memberships` entre as rotas que devem rejeitar acesso sem sessão.
 
-## Próxima validação externa
-Após CI verde e deploy da `main`, abrir a aplicação de produção, autenticar com o usuário de teste já validado e confirmar que o workspace carrega automaticamente o tenant autorizado e o dashboard comercial.
+## Validação externa concluída
+A validação em produção confirmou:
+- entrada automática no Product Workspace para usuário com membership ativa;
+- descoberta do tenant autorizado sem manipulação manual de headers;
+- dashboard tenant-scoped carregado com dados reais;
+- bloqueio explícito e fail-closed para usuário autenticado sem membership;
+- nenhum tenant, dashboard, card ou módulo comercial liberado no cenário sem membership.
+
+Documento de fechamento: `docs/ops/OP-030_CLOSURE.md`.
