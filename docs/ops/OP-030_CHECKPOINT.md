@@ -1,32 +1,64 @@
 # OP-030 — CHECKPOINT DE CONTINUIDADE
 
-## Estado em 2026-08-29
+## Estado em 2026-08-30
 
-A OP-030 — Product Workspace Activation está em execução.
+A OP-030 — Product Workspace Activation permanece em execução, mas já passou pelos principais gates técnicos e funcionais de produção.
 
-## Correção concluída
-O bloqueio de TypeScript identificado no CI anterior foi corrigido:
-- `InMemoryTenantMembershipRepository` passou a implementar `listActiveMemberships`;
-- a implementação filtra por principal autenticado, status `ACTIVE` e role não vazia;
-- `findActiveMembership` reutiliza a mesma regra de descoberta;
-- teste de regressão foi adicionado para garantir que memberships de outro usuário, inativas ou sem role não sejam retornadas.
+## Código e CI já validados
+- branch de referência: `main`;
+- commit implantado no Cloud Run: `6f975509d35a50c2e3026d5e7ba898ac6ca63a8d`;
+- revisão Cloud Run: `ai-sales-saas-vendedor-ia-00040-cqt`;
+- tráfego: 100% na nova revisão;
+- build: PASS;
+- typecheck: PASS;
+- tests: PASS;
+- runtime security boundaries: PASS;
+- production Docker smoke: PASS.
 
-## CI de validação
-Workflow: Project Validation
-Run ID: 33281035867
-Head SHA: 8facda1a10e2ff57ced00c135768c98e3a86663d
-Status final: SUCCESS
+## Produção validada
+Endpoint:
+`https://ai-sales-saas-vendedor-ia-1005722045740.southamerica-east1.run.app`
 
-### Resultado por etapa
-- Build: PASS
-- Typecheck: PASS
-- Tests: PASS
-- Runtime security boundaries: PASS
-- Production Docker smoke test: PASS
+Smoke de `/api/health` validado com:
+- `status: ok`;
+- `environment: production`;
+- `tenantIsolationEnforced: true`;
+- `secretsServerSideOnly: true`.
 
-## Commits da correção
-- `023a06670848bb5452ea9b765c80dff3f703b0d8` — implementação in-memory de membership discovery;
-- `8facda1a10e2ff57ced00c135768c98e3a86663d` — cobertura de teste para descoberta de memberships ativas.
+## Validação funcional externa concluída
+Usuário autenticado conseguiu entrar no novo Product Workspace.
 
-## Próximo ponto
-O bloqueio técnico deste checkpoint está resolvido. A OP-030 ainda não deve ser declarada fechada automaticamente; a próxima tarefa deve continuar o escopo planejado de Product Workspace Activation e passar novamente pelos gates obrigatórios antes do fechamento formal.
+Evidências observadas:
+- sessão autenticada reconhecida;
+- tenant `tenant-op020-a` descoberto automaticamente;
+- perfil `OWNER` reconhecido;
+- nenhuma manipulação manual de `x-tenant-id` foi necessária;
+- dashboard comercial carregou corretamente;
+- cards de Leads, Oportunidades, Pipeline, Follow-ups e Recuperações foram exibidos;
+- valores zerados eram coerentes com tenant de teste sem dados comerciais;
+- a antiga tela técnica deixou de ser a superfície principal.
+
+## Incidente resolvido durante a validação
+O dashboard inicialmente retornou erro por ausência de índice composto no Firestore.
+
+Índice criado e validado como `READY`:
+- collection group: `followUps`;
+- `tenantId ASCENDING`;
+- `scheduledAt ASCENDING`.
+
+Após o índice ficar `READY`, o dashboard carregou normalmente sem novo deploy.
+
+## Próximo ponto exato para retomar
+Executar a última prova externa de segurança da OP-030:
+
+1. criar um usuário temporário no Firebase Authentication;
+2. NÃO criar membership para esse usuário;
+3. autenticar esse usuário no Vendedor IA;
+4. confirmar que a descoberta de memberships falha fechado;
+5. confirmar que nenhum tenant/workspace comercial é liberado;
+6. registrar a evidência;
+7. apagar o usuário temporário;
+8. somente então criar `docs/ops/OP-030_CLOSURE.md` e fechar formalmente a OP-030.
+
+## Regra de continuidade
+Não avançar para a próxima fase operacional antes de concluir essa prova de fail-closed e obter autorização do usuário para a fase seguinte.
