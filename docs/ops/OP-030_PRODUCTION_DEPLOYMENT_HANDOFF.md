@@ -61,5 +61,19 @@ Executado em 2026-08-29 a partir da cópia local em `C:\ai-sales-saas-vendedor-i
 - service URL informado pelo Cloud Run: `https://ai-sales-saas-vendedor-ia-1005722045740.southamerica-east1.run.app`;
 - build, criação da revisão, roteamento de tráfego e IAM: concluídos com sucesso.
 
+## Evidência de smoke externo
+Smoke executado após o deploy contra o endpoint público de produção:
+
+`GET /api/health`
+
+Resultado observado:
+- HTTP/response válida;
+- `status: ok`;
+- `environment: production`;
+- `block: BLK-200`;
+- `tenantBoundaryPrepared: true`;
+- `tenantIsolationEnforced: true`;
+- `secretsServerSideOnly: true`.
+
 ## Próximo gate
-Executar smoke externo de `/api/health` e, em seguida, validar login → descoberta automática de tenant → workspace → dashboard. A OP-030 permanece aberta até essas evidências.
+Validar externamente login → descoberta automática de tenant → workspace → dashboard comercial. A OP-030 permanece aberta até essa evidência funcional.
