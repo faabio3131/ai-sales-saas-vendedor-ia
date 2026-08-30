@@ -3,21 +3,30 @@ import { GeminiHttpTransport, createGeminiHttpTransportFromEnv } from '../src/ai
 
 describe('OP-040: GeminiHttpTransport', () => {
   it('calls generateContent with the API key in a header and normalizes the response', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      candidates: [{
-        content: { parts: [{ text: 'VENDEDOR_IA_AI_OK' }] },
-        finishReason: 'STOP',
-      }],
-      usageMetadata: {
-        promptTokenCount: 7,
-        candidatesTokenCount: 3,
-      },
-    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    let capturedUrl = '';
+    let capturedInit: RequestInit | undefined;
+    let callCount = 0;
+
+    const fetchImpl: typeof fetch = async (input, init) => {
+      callCount += 1;
+      capturedUrl = String(input);
+      capturedInit = init;
+      return new Response(JSON.stringify({
+        candidates: [{
+          content: { parts: [{ text: 'VENDEDOR_IA_AI_OK' }] },
+          finishReason: 'STOP',
+        }],
+        usageMetadata: {
+          promptTokenCount: 7,
+          candidatesTokenCount: 3,
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
 
     const transport = new GeminiHttpTransport({
       apiKey: 'secret-test-key',
       model: 'gemini-test',
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl,
     });
 
     const result = await transport.generate({
@@ -37,19 +46,18 @@ describe('OP-040: GeminiHttpTransport', () => {
       finishReason: 'STOP',
     });
 
-    expect(fetchImpl).toHaveBeenCalledOnce();
-    const [url, init] = fetchImpl.mock.calls[0];
-    expect(String(url)).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent');
-    expect(String(url)).not.toContain('secret-test-key');
-    expect((init?.headers as Record<string, string>)['x-goog-api-key']).toBe('secret-test-key');
+    expect(callCount).toBe(1);
+    expect(capturedUrl).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent');
+    expect(capturedUrl).not.toContain('secret-test-key');
+    expect((capturedInit?.headers as Record<string, string>)['x-goog-api-key']).toBe('secret-test-key');
 
-    const body = JSON.parse(String(init?.body));
+    const body = JSON.parse(String(capturedInit?.body));
     expect(body.system_instruction.parts[0].text).toBe('Return only the marker.');
     expect(body.generationConfig).toEqual({ temperature: 0, maxOutputTokens: 32 });
   });
 
   it('checks model reachability without generating content', async () => {
-    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }));
     const transport = new GeminiHttpTransport({
       apiKey: 'secret-test-key',
       model: 'gemini-test',
@@ -64,14 +72,14 @@ describe('OP-040: GeminiHttpTransport', () => {
   });
 
   it('does not include provider response details in thrown errors', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+    const fetchImpl: typeof fetch = async () => new Response(JSON.stringify({
       error: { message: 'API_KEY=must-never-leak' },
-    }), { status: 401 }));
+    }), { status: 401 });
 
     const transport = new GeminiHttpTransport({
       apiKey: 'secret-test-key',
       model: 'gemini-test',
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl,
     });
 
     await expect(transport.generate({
