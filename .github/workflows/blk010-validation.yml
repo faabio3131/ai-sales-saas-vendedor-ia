@@ -41,11 +41,13 @@ jobs:
           grep -qi '^x-frame-options: DENY' /tmp/headers.txt
           grep -qi '^x-request-id:' /tmp/headers.txt
           if grep -qi '^x-powered-by:' /tmp/headers.txt; then exit 1; fi
-          for PATHNAME in tenancy/context tenancy/memberships catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness release/readiness; do
+          for PATHNAME in tenancy/context tenancy/memberships catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness release/readiness operations/ai-readiness; do
             STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
             test "$STATUS" = "401"
           done
           STATUS=$(curl --silent --output /tmp/sales.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"leadId":"spoofed"}' http://127.0.0.1:3000/api/sales/decision)
+          test "$STATUS" = "401"
+          STATUS=$(curl --silent --output /tmp/ai-smoke.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' http://127.0.0.1:3000/api/operations/ai-smoke)
           test "$STATUS" = "401"
           python - <<'PY' > /tmp/large.json
           import json
