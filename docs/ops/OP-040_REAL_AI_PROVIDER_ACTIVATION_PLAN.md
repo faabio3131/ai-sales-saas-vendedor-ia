@@ -35,6 +35,11 @@ Parâmetros de sampling legados/depreciados não são enviados pelo transporte r
 - atualizar configuração de produção e documentação operacional;
 - executar CI completo antes de qualquer deploy.
 
+## Modelo inicial de produção
+`gemini-3.7-flash`.
+
+Motivo: modelo Flash estável/GA atual, adequado para produção e para os fluxos de chat, classificação, extração e raciocínio desta fase. O nome permanece configurável por `GEMINI_MODEL`; não existe dependência de domínio no modelo escolhido.
+
 ## Capacidades inicialmente habilitadas
 - `FAST_CHAT`;
 - `LEAD_CLASSIFICATION`;
