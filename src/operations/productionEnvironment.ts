@@ -38,6 +38,12 @@ export function validateProductionEnvironment(env: NodeJS.ProcessEnv = process.e
     issues.push({ key: 'PUBLIC_APP_URL', code: 'HTTPS_REQUIRED', message: 'PUBLIC_APP_URL must use HTTPS.' });
   }
 
+  const geminiKey = has(env.GEMINI_API_KEY);
+  const geminiModel = has(env.GEMINI_MODEL);
+  if (geminiKey !== geminiModel) {
+    issues.push({ key: 'GEMINI_REAL_PROVIDER', code: 'PARTIAL_CONFIGURATION', message: 'Gemini API key and model must be configured together.' });
+  }
+
   const whatsappToken = has(env.WHATSAPP_ACCESS_TOKEN);
   const whatsappPhone = has(env.WHATSAPP_PHONE_NUMBER_ID);
   if (whatsappToken !== whatsappPhone) {
