@@ -97,3 +97,15 @@ Após o índice ficar `READY`, o dashboard carregou corretamente sem novo deploy
 
 ## Próximo gate
 Executar prova externa de fail-closed com um usuário autenticado sem membership ativa. A OP-030 permanece aberta até confirmar em produção que esse usuário não obtém workspace comercial/tenant e recebe bloqueio seguro.
+
+
+## Deploy de hardening fail-closed
+Executado em 2026-08-30 após CI verde da correção de UX/segurança para usuários sem membership.
+
+- commit implantado: `1c5531101c627201dbcd0b73e2f76a1fe448e6a8`;
+- revisão Cloud Run: `ai-sales-saas-vendedor-ia-00049-kx2`;
+- tráfego: 100% na nova revisão;
+- build e deploy: concluídos com sucesso;
+- objetivo: garantir que usuário autenticado sem membership ativa veja somente estado explícito de acesso bloqueado, sem tenant, dashboard, cards ou módulos comerciais.
+
+Próxima evidência obrigatória: repetir login com usuário temporário sem membership e validar visualmente o estado fail-closed em produção.
