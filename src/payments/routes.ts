@@ -1,6 +1,8 @@
 import { Request, Response, Router } from 'express';
+import { FirestoreSalesFiscalHandoffRepository } from '../fiscal/firestoreRepository';
+import { SalesFiscalHandoffService } from '../fiscal/service';
 import { ApplicationError } from '../infrastructure/errors';
-import { FirestoreQuoteRepository } from '../quotes/firestoreRepository';
+import { FirestoreQuoteItemRepository, FirestoreQuoteRepository } from '../quotes/firestoreRepository';
 import { FirestorePaymentRepository, FirestorePaymentWebhookEventRepository } from './firestoreRepository';
 import { StructuralPaymentProvider } from './provider';
 import { PaymentService } from './service';
@@ -12,11 +14,18 @@ function requireContext(req: Request) {
 
 export function createPaymentsRouter(): Router {
   const router = Router();
+  const quotes = new FirestoreQuoteRepository();
+  const fiscalObserver = new SalesFiscalHandoffService(
+    new FirestoreSalesFiscalHandoffRepository(),
+    quotes,
+    new FirestoreQuoteItemRepository(),
+  );
   const service = new PaymentService(
     new FirestorePaymentRepository(),
     new FirestorePaymentWebhookEventRepository(),
-    new FirestoreQuoteRepository(),
+    quotes,
     new StructuralPaymentProvider(),
+    fiscalObserver,
   );
 
   router.get('/', async (req, res, next) => {
