@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { PaymentConfirmationObserver } from '../fiscal/contracts';
 import { ApplicationError } from '../infrastructure/errors';
 import { QuoteRepository } from '../quotes/contracts';
 import { TenantContext } from '../types/contracts';
@@ -11,12 +12,19 @@ export class PaymentService {
     private readonly webhookEvents: PaymentWebhookEventRepository,
     private readonly quotes: QuoteRepository,
     private readonly provider: PaymentProviderInterface,
+    private readonly confirmationObserver?: PaymentConfirmationObserver,
   ) {}
 
   private tenant(context: TenantContext): string {
     const tenantId = context.tenantId?.trim();
     if (!tenantId) throw new ApplicationError({ category:'FORBIDDEN', code:'TENANT_CONTEXT_REQUIRED', message:'Tenant context is required.' });
     return tenantId;
+  }
+
+  private async notifyConfirmed(payment: Payment): Promise<void> {
+    if (payment.status === 'CONFIRMED' && this.confirmationObserver) {
+      await this.confirmationObserver.onConfirmed(payment);
+    }
   }
 
   async list(context: TenantContext) { return this.payments.listByTenant(this.tenant(context)); }
@@ -33,7 +41,10 @@ export class PaymentService {
     if (!key) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_IDEMPOTENCY_REQUIRED', message:'Idempotency key is required.' });
     if (input.method !== 'PIX' && input.method !== 'PAYMENT_LINK') throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_METHOD_INVALID', message:'Payment method is invalid.' });
     const existing = await this.payments.findByIdempotencyKey(tenantId, key);
-    if (existing) return existing;
+    if (existing) {
+      await this.notifyConfirmed(existing);
+      return existing;
+    }
 
     const quote = await this.quotes.findById(tenantId, input.quoteId);
     if (!quote) throw new ApplicationError({ category:'NOT_FOUND', code:'QUOTE_NOT_FOUND', message:'Quote not found.' });
@@ -60,7 +71,7 @@ export class PaymentService {
     }
 
     const now = new Date().toISOString();
-    return this.payments.create({
+    const payment = await this.payments.create({
       id: randomUUID(),
       tenantId,
       customerId: quote.customerId,
@@ -79,6 +90,8 @@ export class PaymentService {
       createdAt: now,
       updatedAt: now,
     });
+    await this.notifyConfirmed(payment);
+    return payment;
   }
 
   async refresh(context: TenantContext, id: string): Promise<Payment> {
@@ -101,7 +114,9 @@ export class PaymentService {
       confirmedAt: status === 'CONFIRMED' ? (payment.confirmedAt ?? now) : payment.confirmedAt,
       updatedAt: now,
     };
-    return this.payments.update(updated);
+    const persisted = await this.payments.update(updated);
+    await this.notifyConfirmed(persisted);
+    return persisted;
   }
 
   async handleWebhook(context: TenantContext, headers: Record<string, string | string[] | undefined>, payload: unknown): Promise<Payment> {
@@ -119,7 +134,10 @@ export class PaymentService {
     const duplicate = await this.webhookEvents.findByEventId(tenantId, this.provider.id, normalized.eventId);
     const payment = await this.payments.findByProviderPaymentId(tenantId, this.provider.id, normalized.providerPaymentId);
     if (!payment) throw new ApplicationError({ category:'NOT_FOUND', code:'PAYMENT_NOT_FOUND', message:'Payment not found.' });
-    if (duplicate) return payment;
+    if (duplicate) {
+      await this.notifyConfirmed(payment);
+      return payment;
+    }
 
     await this.webhookEvents.create({
       id: randomUUID(), tenantId, provider: this.provider.id, eventId: normalized.eventId,
