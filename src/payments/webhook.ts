@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { FirestorePaymentRepository, FirestorePaymentWebhookEventRepository } from './firestoreRepository';
-import { FirestoreQuoteRepository } from '../quotes/firestoreRepository';
+import { FirestoreQuoteRepository, FirestoreQuoteItemRepository } from '../quotes/firestoreRepository';
+import { SalesFiscalHandoffService } from '../fiscal/service';
+import { FirestoreSalesFiscalHandoffRepository } from '../fiscal/firestoreRepository';
 import { PaymentService } from './service';
 import { MercadoPagoPixProvider, mercadoPagoSettingsFromEnv } from './mercadoPago';
 
@@ -18,9 +20,12 @@ export async function mercadoPagoWebhookHandler(req:Request,res:Response):Promis
     res.status(401).json({ok:false});return;
   }
   try {
+    const quotes=new FirestoreQuoteRepository();
+    const fiscalObserver=new SalesFiscalHandoffService(
+      new FirestoreSalesFiscalHandoffRepository(),quotes,new FirestoreQuoteItemRepository());
     const service=new PaymentService(
       new FirestorePaymentRepository(),new FirestorePaymentWebhookEventRepository(),
-      new FirestoreQuoteRepository(),provider);
+      quotes,provider,fiscalObserver);
     await service.handleWebhook({tenantId:settings.tenantId,requestId:'mp-'+dataId},req.headers,body);
     res.status(200).json({ok:true});
   } catch {
