@@ -6,6 +6,7 @@ import { FirestoreQuoteItemRepository, FirestoreQuoteRepository } from '../quote
 import { FirestorePaymentRepository, FirestorePaymentWebhookEventRepository } from './firestoreRepository';
 import { StructuralPaymentProvider } from './provider';
 import { PaymentService } from './service';
+import { FirestorePaymentMethodsRepository, PaymentMethodsService } from './methods';
 
 function requireContext(req: Request) {
   if (!req.tenantContext) throw new ApplicationError({ category:'FORBIDDEN', code:'TENANT_CONTEXT_REQUIRED', message:'Tenant context is required.' });
@@ -20,13 +21,22 @@ export function createPaymentsRouter(): Router {
     quotes,
     new FirestoreQuoteItemRepository(),
   );
+  const methodSettings = new PaymentMethodsService(new FirestorePaymentMethodsRepository());
   const service = new PaymentService(
     new FirestorePaymentRepository(),
     new FirestorePaymentWebhookEventRepository(),
     quotes,
     new StructuralPaymentProvider(),
     fiscalObserver,
+    methodSettings,
   );
+
+  router.get('/methods', async (req, res, next) => {
+    try { res.status(200).json({ ok:true, data:await methodSettings.get(requireContext(req)) }); } catch (error) { next(error); }
+  });
+  router.put('/methods', async (req, res, next) => {
+    try { res.status(200).json({ ok:true, data:await methodSettings.update(requireContext(req), req.body) }); } catch (error) { next(error); }
+  });
 
   router.get('/', async (req, res, next) => {
     try { res.status(200).json({ ok:true, data:await service.list(requireContext(req)) }); } catch (error) { next(error); }
