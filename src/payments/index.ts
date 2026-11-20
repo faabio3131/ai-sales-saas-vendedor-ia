@@ -5,3 +5,5 @@ export * from './firestoreRepository';
 export * from './provider';
 export * from './service';
 export * from './routes';
+
+export * from './mercadoPago';
