@@ -1,4 +1,4 @@
-import { Request, Response, Router } from 'express';
+import { Request, Router } from 'express';
 import { FirestoreSalesFiscalHandoffRepository } from '../fiscal/firestoreRepository';
 import { SalesFiscalHandoffService } from '../fiscal/service';
 import { ApplicationError } from '../infrastructure/errors';
