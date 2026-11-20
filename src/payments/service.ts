@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { PaymentConfirmationObserver } from '../fiscal/contracts';
 import { ApplicationError } from '../infrastructure/errors';
 import { QuoteRepository } from '../quotes/contracts';
@@ -42,6 +42,8 @@ export class PaymentService {
     const key = input.idempotencyKey?.trim();
     if (!key) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_IDEMPOTENCY_REQUIRED', message:'Idempotency key is required.' });
     if (!['PIX', 'PAYMENT_LINK', 'PIX_MANUAL', 'CARD_ON_DELIVERY', 'CASH_ON_DELIVERY'].includes(input.method)) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_METHOD_INVALID', message:'Payment method is invalid.' });
+    if(key.length>128) throw new ApplicationError({category:'VALIDATION',code:'PAYMENT_IDEMPOTENCY_INVALID',message:'Invalid idempotency key.'});
+    const paymentId=createHash('sha256').update(tenantId+'\\0'+key).digest('hex');
     const existing = await this.payments.findByIdempotencyKey(tenantId, key);
     if (existing) {
       if (existing.quoteId !== input.quoteId || existing.method !== input.method) throw new ApplicationError({ category:'CONFLICT', code:'PAYMENT_IDEMPOTENCY_CONFLICT', message:'Idempotency key already belongs to another payment.' });
@@ -61,7 +63,7 @@ export class PaymentService {
       // Never generate a fictitious bank payment ID or mark an offline payment as paid.
       const now = new Date().toISOString();
       return this.payments.create({
-        id: randomUUID(), tenantId, customerId: quote.customerId, quoteId: quote.id,
+        id: paymentId, tenantId, customerId: quote.customerId, quoteId: quote.id,
         provider: 'OFFLINE', method: input.method, status: 'PENDING',
         amountMinor: quote.totalMinor, currency: quote.currency,
         idempotencyKey: key, createdAt: now, updatedAt: now,
@@ -90,7 +92,7 @@ export class PaymentService {
 
     const now = new Date().toISOString();
     const payment = await this.payments.create({
-      id: randomUUID(),
+      id: paymentId,
       tenantId,
       customerId: quote.customerId,
       quoteId: quote.id,
@@ -136,7 +138,7 @@ export class PaymentService {
   }
 
   private async applyStatus(payment: Payment, status: PaymentStatus): Promise<Payment> {
-    if(payment.status==='CONFIRMED' || payment.status==='REFUNDED' ||
+    if((payment.status==='CONFIRMED' && status!=='REFUNDED') || payment.status==='REFUNDED' ||
       (['FAILED','CANCELLED','EXPIRED'].includes(payment.status)&&status==='PENDING')) return payment;
     if(payment.status===status) return payment;
 
@@ -167,12 +169,12 @@ export class PaymentService {
     const duplicate = await this.webhookEvents.findByEventId(tenantId, this.provider.id, normalized.eventId);
     const payment = await this.payments.findByProviderPaymentId(tenantId, this.provider.id, normalized.providerPaymentId);
     if (!payment) throw new ApplicationError({ category:'NOT_FOUND', code:'PAYMENT_NOT_FOUND', message:'Payment not found.' });
-    if (duplicate) return payment;
+    if (duplicate && (payment.status === 'CONFIRMED' || payment.status === 'REFUNDED')) return payment;
 
     const verified = await this.provider.getPaymentStatus(normalized.providerPaymentId);
     this.assertVerified(payment,verified);
 
-    await this.webhookEvents.create({
+    if (!duplicate) await this.webhookEvents.create({
       id: randomUUID(), tenantId, provider: this.provider.id, eventId: normalized.eventId,
       providerPaymentId: normalized.providerPaymentId, receivedAt: new Date().toISOString(),
     });
