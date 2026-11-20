@@ -1,4 +1,4 @@
-export type PaymentMethod = 'PIX' | 'PAYMENT_LINK' | 'CHECKOUT';
+export type PaymentMethod = 'PIX' | 'PAYMENT_LINK' | 'CHECKOUT' | 'PIX_MANUAL' | 'CARD_ON_DELIVERY' | 'CASH_ON_DELIVERY';
 export type PaymentStatus = 'CREATED' | 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED';
 
 export interface Payment {
@@ -24,7 +24,7 @@ export interface Payment {
 
 export interface CreatePaymentInput {
   quoteId: string;
-  method: 'PIX' | 'PAYMENT_LINK';
+  method: 'PIX' | 'PAYMENT_LINK' | 'PIX_MANUAL' | 'CARD_ON_DELIVERY' | 'CASH_ON_DELIVERY';
   idempotencyKey: string;
 }
 

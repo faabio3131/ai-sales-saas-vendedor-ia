@@ -5,6 +5,7 @@ import { QuoteRepository } from '../quotes/contracts';
 import { TenantContext } from '../types/contracts';
 import { PaymentProviderInterface, PaymentRepository, PaymentWebhookEventRepository } from './contracts';
 import { CreatePaymentInput, Payment, PaymentStatus } from './model';
+import { PaymentMethodsService } from './methods';
 
 export class PaymentService {
   constructor(
@@ -13,6 +14,7 @@ export class PaymentService {
     private readonly quotes: QuoteRepository,
     private readonly provider: PaymentProviderInterface,
     private readonly confirmationObserver?: PaymentConfirmationObserver,
+    private readonly methodSettings?: PaymentMethodsService,
   ) {}
 
   private tenant(context: TenantContext): string {
@@ -39,9 +41,10 @@ export class PaymentService {
     const tenantId = this.tenant(context);
     const key = input.idempotencyKey?.trim();
     if (!key) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_IDEMPOTENCY_REQUIRED', message:'Idempotency key is required.' });
-    if (input.method !== 'PIX' && input.method !== 'PAYMENT_LINK') throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_METHOD_INVALID', message:'Payment method is invalid.' });
+    if (!['PIX', 'PAYMENT_LINK', 'PIX_MANUAL', 'CARD_ON_DELIVERY', 'CASH_ON_DELIVERY'].includes(input.method)) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_METHOD_INVALID', message:'Payment method is invalid.' });
     const existing = await this.payments.findByIdempotencyKey(tenantId, key);
     if (existing) {
+      if (existing.quoteId !== input.quoteId || existing.method !== input.method) throw new ApplicationError({ category:'CONFLICT', code:'PAYMENT_IDEMPOTENCY_CONFLICT', message:'Idempotency key already belongs to another payment.' });
       await this.notifyConfirmed(existing);
       return existing;
     }
@@ -50,6 +53,20 @@ export class PaymentService {
     if (!quote) throw new ApplicationError({ category:'NOT_FOUND', code:'QUOTE_NOT_FOUND', message:'Quote not found.' });
     if (quote.status !== 'ACCEPTED') throw new ApplicationError({ category:'CONFLICT', code:'QUOTE_NOT_ACCEPTED', message:'Quote must be accepted before payment creation.' });
     if (quote.totalMinor <= 0) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_AMOUNT_INVALID', message:'Payment amount must be positive.' });
+
+    if (input.method === 'PIX_MANUAL' || input.method === 'CARD_ON_DELIVERY' || input.method === 'CASH_ON_DELIVERY') {
+      if (!this.methodSettings || !(await this.methodSettings.isEnabled(tenantId, input.method))) {
+        throw new ApplicationError({ category:'FORBIDDEN', code:'PAYMENT_METHOD_DISABLED', message:'Payment method has not been enabled for this business.' });
+      }
+      // Never generate a fictitious bank payment ID or mark an offline payment as paid.
+      const now = new Date().toISOString();
+      return this.payments.create({
+        id: randomUUID(), tenantId, customerId: quote.customerId, quoteId: quote.id,
+        provider: 'OFFLINE', method: input.method, status: 'PENDING',
+        amountMinor: quote.totalMinor, currency: quote.currency,
+        idempotencyKey: key, createdAt: now, updatedAt: now,
+      });
+    }
 
     const request = {
       tenantId,
