@@ -11,6 +11,7 @@ import { createLeadsRouter } from '../leads/routes';
 import { aiRealReadinessHandler, aiRealSmokeHandler } from '../operations/aiRealRoutes';
 import { firebaseRealReadinessHandler } from '../operations/firebaseRealReadinessRoute';
 import { createPaymentsRouter } from '../payments/routes';
+import { mercadoPagoWebhookHandler } from '../payments/webhook';
 import { createPilotRouter } from '../pilot/routes';
 import { createPlansRouter } from '../plans/routes';
 import { createQuotesRouter } from '../quotes/routes';
@@ -51,6 +52,9 @@ export function createApiRouter(): Router {
   router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());
   router.use('/dashboard', authenticationMiddleware, tenantAuthorizationMiddleware, createDashboardRouter());
   router.use('/quotes', authenticationMiddleware, tenantAuthorizationMiddleware, createQuotesRouter());
+  router.post('/payments/webhooks/mercadopago', (req,res,next) => {
+    mercadoPagoWebhookHandler(req,res).catch(next);
+  });
   router.use('/payments', authenticationMiddleware, tenantAuthorizationMiddleware, createPaymentsRouter());
   router.use('/revenue-expansion', authenticationMiddleware, tenantAuthorizationMiddleware, createRevenueExpansionRouter());
   router.use('/plans', authenticationMiddleware, tenantAuthorizationMiddleware, createPlansRouter());

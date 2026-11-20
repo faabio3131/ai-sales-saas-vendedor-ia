@@ -16,6 +16,7 @@ export interface Payment {
   idempotencyKey: string;
   paymentUrl?: string;
   pixCode?: string;
+  pixQrCodeBase64?: string;
   expiresAt?: string;
   confirmedAt?: string;
   createdAt: string;
@@ -26,6 +27,7 @@ export interface CreatePaymentInput {
   quoteId: string;
   method: 'PIX' | 'PAYMENT_LINK' | 'PIX_MANUAL' | 'CARD_ON_DELIVERY' | 'CASH_ON_DELIVERY';
   idempotencyKey: string;
+  payerEmail?: string;
 }
 
 export interface ProviderPaymentRequest {
@@ -35,6 +37,7 @@ export interface ProviderPaymentRequest {
   amountMinor: number;
   currency: 'BRL';
   idempotencyKey: string;
+  payerEmail?: string;
 }
 
 export interface ProviderPaymentResult {
@@ -43,6 +46,9 @@ export interface ProviderPaymentResult {
   status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
   paymentUrl?: string;
   pixCode?: string;
+  pixQrCodeBase64?: string;
+  amountMinor?: number;
+  referenceId?: string;
   expiresAt?: string;
 }
 

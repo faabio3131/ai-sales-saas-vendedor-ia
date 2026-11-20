@@ -69,6 +69,7 @@ export class PaymentService {
     }
 
     const request = {
+      payerEmail:input.payerEmail,
       tenantId,
       customerId: quote.customerId,
       referenceId: quote.id,
@@ -102,6 +103,7 @@ export class PaymentService {
       idempotencyKey: key,
       paymentUrl: providerResult.paymentUrl,
       pixCode: providerResult.pixCode,
+      pixQrCodeBase64: providerResult.pixQrCodeBase64,
       expiresAt: providerResult.expiresAt,
       confirmedAt: providerResult.status === 'CONFIRMED' ? now : undefined,
       createdAt: now,
@@ -120,10 +122,24 @@ export class PaymentService {
       if (error instanceof ApplicationError) throw error;
       throw new ApplicationError({ category:'PROVIDER', code:'PAYMENT_PROVIDER_ERROR', message:'Payment provider failed.', retryable:true });
     }
+    this.assertVerified(payment,result);
     return this.applyStatus(payment, result.status);
   }
 
+  private assertVerified(payment:Payment, result: import('./model').ProviderPaymentResult):void {
+    if(result.provider!==payment.provider ||
+      result.providerPaymentId!==payment.providerPaymentId ||
+      result.amountMinor!==payment.amountMinor ||
+      result.referenceId!==payment.tenantId+':'+payment.quoteId) {
+      throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_PROVIDER_RECONCILIATION_FAILED',message:'Payment verification failed.'});
+    }
+  }
+
   private async applyStatus(payment: Payment, status: PaymentStatus): Promise<Payment> {
+    if(payment.status==='CONFIRMED' || payment.status==='REFUNDED' ||
+      (['FAILED','CANCELLED','EXPIRED'].includes(payment.status)&&status==='PENDING')) return payment;
+    if(payment.status===status) return payment;
+
     const now = new Date().toISOString();
     const updated: Payment = {
       ...payment,
@@ -151,15 +167,15 @@ export class PaymentService {
     const duplicate = await this.webhookEvents.findByEventId(tenantId, this.provider.id, normalized.eventId);
     const payment = await this.payments.findByProviderPaymentId(tenantId, this.provider.id, normalized.providerPaymentId);
     if (!payment) throw new ApplicationError({ category:'NOT_FOUND', code:'PAYMENT_NOT_FOUND', message:'Payment not found.' });
-    if (duplicate) {
-      await this.notifyConfirmed(payment);
-      return payment;
-    }
+    if (duplicate) return payment;
+
+    const verified = await this.provider.getPaymentStatus(normalized.providerPaymentId);
+    this.assertVerified(payment,verified);
 
     await this.webhookEvents.create({
       id: randomUUID(), tenantId, provider: this.provider.id, eventId: normalized.eventId,
       providerPaymentId: normalized.providerPaymentId, receivedAt: new Date().toISOString(),
     });
-    return this.applyStatus(payment, normalized.status);
+    return this.applyStatus(payment, verified.status);
   }
 }

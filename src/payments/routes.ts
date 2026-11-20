@@ -6,6 +6,7 @@ import { FirestoreQuoteItemRepository, FirestoreQuoteRepository } from '../quote
 import { FirestorePaymentRepository, FirestorePaymentWebhookEventRepository } from './firestoreRepository';
 import { StructuralPaymentProvider } from './provider';
 import { PaymentService } from './service';
+import { MercadoPagoPixProvider, mercadoPagoSettingsFromEnv } from './mercadoPago';
 import { FirestorePaymentMethodsRepository, PaymentMethodsService } from './methods';
 
 function requireContext(req: Request) {
@@ -22,15 +23,20 @@ export function createPaymentsRouter(): Router {
     new FirestoreQuoteItemRepository(),
   );
   const methodSettings = new PaymentMethodsService(new FirestorePaymentMethodsRepository());
+  const mpConfig=mercadoPagoSettingsFromEnv();
+  const provider=mpConfig?new MercadoPagoPixProvider(mpConfig):new StructuralPaymentProvider();
   const service = new PaymentService(
     new FirestorePaymentRepository(),
     new FirestorePaymentWebhookEventRepository(),
     quotes,
-    new StructuralPaymentProvider(),
+    provider,
     fiscalObserver,
     methodSettings,
   );
 
+  router.post('/webhook/mercadopago', async (_req, _res, next) => {
+    next(new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_WEBHOOK_DEDICATED_ROUTE',message:'Use dedicated payment webhook endpoint.'}));
+  });
   router.get('/methods', async (req, res, next) => {
     try { res.status(200).json({ ok:true, data:await methodSettings.get(requireContext(req)) }); } catch (error) { next(error); }
   });
@@ -50,8 +56,6 @@ export function createPaymentsRouter(): Router {
   router.post('/:id/refresh', async (req, res, next) => {
     try { res.status(200).json({ ok:true, data:await service.refresh(requireContext(req), req.params.id) }); } catch (error) { next(error); }
   });
-  router.post('/webhook/provider', async (req: Request, res: Response, next) => {
-    try { res.status(200).json({ ok:true, data:await service.handleWebhook(requireContext(req), req.headers, req.body) }); } catch (error) { next(error); }
-  });
+  // Provider webhooks must not use the authenticated tenant API; use the dedicated signed endpoint.
   return router;
 }
