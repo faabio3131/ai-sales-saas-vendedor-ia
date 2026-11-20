@@ -140,7 +140,11 @@ export class PaymentService {
   private async applyStatus(payment: Payment, status: PaymentStatus): Promise<Payment> {
     if((payment.status==='CONFIRMED' && status!=='REFUNDED') || payment.status==='REFUNDED' ||
       (['FAILED','CANCELLED','EXPIRED'].includes(payment.status)&&status==='PENDING')) return payment;
-    if(payment.status===status) return payment;
+    if(payment.status===status) {
+      // Downstream observer is idempotent and may need a safe retry after an earlier failure.
+      if(status==='CONFIRMED') await this.notifyConfirmed(payment);
+      return payment;
+    }
 
     const now = new Date().toISOString();
     const updated: Payment = {
@@ -169,7 +173,10 @@ export class PaymentService {
     const duplicate = await this.webhookEvents.findByEventId(tenantId, this.provider.id, normalized.eventId);
     const payment = await this.payments.findByProviderPaymentId(tenantId, this.provider.id, normalized.providerPaymentId);
     if (!payment) throw new ApplicationError({ category:'NOT_FOUND', code:'PAYMENT_NOT_FOUND', message:'Payment not found.' });
-    if (duplicate && (payment.status === 'CONFIRMED' || payment.status === 'REFUNDED')) return payment;
+    if (duplicate && (payment.status === 'CONFIRMED' || payment.status === 'REFUNDED')) {
+      if(payment.status==='CONFIRMED') await this.notifyConfirmed(payment);
+      return payment;
+    }
 
     const verified = await this.provider.getPaymentStatus(normalized.providerPaymentId);
     this.assertVerified(payment,verified);
