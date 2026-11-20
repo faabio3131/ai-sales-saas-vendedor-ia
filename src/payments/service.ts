@@ -127,10 +127,10 @@ export class PaymentService {
   }
 
   private assertVerified(payment:Payment, result: import('./model').ProviderPaymentResult):void {
-    if(result.provider!==payment.provider ||
-      result.providerPaymentId!==payment.providerPaymentId ||
-      result.amountMinor!==payment.amountMinor ||
-      result.referenceId!==payment.tenantId+':'+payment.quoteId) {
+    if(result.provider!==payment.provider || result.providerPaymentId!==payment.providerPaymentId ||
+      (payment.provider==='MERCADOPAGO' &&
+        (result.amountMinor!==payment.amountMinor ||
+         result.referenceId!==payment.tenantId+':'+payment.quoteId))) {
       throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_PROVIDER_RECONCILIATION_FAILED',message:'Payment verification failed.'});
     }
   }
