@@ -138,7 +138,11 @@ export class PaymentService {
   }
 
   private async applyStatus(payment: Payment, status: PaymentStatus): Promise<Payment> {
-    if((payment.status==='CONFIRMED' && status!=='REFUNDED') || payment.status==='REFUNDED' ||
+    if(payment.status==='CONFIRMED' && status!=='REFUNDED') {
+      await this.notifyConfirmed(payment);
+      return payment;
+    }
+    if(payment.status==='REFUNDED' ||
       (['FAILED','CANCELLED','EXPIRED'].includes(payment.status)&&status==='PENDING')) return payment;
     if(payment.status===status) {
       // Downstream observer is idempotent and may need a safe retry after an earlier failure.
