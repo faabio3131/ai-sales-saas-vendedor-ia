@@ -222,6 +222,22 @@ describe('T04 — Confirmed order to bank payment, separate state machines',()=>
     {idempotencyKey:'online-pix-001',method:'CHECKOUT',providerId:'ASAAS'}))
     .rejects.toMatchObject({code:'ORDER_PAYMENT_IDEMPOTENCY_CONFLICT'});
  });
+ it('preflights customer data before reservation and preserves the ability to fix it',async()=>{
+  const e=await fixture();
+  const provider=e.psp as PSP & {preflightPix?:(input:ProviderPaymentRequest)=>Promise<void>};
+  provider.preflightPix=async(input)=>{
+   if(!input.payerEmail)throw new Error('Email required for configured PSP');
+  };
+  await expect(e.service.create(tenant(),'main','order_confirmed001',online()))
+    .rejects.toThrow('Email required');
+  expect(e.store.records.size).toBe(0);
+  expect(e.orders.state.get('order_confirmed001')?.paymentState).toBe('NOT_REQUESTED');
+  expect(e.psp.calls.pix).toBe(0);
+  const fixed=await e.service.create(tenant(),'main','order_confirmed001',{
+   ...online(),payerEmail:'payer@example.test',
+  });
+  expect(fixed.status).toBe('PENDING');expect(e.psp.calls.pix).toBe(1);
+ });
  it('deduplicates simultaneous client retries without issuing a second Pix',async()=>{
   const e=await fixture();
   const [first,second,third]=await Promise.all([
@@ -336,11 +352,15 @@ describe('T04 — Confirmed order to bank payment, separate state machines',()=>
   await expect(e.service.collect(tenant(),'main',p.orderId,{
    expectedVersion:2,amountMinor:1,receiptRef:'cash-receipt-001',
   })).rejects.toMatchObject({code:'ORDER_PAYMENT_COLLECTION_AMOUNT_MISMATCH'});
-  const collected=await e.service.collect(tenant('pizza-a','CASHIER'),'main',p.orderId,{
+  await expect(e.service.collect(tenant('pizza-a','CASHIER'),'main',p.orderId,{
    expectedVersion:2,amountMinor:5500,receiptRef:'cash-receipt-001',
+  })).rejects.toMatchObject({code:'ORDER_PAYMENT_CASH_RECEIVED_REQUIRED'});
+  const collected=await e.service.collect(tenant('pizza-a','CASHIER'),'main',p.orderId,{
+   expectedVersion:2,amountMinor:5500,receiptRef:'cash-receipt-001',receivedMinor:10000,
   });
   expect(collected).toMatchObject({status:'CONFIRMED',verificationSource:'OPERATOR_COD',
-   verifiedBy:'operator-pizza-a',receiptRef:'cash-receipt-001'});
+   verifiedBy:'operator-pizza-a',receiptRef:'cash-receipt-001',
+   cashTenderedMinor:10000,changeMinor:4500});
   expect(e.orders.state.get(p.orderId)?.paymentState).toBe('CONFIRMED');
   expect(e.orders.state.get(p.orderId)?.deliveryState).toBe('NOT_STARTED');
  });
