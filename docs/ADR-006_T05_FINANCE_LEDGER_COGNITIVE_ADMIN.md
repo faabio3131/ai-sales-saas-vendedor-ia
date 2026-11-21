@@ -39,7 +39,7 @@ O feed comercial-financeiro derivado do outbox pode atrasar ou entrar em DLQ. **
 - Configuração de dia inicial da semana tem versionamento CAS, autoria e timestamp; nenhuma mutation financeira é exposta pelo painel.
 
 ## Escalabilidade e qualidade
-O repositório de leitura usa os índices de tenant/unidade e rejeita conjuntos acima do limite seguro de reconstrução em vez de emitir números parciais. O manifesto deploy/t05-finance.firestore-indexes.json é versionado; a aplicação real dos índices e otimização por projeções incrementais deverão ser verificadas em operação. CI com repositórios simulados não constitui benchmark Firestore real.
+O repositório de leitura usa paginação de 500 registros por consulta e índices tenant/unidade; rejeita conjuntos acima do limite seguro (100.000 pedidos ou eventos) em vez de emitir números parciais. O manifesto deploy/t05-finance.firestore-indexes.json é versionado; a aplicação real dos índices e otimização por projeções incrementais deverão ser verificadas em operação. CI com repositórios simulados não constitui benchmark Firestore real.
 
 ## Dependências externas
 Sem deploy Contabo/Cloud Run, dados reais do estabelecimento, configuração de PSP, prova de webhook real, parametrização de tarifas e homologação de feed bancário. Essas dependências devem ser verificadas antes do piloto T08; não são convertidas em DONE fictício.
