@@ -57,7 +57,7 @@ describe('PagBank Pix Orders adapter',()=>{
  });
  it('requires API credentials, fixed HTTPS host and idempotency to send PagBank orders',async()=>{
   expect(bankEndpoints('PAGBANK').api).toBe('https://api.pagseguro.com');
-  const http=vi.fn(async()=>({ok:true}));
+  const http=vi.fn(async(_url:string,_method:string,_body:unknown,_headers:Record<string,string>)=>({ok:true}));
   const transport=providerTransport('PAGBANK',{tenantId:'pizza',providerId:'PAGBANK',
    recipientId:'merchant',apiKey:'test-token'},http);
   await expect(transport('/orders','POST',{})).rejects.toMatchObject({code:'PAGBANK_IDEMPOTENCY_REQUIRED'});

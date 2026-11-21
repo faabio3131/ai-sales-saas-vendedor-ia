@@ -32,7 +32,7 @@ export class PagBankPixProvider extends PixOnlyProvider {
   const charge=obj(charges[0]);
   const amount=obj(charge.amount);
   const amountMinor=amount.value;
-  if(!Number.isSafeInteger(amountMinor)||typeof amountMinor!=='number'||amountMinor<=0||str(amount.currency)!=='BRL')
+  if(typeof amountMinor!=='number'||!Number.isSafeInteger(amountMinor)||amountMinor<=0||str(amount.currency)!=='BRL')
    return fail('PAGBANK_AMOUNT_INVALID');
   const status=str(charge.status);
   const states:Record<string,ProviderPaymentResult['status']>={

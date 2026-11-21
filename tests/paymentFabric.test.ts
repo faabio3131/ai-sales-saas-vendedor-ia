@@ -13,7 +13,7 @@ const owner={tenantId:'pizza',role:'OWNER',requestId:'1'};
 describe('Tenant-bound multi-PSP payment fabric',()=>{
  it('makes no unsupported provider available for use',()=>{
    expect(PAYMENT_PROVIDER_CATALOG.length).toBe(10);
-   expect(PAYMENT_PROVIDER_CATALOG.filter(p=>p.status==='ADAPTER_IMPLEMENTED').map(p=>p.id)).toEqual(['MERCADOPAGO','EFI','ASAAS','PAGARME','BANCO_INTER','BANCO_DO_BRASIL']);
+   expect(PAYMENT_PROVIDER_CATALOG.filter(p=>p.status==='ADAPTER_IMPLEMENTED').map(p=>p.id)).toEqual(['MERCADOPAGO','EFI','ASAAS','PAGARME','BANCO_INTER','BANCO_DO_BRASIL','PAGBANK']);
  });
  it('fails closed without a selected or active provider',async()=>{
    await expect(resolver.forNewPayment('pizza')).rejects.toMatchObject({code:'PAYMENT_PROVIDER_SELECTION_REQUIRED'});
