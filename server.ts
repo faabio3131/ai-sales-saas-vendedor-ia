@@ -12,7 +12,11 @@ export async function createApp() {
   app.use(securityHeaders);
   app.use(requestContext);
   app.use(createRateLimiter());
-  app.use(express.json({ limit: '256kb' }));
+  app.use(express.json({ limit: '256kb', verify:(req,_res,buffer)=>{
+    if(req.originalUrl.startsWith('/api/payments/webhooks/')){
+      (req as typeof req&{paymentRawBody?:Buffer}).paymentRawBody=Buffer.from(buffer);
+    }
+  }}));
   app.use('/api', createApiRouter());
   app.use(errorHandler);
 
