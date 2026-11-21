@@ -9,6 +9,9 @@ export interface MerchantBankSecrets {
  clientCertificatePem?:string;clientPrivateKeyPem?:string;
  apiKey?:string;applicationKey?:string;customerMap?:Record<string,string>;
 }
+export interface MerchantCredentialsVault {
+ load(connection:MerchantProviderConnection):Promise<MerchantBankSecrets>;
+}
 /** Fetch per-merchant credentials from GCP Secret Manager via workload identity. */
 export class GoogleSecretManagerMerchantVault {
  constructor(private readonly fetchImpl:typeof fetch=fetch){}

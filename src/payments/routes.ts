@@ -12,6 +12,7 @@ import { FirestoreMerchantProviderConnectionRepository, MerchantPaymentConnectio
 import { TenantPaymentProviderResolver } from './resolver';
 import { PAYMENT_PROVIDER_CATALOG } from './providerCatalog';
 import {GoogleSecretManagerMerchantVault} from './merchantVault';
+import {MountedMerchantCredentialsVault} from './mountedVault';
 import {MerchantPaymentAdapterFactory} from './adapterFactory';
 import {FirestoreMerchantCustomerMap} from './customerMap';
 
@@ -35,7 +36,10 @@ export function createPaymentsRouter(): Router {
   const connectionService=new MerchantPaymentConnectionsService(connectionRepo);
   const adapterMap=new Map<string,import('./contracts').PaymentProviderInterface>();
   if(mpConfig) adapterMap.set('MERCADOPAGO',provider);
-  const factory=new MerchantPaymentAdapterFactory(new GoogleSecretManagerMerchantVault(),new FirestoreMerchantCustomerMap());
+  const vault=process.env.PAYMENT_VAULT_BACKEND==='MOUNTED'
+    ? new MountedMerchantCredentialsVault()
+    : new GoogleSecretManagerMerchantVault();
+  const factory=new MerchantPaymentAdapterFactory(vault,new FirestoreMerchantCustomerMap());
   const resolver=new TenantPaymentProviderResolver(connectionRepo,adapterMap,connection=>factory.build(connection));
   const service = new PaymentService(
     new FirestorePaymentRepository(),

@@ -1,7 +1,7 @@
 import {ApplicationError} from '../infrastructure/errors';
 import type {MerchantProviderConnection} from './connections';
 import type {PaymentProviderInterface} from './contracts';
-import {GoogleSecretManagerMerchantVault} from './merchantVault';
+import type {MerchantCredentialsVault} from './merchantVault';
 import {providerTransport} from './bankTransport';
 import {PixCobBankProvider} from './pixCobBanks';
 import {AsaasPixProvider} from './asaas';
@@ -12,7 +12,7 @@ export interface MerchantCustomerMapRepository {
 }
 export class MerchantPaymentAdapterFactory {
  constructor(
-  private readonly vault:GoogleSecretManagerMerchantVault,
+  private readonly vault:MerchantCredentialsVault,
   private readonly customerMap:MerchantCustomerMapRepository,
  ){}
  async build(conn:MerchantProviderConnection):Promise<PaymentProviderInterface> {
