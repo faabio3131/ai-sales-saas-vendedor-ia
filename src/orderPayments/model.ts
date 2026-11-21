@@ -24,6 +24,7 @@ export interface OrderPaymentEvent {
   id:string;tenantId:string;unitId:string;orderId:string;paymentId:string;
   paymentVersion:number;kind:OrderPaymentEventKind;status:OrderPaymentStatus;
   amountMinor:number;method:OrderPaymentMethod;provider:string;occurredAt:string;
+  verificationSource?:'PSP_GET'|'OPERATOR_COD';verifiedBy?:string;receiptRef?:string;
 }
 export interface OutboxRecord extends OrderPaymentEvent {
   deliveryStatus:'PENDING'|'PROCESSING'|'DELIVERED'|'DLQ';
