@@ -8,6 +8,7 @@ import { requireBusinessScope,requireBusinessAdmin } from './service';
 
 export interface MemorySourceVerifier {
   verifyCustomerEvidence(tenantId:string,customerId:string,sourceRef:string):Promise<boolean>;
+  verifyExplicitConsent(tenantId:string,customerId:string,sourceRef:string):Promise<boolean>;
 }
 function denied(code:string):never {
   throw new ApplicationError({category:'FORBIDDEN',code,message:'Business memory access denied.'});
@@ -69,7 +70,7 @@ export class BusinessMemoryService {
       if(typeof input.consentEvidenceRef!=='string'||!input.consentEvidenceRef.trim()||
         input.consentEvidenceRef.length>220)invalid('MEMORY_CONSENT_EVIDENCE_REQUIRED');
       sourceRef=input.consentEvidenceRef.trim();
-      if(!(await this.sources.verifyCustomerEvidence(s.tenantId,s.customerId,sourceRef)))
+      if(!(await this.sources.verifyExplicitConsent(s.tenantId,s.customerId,sourceRef)))
         denied('MEMORY_CONSENT_EVIDENCE_UNVERIFIED');
     }
     const next:ScopedCustomerMemory={
