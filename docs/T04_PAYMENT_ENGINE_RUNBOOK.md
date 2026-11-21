@@ -6,7 +6,7 @@ Prefixo: /api/order-payments (sessão e membership de tenant obrigatórias).
 - POST /units/:unitId/orders/:orderId — criar pagamento somente para Order.CONFIRMED; corpo: idempotencyKey, method e opcional providerId, payerEmail ou cashTenderedMinor.
 - POST /units/:unitId/payments/:id/refresh — GET oficial do provedor e reconciliação.
 - POST /units/:unitId/orders/:orderId/recover — OWNER/ADMIN; corpo: expectedVersion e providerPaymentId verificados independentemente.
-- POST /units/:unitId/orders/:orderId/collect — cobrança em espécie/POS na entrega, com papel autorizado, expectedVersion, amountMinor e receiptRef.
+- POST /units/:unitId/orders/:orderId/collect — cobrança em espécie/POS na entrega, com papel autorizado, expectedVersion, amountMinor e receiptRef. Para CASH_ON_DELIVERY exige receivedMinor realmente recolhido; troco final é recalculado no ato, e referências contendo PAN/números longos de cartão são recusadas.
 - POST /units/:unitId/orders/:orderId/refund — OWNER/ADMIN; expectedVersion e reason, sem supor estorno liquidado.
 
 ## Autoridade de liquidação
@@ -42,3 +42,6 @@ Alertar DLQ, falhas, atraso de eventos, timeout e casos de criação incerta. Ne
 
 ## Pré-go-live
 Exigir dados reais do cardápio e estabelecimento, autorização do merchant, credenciais do cofre, testes de Pix real controlados, HMAC/mTLS, reconciliação com Firestore real, expiração, reembolso, custódia correta, alertas, verificação real de identidade no canal WhatsApp, rollback e teste da imagem Docker na infraestrutura. O T04 certifica engenharia; T08 é a homologação de ambiente/piloto.
+
+## Índices Firestore para implantação
+O arquivo deploy/order-payments.firestore-indexes.json declara índices compostos de pagamentos por tenant/provedor/ID PSP, varredura de status e pedidos por tenant/unidade. Aplicar e confirmar índices na instância real antes de ativar callbacks e worker. Nenhum índice externo foi declarado provisionado pela CI.
