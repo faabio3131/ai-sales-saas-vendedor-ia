@@ -133,7 +133,8 @@ export class FinanceQuestionService {
   const bootstrap=await this.financial.snapshot(context,unitId,{period:'day'});
   const today=localDateOf(bootstrap.window.asOf,bootstrap.window.timezone);
   const period=recognizePeriod(text,today,defaultPeriod as FinancePeriod);
-  const snapshot=await this.financial.snapshot(context,unitId,period);
+  const snapshot=period.period==='day'&&(!period.anchor||period.anchor===today)?
+    bootstrap:await this.financial.snapshot(context,unitId,period);
   return {metric,question:input.question,answer:describe(snapshot,metric),
     source:'DETERMINISTIC_LEDGER',snapshot};
  }
