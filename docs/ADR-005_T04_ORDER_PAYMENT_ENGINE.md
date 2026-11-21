@@ -9,7 +9,7 @@ A camada T04 reutiliza os adaptadores já existentes Mercado Pago, Efí, Asaas, 
 
 ### Gate financeiro
 - A autorização de pagamento verifica usuário autenticado e role permitido, tenant+unit, Order persistido CONFIRMED, identidade do cliente e total em BRL. A política geral de IA passa a negar CREATE_PAYMENT sem o contexto de pedido confirmado.
-- A reserva transacional cria índice por pedido, chave idempotente, estado financeiro, referência do pedido e evento de outbox; só então chama o PSP. Repetição concorrente nunca chama createPix outra vez. Mesmo pedido não pode gerar uma segunda tentativa automática enquanto uma liquidação tardia puder existir.
+- Uma validação read-only de pré-requisitos do PSP (identidade, e-mail ou mapeamento do customer) ocorre antes da reserva. A reserva transacional cria índice por pedido, chave idempotente, estado financeiro, referência do pedido e evento de outbox; só então chama o PSP. Repetição concorrente nunca chama createPix outra vez. Mesmo pedido não pode gerar uma segunda tentativa automática enquanto uma liquidação tardia puder existir.
 - Resposta ausente do PSP gera RECONCILIATION_REQUIRED e investigação humana; a criação não é repetida cegamente. Recuperação governada por OWNER/ADMIN exige GET oficial do PSP com valor, referência e merchant verificados.
 - A referência única do PSP é indexada transacionalmente; não pode ser vinculada a pedidos distintos da mesma empresa.
 
@@ -33,3 +33,6 @@ O Compose do worker de reconciliação existente foi estendido para executar em 
 
 ### Compatibilidade e ressalvas
 Cotações legadas continuam com seus pagamentos existentes; nenhuma migração, alteração de preços ou duplicação automática de cobranças. A coleção OrderPayment é própria, sem reutilizar Quote como origem de pedido. Não houve autenticação real de WhatsApp, banco externo, terminal POS, PSP de produção, emissão fiscal nem deploy nesta etapa. A prova de engenharia usa testes determinísticos e contratos de PSP; a homologação externa pertence aos gates de implantação da T08.
+
+### Índices e acesso externo
+O manifesto deploy/order-payments.firestore-indexes.json versiona os índices Firestore exigidos para o lookup PSP, scan de reconciliação e isolamento por unidade. Provisionamento externo e testes reais do banco ficam em T08.
