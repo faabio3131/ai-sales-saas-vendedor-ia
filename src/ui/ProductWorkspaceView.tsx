@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Bot, Boxes, LockKeyhole, MessageCircle, RefreshCw, Target, Users } from 'lucide-react';
 import { resolveWorkspaceMemberships, WorkspaceMembership } from './workspaceAccess';
+import { FinancialPanel } from './FinancialPanel';
 
 interface AttentionItem {
   kind: string;
@@ -82,26 +83,33 @@ export function ProductWorkspaceView() {
 
   useEffect(() => {
     if (!tenantId) return;
+    const controller = new AbortController();
+    setDashboard(null);
     localStorage.setItem('vendedor-ia:tenant-id', tenantId);
     async function loadDashboard() {
       setLoading(true);
       setError(null);
       try {
         const response = await fetch('/api/dashboard', {
+          signal: controller.signal,
           credentials: 'same-origin',
           headers: { 'x-tenant-id': tenantId },
         });
         if (!response.ok) throw new Error('Não foi possível carregar o painel comercial.');
         const payload = await response.json() as { ok: boolean; data: DashboardSnapshot };
-        setDashboard(payload.data);
+        if (!controller.signal.aborted && payload.data.tenantId === tenantId) {
+          setDashboard(payload.data);
+        }
       } catch (caught) {
+        if (controller.signal.aborted) return;
         setDashboard(null);
         setError(caught instanceof Error ? caught.message : 'Falha ao carregar o painel comercial.');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     void loadDashboard();
+    return () => controller.abort();
   }, [tenantId]);
 
   const cards = dashboard ? [
@@ -206,6 +214,9 @@ export function ProductWorkspaceView() {
           </div>
         </article>
       </section>
+      {(selectedMembership.role === 'OWNER' || selectedMembership.role === 'ADMIN') && (
+        <FinancialPanel key={tenantId} tenantId={tenantId} role={selectedMembership.role} />
+      )}
         </>
       )}
     </div>

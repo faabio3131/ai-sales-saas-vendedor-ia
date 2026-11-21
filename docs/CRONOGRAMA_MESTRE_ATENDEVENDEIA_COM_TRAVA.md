@@ -88,8 +88,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | **T02** | `✅ ENTREGUE` | Conhecimento e Memória por Estabelecimento (Tenant) | 5d | `[x] ENTREGUE` | `21/11/2026` | `PR #12 / SHA 5a89a5580ede7e3c45041008808deebf692691d7 / CI #44917033763 SUCCESS` |
 | **T03** | `✅ ENTREGUE` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #13 / SHA 47bc7e8cd6ec28a9cef8536b0395ca3b430096b5 / CI #44922979257 SUCCESS` |
 | **T04** | `✅ ENTREGUE` | Payment Engine (Pix Dinâmico, Checkout Governado, Webhooks e Reconciliação) | 8d | `[x] ENTREGUE` | `21/11/2026` | `PR #14 / SHA 704304eb98635479f168f2a932517772b9ba8db3 / CI #44935718242 SUCCESS` |
-| **T05** | `🔒 Aprovação humana pós-T04` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
-| **T06** | `🔒 Finalize T05` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T05** | `✅ ENTREGUE` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[x] ENTREGUE` | `21/11/2026` | `PR #15 / SHA 49dcae65424c2f579cc650803e6b88aff1c34f9b / CI #44940142925 SUCCESS` |
+| **T06** | `🔒 Aprovação humana pós-T05` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T07** | `🔒 Finalize T06` | Autonomia Operacional Governada e Resolução de Exceções | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 
 ### Trilha 2 — T08: Piloto Pizzaria Americana & Habilitação Externa (Pós-T07)
@@ -151,12 +151,12 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Confirmação financeira/eventos duráveis não são confundidos com preparo ou entrega; dinheiro/cartão na entrega seguem confirmação operacional auditada, com papel e ator identificados.
   - [x] Reconciliar a base já implementada (PR #8 e #9, 21/11/2026) sem reimplementar adapters: faltas de outbox, vínculo pedido/pagamento e emissão de eventos são auditadas e só recebem status DONE quando certificadas.
 
-### T05 — Gestão Financeira Comercial e Consultas Cognitivas (`🔒 Travado em T04`)
+### T05 — Gestão Financeira Comercial e Consultas Cognitivas (`✅ ENTREGUE INTERNAMENTE — 21/11/2026`)
 - **Escopo:** Consolidar ledger comercial e projeções reconstruíveis; congelar definições de vendas brutas, vendas líquidas, recebimentos confirmados, recebimentos líquidos, pendentes, taxas, estornos, ticket médio e ranking de produtos; timezone do estabelecimento (`America/Sao_Paulo`), intervalos semiabertos e semana configurável; painel administrativo e consulta em linguagem natural autenticada via RBAC.
 - **Critério de Aceite (DoD):**
-  - [ ] Totais reconciliam 100% contra transações conhecidas (dia, semana e mês).
-  - [ ] Bloqueio estrito de consultas administrativas em conversa pública ou sem RBAC válido.
-  - [ ] Separação clara entre receita do estabelecimento e métricas/custos de IA da FM.
+  - [x] Totais reconciliam 100% contra transações conhecidas (dia, semana e mês).
+  - [x] Bloqueio estrito de consultas administrativas em conversa pública ou sem RBAC válido.
+  - [x] Separação clara entre receita do estabelecimento e métricas/custos de IA da FM.
 
 ### T06 — Delivery, Produção e Acompanhamento (`🔒 Travado em T05`)
 - **Escopo:** Implementar e certificar o **Food Service Pack com dois modos mutuamente exclusivos por estabelecimento/unidade**: `NATIVE_OPERATIONS` usa painel próprio de produção/fila/retirada/entrega; `INTEGRATED_OPERATIONS` usa adapter homologável de PDV/KDS/delivery existente, sem duplicar as operações. Construir contrato `ProductionDispatchPort` com ACK real, correlação, idempotência, outbox/inbox, retries/backoff/DLQ e fonte de verdade explícita dos estados. Proibir mudança silenciosa de modo durante pedido ativo. Completar `Delivery Engine` (validação de endereço/CEP, área atendida, regras de taxa, retirada, janela estimada fundamentada); painel/adapter operacional de produção, fila de despacho e eventos duráveis (`OrderReleasedToProduction`, `OrderReady`, `DeliveryDispatched`, `DeliveryCompleted`); notificações reais ao cliente baseadas no estado persistido.
@@ -284,3 +284,13 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - **Não declarar homologado:** PSP/checkout/estorno bancário real, aplicação de índices em Firestore externo, publicação na Contabo/Cloud Run, autenticação real WhatsApp e piloto Pizzaria Americana.
 - **Evidência:** docs/T04_CLOSURE_CERTIFICATION.md e docs/ADR-005_T04_ORDER_PAYMENT_ENGINE.md; T04 tem contratos e teste determinístico de PSP, não certificação real de adquirência/sandbox externo.
 - **T05 bloqueada** até autorização humana explícita após T04, segundo a trava sequencial.
+
+
+## 11. Certificação T05 — Gestão Financeira Comercial
+- **21/11/2026 — T05 certificada internamente:** PR #15; SHA funcional `49dcae65424c2f579cc650803e6b88aff1c34f9b`; CI integral #44940142925 SUCCESS.
+- **Testes:** 289/289 TypeScript em 52 arquivos; 7/7 Python; build, typecheck, segurança e smoke Docker aprovados.
+- **Entregue:** ledger determinístico por unidade, vendas brutas/líquidas, recebimentos, estornos, pendentes, descontos, ticket médio, ranking, intervalos dia/semana/mês com timezone do estabelecimento, semana configurável e consultas administrativas IA com RBAC OWNER/ADMIN.
+- **Qualidade:** valores financeiros reconstruídos com Orders T03 e outbox T04, verificação de pagamentos e prova, paginação de fontes, rejeição de registros incompletos e proteção contra dados históricos cruzados.
+- **Limites explícitos:** cobertura apenas T03/T04 com unitId verificável; cotações legadas sem unitId não atribuídas; taxas PSP ausentes permanecem null; nenhum dado bancário real ou deploy Contabo/Cloud Run homologado; índices Firestore versionados, não aplicados externamente.
+- **Evidências:** `docs/T05_CLOSURE_CERTIFICATION.md`, `docs/ADR-006_T05_FINANCE_LEDGER_COGNITIVE_ADMIN.md` e `docs/T05_FINANCIAL_ADMIN_RUNBOOK.md`.
+- **T06 permanece BLOQUEADA** até autorização humana explícita pós-certificação T05.
