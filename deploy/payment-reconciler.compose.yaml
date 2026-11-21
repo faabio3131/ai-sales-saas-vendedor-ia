@@ -29,12 +29,13 @@ services:
     volumes:
       - "${PAYMENT_FIREBASE_CREDENTIAL_FILE:?Mount the service account credential file}:/run/secrets/firebase/service-account.json:ro"
     entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      while true; do
-        if node dist/payment-reconciler.cjs; then
-          date +%s > /tmp/payment-reconciler.last-success
-        else
-          echo 'payment_reconciliation_cycle_failed' >&2
-        fi
-        sleep 300
-      done
+    command:
+      - |
+        while true; do
+          if node dist/payment-reconciler.cjs; then
+            date +%s > /tmp/payment-reconciler.last-success
+          else
+            echo 'payment_reconciliation_cycle_failed' >&2
+          fi
+          sleep 300
+        done
