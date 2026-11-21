@@ -13,6 +13,7 @@ describe('T06 — build and deployment manifests remain fail-closed',()=>{
    ['orders',['tenantId','unitId','status']],
    ['productionOperations',['tenantId','unitId']],
    ['productionOutbox',['deliveryStatus','nextAttemptAt']],
+   ['productionOutbox',['deliveryStatus','leaseUntil']],
   ] as const;
   for(const [collection,fields] of expected){
    expect(manifest.indexes.some(x=>x.collectionGroup===collection&&
