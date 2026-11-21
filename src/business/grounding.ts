@@ -4,7 +4,7 @@ import type { CatalogRepository } from '../catalog/contracts';
 import type { CatalogItem } from '../catalog/model';
 import type { TenantContext } from '../types/contracts';
 import type { BusinessProfileRepository } from './contracts';
-import type { ApprovedBusinessFact,BusinessProfileRevision,GroundedBusinessAnswer } from './model';
+import type { ApprovedBusinessFact,GroundedBusinessAnswer } from './model';
 import { normalizedQuestion,requireBusinessScope } from './service';
 
 const priceIntent=/\b(preco|valor|quanto custa|quanto e|quanto fica|custa|reais)\b/;
