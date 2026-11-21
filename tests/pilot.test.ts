@@ -9,7 +9,7 @@ describe('BLK-190 Pilot readiness', () => {
     expect(report.checks.find((x) => x.key === 'WHATSAPP_REAL_PROVIDER')?.status).toBe('STRUCTURAL_ONLY');
   });
 
-  it('returns GO only when all required pilot integrations are configured', () => {
+  it('still returns NO_GO with credentials until real owner, deploy, 10 journeys and director approval exist', () => {
     const report = evaluatePilotReadiness('tenant-1', {
       SESSION_SECRET: 'secret-value',
       FIREBASE_PROJECT_ID: 'project',
@@ -17,6 +17,16 @@ describe('BLK-190 Pilot readiness', () => {
       WHATSAPP_PHONE_NUMBER_ID: 'phone-id',
       GEMINI_API_KEY: 'ai-secret',
     });
+    expect(report.status).toBe('NO_GO');
+    expect(report.checks.find(x=>x.key==='T08_1_OWNER_ATTESTED')?.status).toBe('MISSING');
+  });
+
+  it('permits GO only when every external certification gate is explicitly supplied by trusted server logic',()=>{
+    const report=evaluatePilotReadiness('tenant-1',{
+      SESSION_SECRET:'a',FIREBASE_PROJECT_ID:'b',WHATSAPP_ACCESS_TOKEN:'c',
+      WHATSAPP_PHONE_NUMBER_ID:'d',GEMINI_API_KEY:'e',
+    },{ownerAttested:true,deploymentVerified:true,tenJourneysVerified:true,
+      directorGoLiveApproved:true});
     expect(report.status).toBe('GO');
   });
 
