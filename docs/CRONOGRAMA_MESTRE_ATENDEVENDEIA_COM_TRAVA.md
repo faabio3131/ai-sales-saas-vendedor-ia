@@ -86,8 +86,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
 | **T01** | `✅ ENTREGUE` | Integração Cognitiva (ADR-001/002: FM Core Base + Padrões NFCore + Adaptador TS) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #11 / SHA c150420e9d7cb66ca4335baadd5796fea6fd761a / CI #44906758883 SUCCESS` |
 | **T02** | `✅ ENTREGUE` | Conhecimento e Memória por Estabelecimento (Tenant) | 5d | `[x] ENTREGUE` | `21/11/2026` | `PR #12 / SHA 5a89a5580ede7e3c45041008808deebf692691d7 / CI #44917033763 SUCCESS` |
-| **T03** | `🔒 Aprovação humana pós-T02` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
-| **T04** | `🔒 Finalize T03` | Payment Engine (Pix Dinâmico, Checkout, Webhooks e Reconciliação) | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T03** | `✅ ENTREGUE` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #13 / SHA 47bc7e8cd6ec28a9cef8536b0395ca3b430096b5 / CI #44922979257 SUCCESS` |
+| **T04** | `🔒 Aprovação humana pós-T03` | Payment Engine (Pix Dinâmico, Checkout, Webhooks e Reconciliação) | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T05** | `🔒 Finalize T04` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T06** | `🔒 Finalize T05` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T07** | `🔒 Finalize T06` | Autonomia Operacional Governada e Resolução de Exceções | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
@@ -133,14 +133,14 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Alterações respeitam versão e vigência; memória persistida e governada.
   - [x] O perfil de negócio e o modo operacional são persistidos e versionados por tenant/unidade, com alteração autorizada, fail-closed e teste de isolamento. Nenhum nicho é hardcoded no Core.
 
-### T03 — Motor de Pedidos e Regras Comerciais (`🔒 Travado em T02`)
+### T03 — Motor de Pedidos e Regras Comerciais (`✅ ENTREGUE — 21/11/2026`)
 - **Escopo:** Completar `Catalog Engine` (produtos, variantes, tamanhos, bordas, adicionais, combos, múltiplos sabores e regra configurável de meio a meio) e `Order Engine` (valores em centavos inteiros BRL, snapshot imutável do catálogo, numeração atômica única por tenant/unidade, separação das dimensões Pedido/Pagamento/Entrega e cotação básica de entrega).
 - **Critério de Aceite (DoD):**
-  - [ ] Jornada completa de pedido repetível com cálculo determinístico exato.
-  - [ ] Concorrência na numeração, idempotência, alteração, cancelamento e titularidade testados.
-  - [ ] Nenhuma cobrança criada antes da confirmação explícita do cliente.
-  - [ ] O `Order Engine` é horizontal e independente de PDV, cozinha e plataforma de pagamento; contrato de despacho aceita ambos os modos sem executar despacho nesta tarefa.
-  - [ ] Casos alimentares cobertos: meio a meio, múltiplos tamanhos, bordas, adicionais, bebidas, combos, promoções, disponibilidade, opção retirada/delivery, snapshot e taxa configurável.
+  - [x] Jornada completa de pedido repetível com cálculo determinístico exato.
+  - [x] Concorrência na numeração, idempotência, alteração, cancelamento e titularidade testados.
+  - [x] Nenhuma cobrança criada antes da confirmação explícita do cliente.
+  - [x] O `Order Engine` é horizontal e independente de PDV, cozinha e plataforma de pagamento; contrato de despacho aceita ambos os modos sem executar despacho nesta tarefa.
+  - [x] Casos alimentares cobertos: meio a meio, múltiplos tamanhos, bordas, adicionais, bebidas, combos, promoções, disponibilidade, opção retirada/delivery, snapshot e taxa configurável.
 
 ### T04 — Payment Engine (`🔒 Travado em T03`)
 - **Escopo:** Implementar `PaymentProviderPort` com adapters candidatos (Mercado Pago, PagBank, Asaas) em sandbox/contrato; Pix dinâmico (QR Code + Copia e Cola + expiração), checkout seguro de cartão (sem armazenar PAN), dinheiro na entrega e troco; webhook autenticado com validação de assinatura, valor, moeda, conta beneficiária e deduplicação; outbox transacional, reconciliação em worker com backoff/DLQ, estorno governado; atualizar `PolicyEngine` para autorizar `CREATE_PAYMENT` apenas sobre pedido confirmado; lançamentos financeiros mínimos para T05.
@@ -193,7 +193,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | :--- | :---: | :---: |
 | Commercial Cognitive Core (Router, Context Pack, Output Guard, Resilience, FinOps) | `T01`, `T07` | `[ ] DoD da evolução não certificado` |
 | Business Knowledge & Memory Layer (Multi-tenant) | `T02` | `[x] T02 certificada (código interno; sem ativação externa)` |
-| Catalog Engine & Order Engine | `T03` | `[ ] DoD da evolução não certificado` |
+| Catalog Engine & Order Engine | `T03` | `[x] T03 certificada internamente; cobrança/despacho em T04/T06` |
 | Payment Engine (Pix Dinâmico, Checkout, Webhooks, Reconciliação) | `T04` | `[ ] DoD da evolução não certificado` |
 | Financial Engine & Admin Cognitive Queries | `T05` | `[ ] DoD da evolução não certificado` |
 | Delivery, Production & Notification Engine | `T06` | `[ ] DoD da evolução não certificado` |
@@ -265,3 +265,12 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - Evidência detalhada: `docs/T02_CLOSURE_CERTIFICATION.md`, `docs/ADR-003_T02_BUSINESS_KNOWLEDGE_MEMORY.md` e `docs/T02_BUSINESS_PROFILE_RUNBOOK.md`.
 - O catálogo existente ainda é tenant-scoped; ajustes por unidade e Food Pack operacional pertencem a T03/T06. Sem deploy/WhatsApp bancário real.
 - **T03 permanece bloqueada** até aprovação humana explícita após certificação e revisão de encerramento da T02.
+
+
+## 9. Certificação T03 — Registro pós-evolução
+- **21/11/2026 — T03 certificada internamente:** PR #13, SHA funcional `47bc7e8cd6ec28a9cef8536b0395ca3b430096b5`, CI #44922979257 SUCCESS; 248 testes TypeScript, 7 Python, build/segurança/Docker verdes.
+- **Entregue:** Catálogo unitário versionado, pizza meio a meio, tamanhos, bordas, adicionais, bebidas, combos, cupons, disponibilidade, delivery/pickup, ordem atômica, snapshots, idempotência, confirmação e cancelamento governados.
+- **Não entregue nesta etapa:** pagamento pedido→PSP (T04); gestão financeira (T05); despacho real/painel/PDV/KDS/geoentrega (T06); ativação WhatsApp e dados reais da Pizzaria (T08).
+- **Limite de certificação:** transações Firestore implementadas e avaliadas por doubles determinísticos na CI, sem homologação com Firestore real ou autenticação externa de WhatsApp.
+- Evidências: `docs/T03_CLOSURE_CERTIFICATION.md`, `docs/ADR-004_T03_UNIVERSAL_ORDER_ENGINE_FOOD_PACK.md` e `docs/T03_ORDER_ENGINE_RUNBOOK.md`.
+- **T04 permanece BLOQUEADA** até autorização humana explícita após certificação e aprovação do bloco.
