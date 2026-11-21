@@ -1,5 +1,5 @@
-import {createHash} from 'node:crypto';
-import {getFirestore,type DocumentReference} from 'firebase-admin/firestore';
+import {createHash,randomUUID} from 'node:crypto';
+import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import type {Order} from '../orders/model';
 import type {OrderPayment} from '../orderPayments/model';
@@ -15,9 +15,6 @@ const orderRef=(id:string)=>database().collection('orders').doc(id);
 const eventRef=(event:OperationEvent)=>database().collection('productionEvents').doc(event.id);
 function outboxFor(event:OperationEvent,work:'DISPATCH'|'CUSTOMER_NOTICE'):OperationOutboxItem{
  return {...event,work,deliveryStatus:'PENDING',attemptCount:0,nextAttemptAt:0,leaseUntil:0};
-}
-function activeOrder(order:Order):boolean{
- return order.status==='CONFIRMED'&&order.productionState!=='COMPLETED';
 }
 export class FirestoreFulfillmentSettingsRepository implements FulfillmentSettingsRepository{
  async get(t:string,u:string):Promise<UnitFulfillmentSettings|null>{
@@ -190,7 +187,7 @@ export class FirestoreOperationOutboxRepository implements OperationOutboxReposi
   const output:OperationOutboxItem[]=[];
   for(const row of rows.docs){
    if(output.length>=max)break;
-   const token=hash(row.id,String(now),String(Math.random()));
+   const token=randomUUID();
    const claimed=await database().runTransaction(async tx=>{
     const current=(await tx.get(row.ref)).data() as OperationOutboxItem|undefined;
     if(!current||!['PENDING','PROCESSING'].includes(current.deliveryStatus)||

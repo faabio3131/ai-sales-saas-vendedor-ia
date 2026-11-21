@@ -1,7 +1,5 @@
 import {createHash} from 'node:crypto';
 import type {TenantContext} from '../types/contracts';
-import type {Order} from '../orders/model';
-import type {OrderPayment} from '../orderPayments/model';
 import {rejected,operationalScope,VIEW,RELEASE,KITCHEN,DELIVERY,ADMIN,
   parseSettings,assessDelivery,stateProjection,eventFor,canAdvance} from './policy';
 import type {OperationDependencies,OperationRecord,OperationEvent,OperationState,
@@ -178,7 +176,7 @@ export class FulfillmentService {
     externalOrderId:ack.externalOrderId,version:before.version+1,
     updatedAt:this.clock().toISOString()};
   return this.dep.operations.advance(next,before.version,
-    event(next,'ProductionDispatchAcknowledged',before.connectorId),
+    event(next,'OrderReleasedToProduction',before.connectorId),
     undefined,'ack:'+ack.externalOrderId);
  }
  /** The caller is a verified adapter, NEVER an internet-facing JSON route. */
@@ -189,6 +187,7 @@ export class FulfillmentService {
     before.correlationId!==status.correlationId||!validText(status.proofRef,200)||
     !validText(status.providerEventId,128))
     rejected('FULFILLMENT_EXTERNAL_STATUS_UNVERIFIED','FORBIDDEN');
+  if(before.lastVerifiedExternalEventId===status.providerEventId)return before;
   const nextState:OperationState=status.status==='OUT_FOR_DELIVERY'?
     'OUT_FOR_DELIVERY':status.status;
   const valid=(before.state==='QUEUED'&&nextState==='IN_PREPARATION')||

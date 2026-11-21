@@ -132,7 +132,7 @@ export function stateProjection(state:OperationState,kind:'PICKUP'|'DELIVERY'):{
   const prod=state==='IN_PREPARATION'?'IN_PREPARATION':
     state==='READY'?'READY':state==='AWAITING_ACK'?'AWAITING_ACK':
     state==='MANUAL_REVIEW_REQUIRED'?'MANUAL_REVIEW_REQUIRED':
-    state==='COMPLETED'||state==='OUT_FOR_DELIVERY'?'COMPLETED':'QUEUED';
+    state==='COMPLETED'?'COMPLETED':state==='OUT_FOR_DELIVERY'?'READY':'QUEUED';
   const delivery=state==='COMPLETED'?(kind==='PICKUP'?'PICKED_UP':'COMPLETED'):
     state==='OUT_FOR_DELIVERY'?'OUT_FOR_DELIVERY':'NOT_STARTED';
   return {productionState:prod,deliveryState:delivery};

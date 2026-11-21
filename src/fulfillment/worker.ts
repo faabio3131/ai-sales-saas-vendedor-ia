@@ -1,4 +1,3 @@
-import {randomUUID} from 'node:crypto';
 import type {OperationOutboxRepository,OperationRepository,ProductionAdapterRegistry,
   CustomerNoticePort,OperationEvent} from './model';
 import {FulfillmentService} from './service';
@@ -57,4 +56,3 @@ export class FulfillmentWorker {
 export class EmptyProductionAdapterRegistry implements ProductionAdapterRegistry{
  get(_id:string){return null;}
 }
-export const fulfillmentWorkerId=()=>randomUUID();
