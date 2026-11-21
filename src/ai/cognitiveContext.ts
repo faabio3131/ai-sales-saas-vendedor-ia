@@ -43,6 +43,36 @@ export function redactCommercialText(input: string): string {
   for (const [regex, replacement] of REDACTION) value = value.replace(regex, replacement);
   return value;
 }
+/** Recursively remove credential-bearing fields before any external model or S2S call. */
+function sanitizeUnknown(value:unknown,depth=0):unknown {
+  if(depth>8)throw new Error('Cognitive input nesting limit.');
+  if(typeof value==='string')return bounded(value,16384);
+  if(value===null||typeof value==='boolean')return value;
+  if(typeof value==='number') {
+    if(!Number.isFinite(value))throw new Error('Invalid cognitive number.');
+    return value;
+  }
+  if(Array.isArray(value)) {
+    if(value.length>100)throw new Error('Cognitive array too large.');
+    return value.map(v=>sanitizeUnknown(v,depth+1));
+  }
+  if(typeof value==='object') {
+    if(Object.getPrototypeOf(value)!==Object.prototype && Object.getPrototypeOf(value)!==null)
+      throw new Error('Cognitive input must be plain structured data.');
+    const entries=Object.entries(value as Record<string,unknown>);
+    if(entries.length>100)throw new Error('Cognitive object too large.');
+    const cleaned:Record<string,unknown>={};
+    for(const [key,v] of entries) {
+      if(key.length>128||key==='__proto__'||key==='constructor'||key==='prototype')
+        throw new Error('Invalid cognitive object key.');
+      cleaned[key]=/(?:password|senha|secret|token|api[_-]?key|authorization|clientsecret|privatekey|email|phone|telefone|cpf|cnpj)/i.test(key)
+        ? '[REDACTED]' : sanitizeUnknown(v,depth+1);
+    }
+    return cleaned;
+  }
+  throw new Error('Unsupported cognitive input type.');
+}
+
 export function hasInjectionMarkers(input: string): boolean {
   return INJECTION.some(pattern => pattern.test(input));
 }
@@ -76,7 +106,7 @@ export function buildCognitiveContextPack(input: AIRequest): CognitiveContextPac
   const evidenceIds = facts.map(x=>x.id);
   const trustedFacts = bounded(facts.map(x=>x.text).join('\n'), 16384);
   let serialized: string;
-  try { serialized = JSON.stringify(input.input); }
+  try { serialized = JSON.stringify(sanitizeUnknown(input.input)); }
   catch { throw new Error('Cognitive input cannot be serialized.'); }
   if (!serialized || serialized === 'null') throw new Error('Cognitive input required.');
   const untrustedData = bounded(serialized, 32768);
