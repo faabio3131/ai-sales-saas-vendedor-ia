@@ -59,6 +59,7 @@ export class MercadoPagoPixProvider implements PaymentProviderInterface {
     this.fetchImpl=settings.fetchImpl??fetch;
   }
   get tenantId():string{return this.settings.tenantId;}
+  get recipientId():string{return this.settings.collectorId;}
   private async request(path:string,init?:RequestInit):Promise<MpPayload> {
     let response:Response;
     try {

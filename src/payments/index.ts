@@ -7,3 +7,6 @@ export * from './service';
 export * from './routes';
 
 export * from './mercadoPago';
+export * from './providerCatalog';
+export * from './connections';
+export * from './resolver';
