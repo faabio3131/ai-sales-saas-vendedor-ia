@@ -93,6 +93,12 @@ export class MercadoPagoPixProvider implements PaymentProviderInterface {
       expiresAt:payment.date_of_expiration,
     };
   }
+  async preflightPix(input:ProviderPaymentRequest):Promise<void> {
+    if(input.tenantId!==this.tenantId) invalid('MP_TENANT_DENIED','Payment merchant does not match tenant.');
+    if(!Number.isSafeInteger(input.amountMinor)||input.amountMinor<=0||input.currency!=='BRL')
+      invalid('MP_AMOUNT_INVALID','Invalid payment amount.');
+    cleanEmail(input.payerEmail);
+  }
   async createPix(input:ProviderPaymentRequest):Promise<ProviderPaymentResult> {
     if(input.tenantId!==this.tenantId) return invalid('MP_TENANT_DENIED','Payment merchant does not match tenant.');
     if(!Number.isSafeInteger(input.amountMinor)||input.amountMinor<=0||input.currency!=='BRL') return invalid('MP_AMOUNT_INVALID','Invalid payment amount.');

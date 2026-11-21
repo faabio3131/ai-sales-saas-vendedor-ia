@@ -30,6 +30,12 @@ export class PagarmePixProvider extends PixOnlyProvider {
    paymentUrl:str(transaction.qr_code_url)||undefined,
   };
  }
+ async preflightPix(input:ProviderPaymentRequest):Promise<void>{
+  if(input.tenantId!==this.tenantId)return fail('PAGARME_TENANT_MISMATCH');
+  const customer=await this.cfg.resolveCustomer(input.customerId);
+  if(!customer||!/^cus_[A-Za-z0-9]+$/.test(customer))
+    return fail('PAGARME_CUSTOMER_NOT_MAPPED');
+ }
  async createPix(input:ProviderPaymentRequest):Promise<ProviderPaymentResult>{
   if(input.tenantId!==this.tenantId)return fail('PAGARME_TENANT_MISMATCH');
   const customer=await this.cfg.resolveCustomer(input.customerId);

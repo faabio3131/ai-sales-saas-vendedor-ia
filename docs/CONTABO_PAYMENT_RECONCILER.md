@@ -54,8 +54,15 @@ docker compose -f deploy/payment-reconciler.compose.yaml \
 ```
 
 A execução de `config --quiet` é um pré-check estrutural, não conecta contas.
-O serviço consulta periodicamente os pagamentos e registra
-`payment_reconciliation_completed` em caso de rodada bem-sucedida.
+O serviço executa **ambos** os ciclos em cada iteração: o reconciliador legado
+de cotações e o novo reconciliador T04 de pedidos, seguido da entrega do outbox
+financeiro. A saúde só é renovada quando **ambos** os comandos retornam sucesso.
+Registra `payment_reconciliation_completed` e
+`order-payment-worker-completed` (incluindo contadores de análise manual e DLQ).
+Um PSP com ID desconhecido gera investigação e não dispara nova cobrança.
+`dist/order-payment-workers.cjs` é obrigatório na imagem certificada;
+a imagem antiga não atende ao gate T04. Mesmo após implantação, é necessário
+monitorar DLQ, falhas, atraso de eventos e chaves bancárias expiradas.
 Falhas registram `payment_reconciliation_cycle_failed` e o healthcheck fica
 `unhealthy` se não ocorrer uma rodada bem-sucedida por mais de 20 minutos.
 O intervalo de **5 minutos é o tempo de espera após a conclusão de cada rodada**;

@@ -87,8 +87,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | **T01** | `✅ ENTREGUE` | Integração Cognitiva (ADR-001/002: FM Core Base + Padrões NFCore + Adaptador TS) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #11 / SHA c150420e9d7cb66ca4335baadd5796fea6fd761a / CI #44906758883 SUCCESS` |
 | **T02** | `✅ ENTREGUE` | Conhecimento e Memória por Estabelecimento (Tenant) | 5d | `[x] ENTREGUE` | `21/11/2026` | `PR #12 / SHA 5a89a5580ede7e3c45041008808deebf692691d7 / CI #44917033763 SUCCESS` |
 | **T03** | `✅ ENTREGUE` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #13 / SHA 47bc7e8cd6ec28a9cef8536b0395ca3b430096b5 / CI #44922979257 SUCCESS` |
-| **T04** | `🔒 Aprovação humana pós-T03` | Payment Engine (Pix Dinâmico, Checkout, Webhooks e Reconciliação) | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
-| **T05** | `🔒 Finalize T04` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T04** | `✅ ENTREGUE` | Payment Engine (Pix Dinâmico, Checkout Governado, Webhooks e Reconciliação) | 8d | `[x] ENTREGUE` | `21/11/2026` | `PR #14 / SHA 704304eb98635479f168f2a932517772b9ba8db3 / CI #44935718242 SUCCESS` |
+| **T05** | `🔒 Aprovação humana pós-T04` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T06** | `🔒 Finalize T05` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T07** | `🔒 Finalize T06` | Autonomia Operacional Governada e Resolução de Exceções | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 
@@ -142,14 +142,14 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] O `Order Engine` é horizontal e independente de PDV, cozinha e plataforma de pagamento; contrato de despacho aceita ambos os modos sem executar despacho nesta tarefa.
   - [x] Casos alimentares cobertos: meio a meio, múltiplos tamanhos, bordas, adicionais, bebidas, combos, promoções, disponibilidade, opção retirada/delivery, snapshot e taxa configurável.
 
-### T04 — Payment Engine (`🔒 Travado em T03`)
+### T04 — Payment Engine (`✅ ENTREGUE INTERNAMENTE — 21/11/2026`)
 - **Escopo:** Implementar `PaymentProviderPort` com adapters candidatos (Mercado Pago, PagBank, Asaas) em sandbox/contrato; Pix dinâmico (QR Code + Copia e Cola + expiração), checkout seguro de cartão (sem armazenar PAN), dinheiro na entrega e troco; webhook autenticado com validação de assinatura, valor, moeda, conta beneficiária e deduplicação; outbox transacional, reconciliação em worker com backoff/DLQ, estorno governado; atualizar `PolicyEngine` para autorizar `CREATE_PAYMENT` apenas sobre pedido confirmado; lançamentos financeiros mínimos para T05.
 - **Critério de Aceite (DoD):**
-  - [ ] Testes contratuais/sandbox por adapter e integração pedido-pagamento aprovados.
-  - [ ] Exceções cobertas: timeout, Pix expirado, pagamento tardio, webhook duplicado/fora de ordem, valor divergente e estorno.
-  - [ ] Zero confirmação de pagamento baseada em texto, print ou confiança do LLM.
-  - [ ] Confirmação financeira/eventos duráveis não são confundidos com preparo ou entrega; dinheiro/cartão na entrega seguem confirmação operacional auditada, com papel e ator identificados.
-  - [ ] Reconciliar a base já implementada (PR #8 e #9, 21/11/2026) sem reimplementar adapters: faltas de outbox, vínculo pedido/pagamento e emissão de eventos são auditadas e só recebem status DONE quando certificadas.
+  - [x] Testes contratuais/sandbox por adapter e integração pedido-pagamento aprovados.
+  - [x] Exceções cobertas: timeout, Pix expirado, pagamento tardio, webhook duplicado/fora de ordem, valor divergente e estorno.
+  - [x] Zero confirmação de pagamento baseada em texto, print ou confiança do LLM.
+  - [x] Confirmação financeira/eventos duráveis não são confundidos com preparo ou entrega; dinheiro/cartão na entrega seguem confirmação operacional auditada, com papel e ator identificados.
+  - [x] Reconciliar a base já implementada (PR #8 e #9, 21/11/2026) sem reimplementar adapters: faltas de outbox, vínculo pedido/pagamento e emissão de eventos são auditadas e só recebem status DONE quando certificadas.
 
 ### T05 — Gestão Financeira Comercial e Consultas Cognitivas (`🔒 Travado em T04`)
 - **Escopo:** Consolidar ledger comercial e projeções reconstruíveis; congelar definições de vendas brutas, vendas líquidas, recebimentos confirmados, recebimentos líquidos, pendentes, taxas, estornos, ticket médio e ranking de produtos; timezone do estabelecimento (`America/Sao_Paulo`), intervalos semiabertos e semana configurável; painel administrativo e consulta em linguagem natural autenticada via RBAC.
@@ -274,3 +274,13 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - **Limite de certificação:** transações Firestore implementadas e avaliadas por doubles determinísticos na CI, sem homologação com Firestore real ou autenticação externa de WhatsApp.
 - Evidências: `docs/T03_CLOSURE_CERTIFICATION.md`, `docs/ADR-004_T03_UNIVERSAL_ORDER_ENGINE_FOOD_PACK.md` e `docs/T03_ORDER_ENGINE_RUNBOOK.md`.
 - **T04 permanece BLOQUEADA** até autorização humana explícita após certificação e aprovação do bloco.
+
+
+## 10. Certificação T04 — Fechamento interno
+
+- **21/11/2026:** T04 entregue e certificada internamente via PR #14, SHA funcional 704304eb98635479f168f2a932517772b9ba8db3, CI #44935718242 SUCCESS.
+- **Testes:** 269/269 TypeScript em 50 arquivos; 7/7 Python; build, typecheck, security boundaries, Compose config, Docker Node e Python certificados.
+- **Entregue:** vínculo transacional pedido/pagamento, Pix, adaptação multibanco existente, COD auditado, governança de refund, webhook autenticado + PSP GET, reconciliação, investigação, outbox com DLQ, eventos financeiros e índices versionados.
+- **Não declarar homologado:** PSP/checkout/estorno bancário real, aplicação de índices em Firestore externo, publicação na Contabo/Cloud Run, autenticação real WhatsApp e piloto Pizzaria Americana.
+- **Evidência:** docs/T04_CLOSURE_CERTIFICATION.md e docs/ADR-005_T04_ORDER_PAYMENT_ENGINE.md; T04 tem contratos e teste determinístico de PSP, não certificação real de adquirência/sandbox externo.
+- **T05 bloqueada** até autorização humana explícita após T04, segundo a trava sequencial.

@@ -55,7 +55,7 @@ describe('BLK-090: Sales Engine', () => {
     };
     const engine = new SalesEngine(new PolicyEngine(), ai);
     const result = await engine.decide({ tenantId:'tenant-a', customerId:'customer-a', leadId:'lead-a', stage:'QUALIFICADO', autonomyMode:'AUTONOMOUS' });
-    expect(result).toMatchObject({ ok:true, data:{ action:'CREATE_PAYMENT', requiresHumanApproval:true, policyReasonCode:'HUMAN_APPROVAL_REQUIRED', source:'AI_SUGGESTED' } });
+    expect(result).toMatchObject({ ok:true, data:{ action:'CREATE_PAYMENT', allowed:false, requiresHumanApproval:true, policyReasonCode:'CONFIRMED_ORDER_REQUIRED', source:'AI_SUGGESTED' } });
   });
 
   it('falls back safely when AI throws or returns invalid output', async () => {

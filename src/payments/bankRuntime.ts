@@ -1,4 +1,5 @@
 import {FirestorePaymentRepository,FirestorePaymentWebhookEventRepository} from './firestoreRepository';
+import {createOrderPaymentRuntime} from '../orderPayments/runtime';
 import {FirestoreMerchantProviderConnectionRepository} from './connections';
 import {GoogleSecretManagerMerchantVault} from './merchantVault';
 import {MountedMerchantCredentialsVault} from './mountedVault';
@@ -24,5 +25,7 @@ export function createBankPaymentRuntime(){
   new FirestoreQuoteItemRepository());
  const service=new PaymentService(payments,new FirestorePaymentWebhookEventRepository(),
   quotes,new StructuralPaymentProvider(),fiscal,undefined,resolver);
- return {payments,connections,vault,resolver,service,audit:new FirestoreVerifiedWebhookLedger()};
+ const orderRuntime=createOrderPaymentRuntime();
+ return {payments,connections,vault,resolver,service,audit:new FirestoreVerifiedWebhookLedger(),
+  orderPayments:orderRuntime.store,orderService:orderRuntime.service};
 }

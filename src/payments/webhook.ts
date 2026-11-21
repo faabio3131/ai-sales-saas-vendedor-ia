@@ -5,6 +5,7 @@ import { SalesFiscalHandoffService } from '../fiscal/service';
 import { FirestoreSalesFiscalHandoffRepository } from '../fiscal/firestoreRepository';
 import { PaymentService } from './service';
 import { MercadoPagoPixProvider, mercadoPagoSettingsFromEnv } from './mercadoPago';
+import { createOrderPaymentRuntime } from '../orderPayments/runtime';
 
 /** Public endpoint accepts ONLY signed PSP notifications; never a browser-supplied tenant. */
 export async function mercadoPagoWebhookHandler(req:Request,res:Response):Promise<void> {
@@ -26,7 +27,13 @@ export async function mercadoPagoWebhookHandler(req:Request,res:Response):Promis
     const service=new PaymentService(
       new FirestorePaymentRepository(),new FirestorePaymentWebhookEventRepository(),
       quotes,provider,fiscalObserver);
-    await service.handleWebhook({tenantId:settings.tenantId,requestId:'mp-'+dataId},req.headers,body);
+    const orderRuntime=createOrderPaymentRuntime();
+    const newPayment=await orderRuntime.store.byProvider(settings.tenantId,'MERCADOPAGO',dataId);
+    if(newPayment){
+      await orderRuntime.service.refreshFromWebhook(settings.tenantId,'MERCADOPAGO',dataId);
+    }else{
+      await service.handleWebhook({tenantId:settings.tenantId,requestId:'mp-'+dataId},req.headers,body);
+    }
     res.status(200).json({ok:true});
   } catch {
     // Don't acknowledge failures that require safe provider retry / reconciliation.

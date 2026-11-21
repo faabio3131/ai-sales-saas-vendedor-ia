@@ -3,6 +3,8 @@ import type {Request,Response} from 'express';
 import {ApplicationError} from '../infrastructure/errors';
 import type {PaymentProviderId} from './providerCatalog';
 import type {Payment,PaymentStatus} from './model';
+import type {OrderPaymentRepository,OrderPaymentStatus} from '../orderPayments/model';
+import type {OrderPaymentService} from '../orderPayments/service';
 import type {MerchantProviderConnectionRepository} from './connections';
 import type {MerchantCredentialsVault} from './merchantVault';
 import type {PaymentRepository} from './contracts';
@@ -94,12 +96,14 @@ export interface PaymentWebhookRuntime {
  payments:PaymentRepository;
  service:WebhookRefreshService;
  audit?:VerifiedPaymentWebhookLedger;
+ orderPayments?:Pick<OrderPaymentRepository,'byProvider'>;
+ orderService?:Pick<OrderPaymentService,'refreshFromWebhook'>;
 }
 export class PaymentWebhookProcessor {
  constructor(private readonly runtime:PaymentWebhookRuntime){}
  async process(input:{
   provider:string;tenantId:string;headers:Headers;rawBody:Buffer;payload:unknown;
- }):Promise<PaymentStatus[]>{
+ }):Promise<Array<PaymentStatus|OrderPaymentStatus>>{
   const {provider,tenantId,headers,rawBody,payload}=input;
   if(!ENABLED_WEBHOOK_PROVIDERS.has(provider)||!tenantId||tenantId.length>150)return deny();
   const connection=await this.runtime.connections.get(tenantId,provider as PaymentProviderId);
@@ -108,16 +112,27 @@ export class PaymentWebhookProcessor {
   if(secrets.tenantId!==tenantId||secrets.providerId!==provider||secrets.recipientId!==connection.recipientId)return deny();
   if(!authorizePaymentWebhook({provider,tenantId,headers,rawBody,secret:secrets.webhookSecret??''}))return deny();
   const event=parsePaymentWebhook(provider,payload);
-  const statuses:PaymentStatus[]=[];
+  const statuses:Array<PaymentStatus|OrderPaymentStatus>=[];
   for(const providerPaymentId of event.paymentIds){
    const persisted=await this.runtime.payments.findByProviderPaymentId(tenantId,provider,providerPaymentId);
-   if(!persisted)return deny();
-   // The event's status is ignored; only an authenticated provider GET can
-   // advance payment state and dispatch the fiscal confirmation observer.
-   const result=await this.runtime.service.refresh({tenantId,requestId:'bank-webhook'},persisted.id);
+   // Webhook payload status is NEVER used. Only tenant-bound PSP GET can
+   // reconcile a legacy quote payment or a new T04 order payment.
+   if(persisted){
+    const result=await this.runtime.service.refresh({tenantId,requestId:'bank-webhook'},persisted.id);
+    await this.runtime.audit?.record({
+     tenantId,provider,eventId:event.eventId,providerPaymentId,
+     paymentId:persisted.id,verifiedStatus:result.status,
+    });
+    statuses.push(result.status);
+    continue;
+   }
+   const orderPayment=await this.runtime.orderPayments?.byProvider(tenantId,provider,providerPaymentId);
+   if(!orderPayment||!this.runtime.orderService)return deny();
+   const result=await this.runtime.orderService.refreshFromWebhook(tenantId,provider,providerPaymentId);
+   if(!result)return deny();
    await this.runtime.audit?.record({
     tenantId,provider,eventId:event.eventId,providerPaymentId,
-    paymentId:persisted.id,verifiedStatus:result.status,
+    paymentId:orderPayment.id,verifiedStatus:result.status,
    });
    statuses.push(result.status);
   }
