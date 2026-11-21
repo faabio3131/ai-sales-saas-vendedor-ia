@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore,type DocumentReference } from 'firebase-admin/firestore';
 import { ensureFirebaseAdminApp } from '../infrastructure/firebaseAdmin';
 import type { Order } from '../orders/model';
 import { denyPayment } from './policy';
@@ -131,7 +131,7 @@ export class FirestoreOrderPaymentRepository implements OrderPaymentRepository {
         denyPayment('ORDER_PAYMENT_PROVIDER_REFERENCE_IMMUTABLE');
       // A charge identifier cannot be attached to two orders of one merchant.
       // This unique index is written in the SAME transaction as payment state.
-      let providerIndex:ReturnType<ReturnType<typeof db>['collection']> | undefined;
+      let providerIndex:DocumentReference|undefined;
       if(next.providerPaymentId&&!previous.providerPaymentId){
         const index=db().collection('orderPaymentProviderIds')
           .doc(hash(next.tenantId,next.provider,next.providerPaymentId));
