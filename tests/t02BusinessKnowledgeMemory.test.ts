@@ -325,7 +325,7 @@ describe('T02 — Governed, provenanced customer memory',()=>{
     ]));
     const assembler=new CommercialCustomerContextService(grounding,service);
     const empty=await assembler.aiRequest(t('pizza-a'),'unit-1','cust-a',{stage:'NOVO'},NOW);
-    expect(buildCognitiveContextPack(empty).evidenceIds).not.toContain('memory:1');
+    expect(buildCognitiveContextPack(empty).untrustedData).not.toContain('customerMemory');
     await service.changeConsent(t('pizza-a'),'unit-1','cust-a',{
       expectedVersion:0,grant:true,consentEvidenceRef:'conversation:pizza-a:cust-a:consent',
     });
@@ -335,12 +335,13 @@ describe('T02 — Governed, provenanced customer memory',()=>{
     });
     const ready=await assembler.aiRequest(t('pizza-a'),'unit-1','cust-a',{stage:'QUALIFICADO'},NOW);
     const pack=buildCognitiveContextPack(ready);
-    expect(pack.evidenceIds).toContain('memory:2');
-    expect(pack.trustedFacts).toContain('Prefere portuguesa.');
+    expect(pack.evidenceIds).not.toContain('memory:2');
+    expect(pack.trustedFacts).not.toContain('Prefere portuguesa.');
+    expect(pack.untrustedData).toContain('Prefere portuguesa.');
     expect(pack.evidenceIds).toContain('catalog:one');
     setNow('2027-01-01T00:00:00.000Z');
     const after=await assembler.aiRequest(t('pizza-a'),'unit-1','cust-a',{stage:'NOVO'},NOW);
-    expect(buildCognitiveContextPack(after).evidenceIds).not.toContain('memory:2');
+    expect(buildCognitiveContextPack(after).untrustedData).not.toContain('customerMemory');
   });
   it('rejects impersonated message, outbound assistant messages and fake consent',async()=>{
     const conv:Conversation={id:'conv-a',tenantId:'pizza-a',customerId:'cust-a',channel:'WHATSAPP',
