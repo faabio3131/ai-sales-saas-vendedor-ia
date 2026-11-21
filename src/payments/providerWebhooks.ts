@@ -96,6 +96,8 @@ export interface PaymentWebhookRuntime {
  payments:PaymentRepository;
  service:WebhookRefreshService;
  audit?:VerifiedPaymentWebhookLedger;
+ orderPayments?:Pick<OrderPaymentRepository,'byProvider'>;
+ orderService?:Pick<OrderPaymentService,'refreshFromWebhook'>;
 }
 export class PaymentWebhookProcessor {
  constructor(private readonly runtime:PaymentWebhookRuntime){}
