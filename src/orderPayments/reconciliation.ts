@@ -84,6 +84,12 @@ export class OrderPaymentReconciliationWorker {
         await this.repository.finish(entry.id,this.clock(),false,'MANUAL_RECONCILIATION_REQUIRED');
         result.manualReview++;continue;
       }
+      if(entry.status==='REFUND_PENDING'&&entry.refund?.requestedAt&&
+        this.clock()-Date.parse(entry.refund.requestedAt)>24*60*60*1000){
+        await this.repository.investigation(entry,'REFUND_REQUIRES_MANUAL_REVIEW');
+        await this.repository.finish(entry.id,this.clock(),false,'REFUND_PENDING_TOO_LONG');
+        result.manualReview++;continue;
+      }
       try{
         const checked=await this.service.refreshVerified(entry);
         if(checked.id!==entry.id||checked.tenantId!==entry.tenantId||
