@@ -1,5 +1,5 @@
 import type {OperationMode} from '../business/model';
-import type {LineSnapshot,Order,OrderFulfillmentInput} from '../orders/model';
+import type {LineSnapshot,OrderFulfillmentInput} from '../orders/model';
 
 export type ProductionState='NOT_DISPATCHED'|'AWAITING_ACK'|'QUEUED'|'IN_PREPARATION'|'READY'|'COMPLETED'|'MANUAL_REVIEW_REQUIRED';
 export type DeliveryState='NOT_STARTED'|'OUT_FOR_DELIVERY'|'COMPLETED'|'PICKED_UP';
