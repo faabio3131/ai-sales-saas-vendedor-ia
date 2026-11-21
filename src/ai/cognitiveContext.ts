@@ -37,11 +37,11 @@ const REDACTION: Array<[RegExp, string]> = [
   [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[EMAIL]'],
   [/(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)/g, '[CPF]'],
   [/(?<!\d)(?:\+?55[ -]?)?\(?\d{2}\)?[ -]?9?\d{4}[ -]?\d{4}(?!\d)/g, '[PHONE]'],
-  [/\\b[a-z][a-z0-9+.-]*:\\/\\/[^\\s/@:]+:[^\\s/@]+@/gi,'[CREDENTIAL_URL]@'],
-  [/(?<!\\d)\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}(?!\\d)/g,'[CNPJ]'],
-  [/(?<!\\d)\\d{11,19}(?!\\d)/g,'[SENSITIVE_NUMBER]'],
-  [/(?<!\\d)\\d{4}(?:[ -]\\d{4}){2,3}(?:[ -]\\d{1,4})?(?!\\d)/g,'[CARD]'],
-  [/\\b[A-Za-z0-9+/_-]{40,}={0,2}\\b/g,'[CREDENTIAL]'],
+  [/\b[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@/gi,'[CREDENTIAL_URL]@'],
+  [/(?<!\d)\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}(?!\d)/g,'[CNPJ]'],
+  [/(?<!\d)\d{11,19}(?!\d)/g,'[SENSITIVE_NUMBER]'],
+  [/(?<!\d)\d{4}(?:[ -]\d{4}){2,3}(?:[ -]\d{1,4})?(?!\d)/g,'[CARD]'],
+  [/\b[A-Za-z0-9+/_-]{40,}={0,2}\b/g,'[CREDENTIAL]'],
 ];
 export function redactCommercialText(input: string): string {
   let value = input;
