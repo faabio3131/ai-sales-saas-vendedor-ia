@@ -66,5 +66,6 @@ export function resolveWindow(input:{
   const startInclusive=startUtc(start,input.timezone);
   const endExclusive=startUtc(end,input.timezone);
   return {period:input.period,anchor,timezone:input.timezone,
-    weekStartsOn:input.weekStartsOn,startInclusive,endExclusive,asOf};
+    weekStartsOn:input.weekStartsOn,startLocalDate:start,endLocalDate:end,
+    startInclusive,endExclusive,asOf};
 }
