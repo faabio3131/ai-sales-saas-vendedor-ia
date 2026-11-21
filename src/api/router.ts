@@ -12,6 +12,8 @@ import { aiRealReadinessHandler, aiRealSmokeHandler } from '../operations/aiReal
 import { firebaseRealReadinessHandler } from '../operations/firebaseRealReadinessRoute';
 import { createPaymentsRouter } from '../payments/routes';
 import { mercadoPagoWebhookHandler } from '../payments/webhook';
+import {PaymentWebhookProcessor,handleBankWebhook} from '../payments/providerWebhooks';
+import {createBankPaymentRuntime} from '../payments/bankRuntime';
 import { createPilotRouter } from '../pilot/routes';
 import { createPlansRouter } from '../plans/routes';
 import { createQuotesRouter } from '../quotes/routes';
@@ -54,6 +56,11 @@ export function createApiRouter(): Router {
   router.use('/quotes', authenticationMiddleware, tenantAuthorizationMiddleware, createQuotesRouter());
   router.post('/payments/webhooks/mercadopago', (req,res,next) => {
     mercadoPagoWebhookHandler(req,res).catch(next);
+  });
+  router.post('/payments/webhooks/:provider/:tenantId', (req,res,next)=>{
+    const runtime=createBankPaymentRuntime();
+    const processor=new PaymentWebhookProcessor(runtime);
+    handleBankWebhook(req,res,processor).catch(next);
   });
   router.use('/payments', authenticationMiddleware, tenantAuthorizationMiddleware, createPaymentsRouter());
   router.use('/revenue-expansion', authenticationMiddleware, tenantAuthorizationMiddleware, createRevenueExpansionRouter());
