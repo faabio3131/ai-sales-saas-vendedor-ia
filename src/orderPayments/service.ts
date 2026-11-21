@@ -115,6 +115,9 @@ export class OrderPaymentService {
     // a charge. No client-supplied recipient, credentials or provider URL.
     const provider=ONLINE.has(input.method)?
       await this.resolver.forNewPayment(scope.tenantId,input.providerId):undefined;
+    if(provider&&input.method!=='PIX'&&
+      !provider.supportedMethods?.includes(input.method as 'PAYMENT_LINK'|'CHECKOUT'))
+      denyPayment('ORDER_PAYMENT_ONLINE_METHOD_UNSUPPORTED','PROVIDER');
     const now=this.clock().toISOString();
     const draft:OrderPayment={
       ...scope,orderId,customerId:order.customerId,id:'opay_'+randomUUID().replace(/-/g,''),
