@@ -55,6 +55,14 @@ function buildInteractionBody(input: AIRequest, model: string): Record<string, u
   return body;
 }
 
+function parseStructuredOutput(text: string): Record<string, unknown> {
+  // Provider output is untrusted: only strict JSON (no markdown wrappers) passes.
+  if (text.length > 16384) throw new Error('Structured output too large.');
+  const parsed: unknown = JSON.parse(text);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid structured provider output.');
+  return parsed as Record<string, unknown>;
+}
+
 function extractText(payload: GeminiInteractionResponse): string {
   if (payload.output_text?.trim()) return payload.output_text.trim();
 
@@ -91,6 +99,7 @@ export class GeminiHttpTransport implements GeminiTransport {
     inputTokens?: number;
     outputTokens?: number;
     finishReason?: string;
+    structuredData?: unknown;
   }> {
     const response = await this.fetchImpl(`${this.interactionsBaseUrl}/interactions`, {
       method: 'POST',
@@ -118,6 +127,7 @@ export class GeminiHttpTransport implements GeminiTransport {
       inputTokens: payload.usage?.total_input_tokens,
       outputTokens: payload.usage?.total_output_tokens,
       finishReason: payload.status,
+      structuredData: request.responseSchema === undefined ? undefined : parseStructuredOutput(content),
     };
   }
 
