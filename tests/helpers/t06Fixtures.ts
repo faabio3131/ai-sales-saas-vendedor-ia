@@ -102,6 +102,9 @@ export class MemoryOperations implements OperationRepository,OperationOutboxRepo
   const item=this.operations.get(this.key(t,u,o));
   return item?structuredClone(item):null;
  }
+ async hasInbox(t:string,u:string,o:string,inboxKey:string){
+  return this.inbox.has(this.key(t,u,o)+':'+inboxKey);
+ }
  async list(t:string,u:string){
   return [...this.operations.values()].filter(x=>x.tenantId===t&&x.unitId===u)
     .map(x=>structuredClone(x));
