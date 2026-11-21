@@ -29,7 +29,8 @@ A acumulação dos papéis de arquitetura e execução pelo ChatGPT não altera 
 11. `docs/ADR-004_T03_UNIVERSAL_ORDER_ENGINE_FOOD_PACK.md` e `docs/T03_ORDER_ENGINE_RUNBOOK.md` — contratos do Order Engine horizontal, Food Pack e fronteiras entre pedido, cobrança e produção;
 12. `docs/ADR-005_T04_ORDER_PAYMENT_ENGINE.md` e `docs/T04_PAYMENT_ENGINE_RUNBOOK.md` — vínculo financeiro T04, PSP, outbox e evidência bancária;
 13. `docs/ADR-006_T05_FINANCE_LEDGER_COGNITIVE_ADMIN.md` e `docs/T05_FINANCIAL_ADMIN_RUNBOOK.md` — métricas, reconstrução, privacidade, timezone, acesso administrativo e limites de qualidade;
-14. tarefa/bloco atualmente autorizado e ADRs aplicáveis.
+14. `docs/ADR-007_T06_FULFILLMENT_DUAL_MODE.md` e `docs/T06_FULFILLMENT_RUNBOOK.md` — produção nativa, contrato PDV/KDS, CEP, notificações e limites da integração externa;
+15. tarefa/bloco atualmente autorizado e ADRs aplicáveis.
 
 ## Regra de conflito
 
