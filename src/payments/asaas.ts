@@ -24,6 +24,12 @@ export class AsaasPixProvider extends PixOnlyProvider {
    amountMinor:minor(j.value),referenceId:str(j.externalReference),
    paymentUrl:str(j.invoiceUrl)||undefined};
  }
+ async preflightPix(input:ProviderPaymentRequest):Promise<void>{
+  if(input.tenantId!==this.tenantId)return fail('ASAAS_TENANT_MISMATCH');
+  const customer=await this.cfg.resolveCustomer(input.customerId);
+  if(!customer||!/^cus_[A-Za-z0-9]+$/.test(customer))
+    return fail('ASAAS_CUSTOMER_NOT_MAPPED');
+ }
  async createPix(input:ProviderPaymentRequest):Promise<ProviderPaymentResult>{
   if(input.tenantId!==this.tenantId)return fail('ASAAS_TENANT_MISMATCH');
   const customer=await this.cfg.resolveCustomer(input.customerId);
