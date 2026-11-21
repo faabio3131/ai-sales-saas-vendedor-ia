@@ -256,6 +256,40 @@ describe('T04 — Confirmed order to bank payment, separate state machines',()=>
     .rejects.toMatchObject({code:'ORDER_PAYMENT_CREATION_UNCERTAIN'});
   expect(f.orders.state.get('order_confirmed001')?.paymentState).toBe('PENDING');
  });
+ it('recovers a missing PSP reference by owner-only verified GET without double issuing Pix',async()=>{
+  const e=await fixture();e.psp.throwCreate=true;
+  await expect(e.service.create(tenant(),'main','order_confirmed001',online()))
+    .rejects.toMatchObject({code:'ORDER_PAYMENT_CREATION_UNCERTAIN'});
+  const uncertain=(await e.store.byOrder('pizza-a','main','order_confirmed001'))!;
+  await expect(e.service.recoverUnknown(tenant('pizza-a','CASHIER'),'main',uncertain.orderId,{
+   expectedVersion:uncertain.version,providerPaymentId:'pay_123',
+  })).rejects.toMatchObject({code:'ORDER_PAYMENT_OWNER_REQUIRED'});
+  await expect(e.service.recoverUnknown(tenant(),'main',uncertain.orderId,{
+   expectedVersion:uncertain.version,providerPaymentId:'pay_FAKE',
+  })).rejects.toMatchObject({code:'ORDER_PAYMENT_RECOVERY_PSP_MISMATCH'});
+  const recovered=await e.service.recoverUnknown(tenant(),'main',uncertain.orderId,{
+   expectedVersion:uncertain.version,providerPaymentId:'pay_123',
+  });
+  expect(recovered).toMatchObject({status:'PENDING',providerPaymentId:'pay_123'});
+  expect(e.psp.calls.pix).toBe(1);
+  e.psp.statuses.set('pay_123','CONFIRMED');
+  expect((await e.service.refresh(tenant(),'main',recovered.id)).status).toBe('CONFIRMED');
+ });
+ it('refuses online methods without a declared PSP checkout capability BEFORE reservation',async()=>{
+  const e=await fixture();
+  const limited={...e.psp,supportedMethods:undefined};
+  const resolver:OrderPaymentProviderResolver={
+   forNewPayment:async()=>limited as unknown as PaymentProviderInterface,
+   forRecordedPayment:async()=>limited as unknown as PaymentProviderInterface,
+  };
+  const s=new OrderPaymentService(e.store,e.orders as unknown as OrderRepository,
+   resolver,e.methods);
+  await expect(s.create(tenant(),'main','order_confirmed001',{
+   method:'CHECKOUT',idempotencyKey:'no-checkout-001',
+  })).rejects.toMatchObject({code:'ORDER_PAYMENT_ONLINE_METHOD_UNSUPPORTED'});
+  expect(e.store.records.size).toBe(0);
+  expect(e.orders.state.get('order_confirmed001')?.paymentState).toBe('NOT_REQUESTED');
+ });
  it('handles expiry, late bank confirmation, webhook retries and stale PENDING without downgrading',async()=>{
   const e=await fixture();
   const p=await e.service.create(tenant(),'main','order_confirmed001',online());
