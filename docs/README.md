@@ -26,7 +26,8 @@ A acumulação dos papéis de arquitetura e execução pelo ChatGPT não altera 
 8. `docs/IMPLEMENTATION_PLAN.md`
 9. `docs/EXECUTION_PROTOCOL.md`
 10. `CRONOGRAMA_MESTRE_ATENDEVENDEIA_COM_TRAVA.md` — roteiro das evoluções T01–T12, decisões Food Service Pack, dois modos de operação e gates sequenciais;
-11. tarefa/bloco atualmente autorizado e ADRs aplicáveis.
+11. `docs/ADR-004_T03_UNIVERSAL_ORDER_ENGINE_FOOD_PACK.md` e `docs/T03_ORDER_ENGINE_RUNBOOK.md` — contratos do Order Engine horizontal, Food Pack e fronteiras entre pedido, cobrança e produção;
+12. tarefa/bloco atualmente autorizado e ADRs aplicáveis.
 
 ## Regra de conflito
 
