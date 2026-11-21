@@ -47,9 +47,9 @@ export function ProductionBoard({tenantId,role}:{tenantId:string;role:string}){
  const [error,setError]=useState<string|null>(null);
  const [orderId,setOrderId]=useState('');
  const [busy,setBusy]=useState<string|null>(null);
- const [zoneId,setZoneId]=useState('centro');
- const [fromCep,setFromCep]=useState('11700000');
- const [toCep,setToCep]=useState('11799999');
+ const [postalRanges,setPostalRanges]=useState<Settings['postalRanges']>([
+   {zoneId:'centro',fromCep:'11700000',toCep:'11799999'},
+ ]);
  const [prep,setPrep]=useState(30);
  const [delivery,setDelivery]=useState(30);
  const [pickup,setPickup]=useState(10);
@@ -85,8 +85,7 @@ export function ProductionBoard({tenantId,role}:{tenantId:string;role:string}){
          setPrep(p.data.prepMinutes);setDelivery(p.data.deliveryMinutes);
          setPickup(p.data.pickupMinutes);
          setConnectorId(p.data.connectorId??'');
-         const postal=p.data.postalRanges[0];
-         if(postal){setZoneId(postal.zoneId);setFromCep(postal.fromCep);setToCep(postal.toCep);}
+         setPostalRanges(p.data.postalRanges);
        }
      }catch{
        if(!controller.signal.aborted)setError('Fila indisponível ou acesso não autorizado. Confira a unidade.');
@@ -118,7 +117,7 @@ export function ProductionBoard({tenantId,role}:{tenantId:string;role:string}){
   const payload={
    expectedVersion:settings?.version??0,
    operationMode:profileMode,
-   postalRanges:[{zoneId,fromCep,toCep}],
+   postalRanges,
    prepMinutes:prep,deliveryMinutes:delivery,pickupMinutes:pickup,
    ...(profileMode==='INTEGRATED_OPERATIONS'?{connectorId}:{}),
   };
@@ -174,12 +173,33 @@ export function ProductionBoard({tenantId,role}:{tenantId:string;role:string}){
      </h3>
      <p className="mt-1 text-xs text-slate-400">Modo herdado do perfil T02. CEP define uma faixa postal cadastrada, não geofencing ou rastreamento.</p>
      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-       <label className="text-xs text-slate-400">Zona do catálogo<input value={zoneId} onChange={e=>setZoneId(e.target.value)}
-        className="mt-1 block w-full rounded-lg bg-slate-950 px-2 py-2 text-white"/></label>
-       <label className="text-xs text-slate-400">CEP inicial<input value={fromCep} onChange={e=>setFromCep(e.target.value)}
-        maxLength={8} className="mt-1 block w-full rounded-lg bg-slate-950 px-2 py-2 text-white"/></label>
-       <label className="text-xs text-slate-400">CEP final<input value={toCep} onChange={e=>setToCep(e.target.value)}
-        maxLength={8} className="mt-1 block w-full rounded-lg bg-slate-950 px-2 py-2 text-white"/></label>
+       <div className="col-span-2 space-y-2 md:col-span-4">
+        <p className="text-xs text-slate-400">Faixas de CEP por zona (preservadas integralmente ao publicar)</p>
+        {postalRanges.map((range,i)=><div key={i} className="grid grid-cols-2 gap-2 md:grid-cols-4">
+         <label className="text-xs text-slate-400">Zona do catálogo
+          <input value={range.zoneId} maxLength={96}
+           onChange={e=>setPostalRanges(rows=>rows.map((r,j)=>j===i?{...r,zoneId:e.target.value}:r))}
+           className="mt-1 block w-full rounded-lg bg-slate-950 px-2 py-2 text-white"/></label>
+         <label className="text-xs text-slate-400">CEP inicial
+          <input value={range.fromCep} maxLength={8} inputMode="numeric"
+           onChange={e=>setPostalRanges(rows=>rows.map((r,j)=>j===i?{...r,fromCep:e.target.value}:r))}
+           className="mt-1 block w-full rounded-lg bg-slate-950 px-2 py-2 text-white"/></label>
+         <label className="text-xs text-slate-400">CEP final
+          <input value={range.toCep} maxLength={8} inputMode="numeric"
+           onChange={e=>setPostalRanges(rows=>rows.map((r,j)=>j===i?{...r,toCep:e.target.value}:r))}
+           className="mt-1 block w-full rounded-lg bg-slate-950 px-2 py-2 text-white"/></label>
+         <button type="button" disabled={Boolean(busy)}
+          onClick={()=>setPostalRanges(rows=>rows.filter((_,j)=>j!==i))}
+          className="self-end rounded-lg border border-rose-800/50 px-2 py-2 text-xs text-rose-300">
+          Remover faixa
+         </button>
+        </div>)}
+        <button type="button" disabled={Boolean(busy)||postalRanges.length>=60}
+         onClick={()=>setPostalRanges(rows=>[...rows,{zoneId:'',fromCep:'',toCep:''}])}
+         className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200">
+         Adicionar faixa de CEP
+        </button>
+       </div>
        <label className="text-xs text-slate-400">Preparo (min)<input type="number" min={1} max={240}
         value={prep} onChange={e=>setPrep(Number(e.target.value))}
         className="mt-1 block w-full rounded-lg bg-slate-950 px-2 py-2 text-white"/></label>
