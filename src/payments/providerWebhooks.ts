@@ -6,7 +6,6 @@ import type {Payment,PaymentStatus} from './model';
 import type {MerchantProviderConnectionRepository} from './connections';
 import type {MerchantCredentialsVault} from './merchantVault';
 import type {PaymentRepository} from './contracts';
-import type {PaymentProviderResolver} from './resolver';
 
 type Headers=Record<string,string|string[]|undefined>;
 type EventDetails={paymentIds:string[];eventId:string};
