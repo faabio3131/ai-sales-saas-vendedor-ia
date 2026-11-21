@@ -1,6 +1,5 @@
 import { ApplicationError } from '../infrastructure/errors';
 import type { Order } from '../orders/model';
-import type { OutboxRecord } from '../orderPayments/model';
 import type { CommercialMetrics,FinanceSnapshot,FinanceSources,FinancialWindow,ProductRank } from './model';
 
 function corrupt(code:string):never{
@@ -77,7 +76,7 @@ export function computeCommercialSnapshot(input:{
   if(list.has(e.paymentVersion))corrupt('FINANCE_PAYMENT_VERSION_DUPLICATE');
   list.add(e.paymentVersion);versions.set(e.paymentId,list);
  }
- for(const [paymentId,used] of versions){
+ for(const paymentId of versions.keys()){
   const sorted=events.filter(e=>e.paymentId===paymentId);
   if(sorted[0]?.paymentVersion!==1||sorted[0].kind!=='PAYMENT_INTENT_RESERVED'||
     sorted.some((e,i)=>e.paymentVersion!==i+1))
