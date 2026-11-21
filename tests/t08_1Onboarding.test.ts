@@ -237,8 +237,12 @@ describe('T08.1 — coleta, validação de proprietário e isolamento de cadastr
   expect(catalog.pizzaFlavors.find((x:{sourceNumber:number})=>x.sourceNumber===61))
    .toMatchObject({name:'Siciliana',ownerVerified:false,priceMinor:null});
   expect(catalog.pizzaFlavors.some((x:{priceMinor:unknown})=>x.priceMinor!==null)).toBe(false);
-  expect(catalog.identification).toMatchObject({street:'Avenida dos Juritis',number:'146',
-   municipality:null,postalCode:null,whatsappE164:'5511975691385'});
+  expect(catalog.identification).toMatchObject({street:'Avenida das Juritis',
+   streetAsProvided:'Avenida dos Juritis',number:'146',district:'Paraíso (Polvilho)',
+   municipality:'Cajamar',state:'SP',postalCode:'07793530',
+   whatsappE164:'5511975691385',
+   addressSource:{streetCepStatus:'PUBLIC_SOURCE_CONFIRMED_NOT_OWNER_ATTESTED',
+    legalOrOccupancyVerified:false}});
   expect(catalog.state).toBe('PRELIMINARY_NOT_OWNER_VERIFIED');
  });
  it('exposes protected owner-only HTTP routes with data & mode tampering blocked',async()=>{

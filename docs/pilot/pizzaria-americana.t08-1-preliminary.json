@@ -5,15 +5,27 @@
   "state": "PRELIMINARY_NOT_OWNER_VERIFIED",
   "identification": {
     "businessName": "Pizzaria Americana",
-    "street": "Avenida dos Juritis",
+    "street": "Avenida das Juritis",
     "number": "146",
-    "district": null,
-    "municipality": null,
-    "state": null,
-    "postalCode": null,
+    "district": "Paraíso (Polvilho)",
+    "municipality": "Cajamar",
+    "state": "SP",
+    "postalCode": "07793530",
     "whatsappE164": "5511975691385",
     "printedAdditionalPhoneE164": "5511998495454",
-    "printedAdditionalPhoneVerified": false
+    "printedAdditionalPhoneVerified": false,
+    "streetAsProvided": "Avenida dos Juritis",
+    "addressSource": {
+      "streetCepStatus": "PUBLIC_SOURCE_CONFIRMED_NOT_OWNER_ATTESTED",
+      "municipalitySource": "Diretor confirmou Cajamar em 21/11/2026",
+      "postalStreetSource": "https://cajamar.sp.gov.br/concursos/wp-content/uploads/sites/7/indepac_cajamar-edital-cp-05-2023_28_12_23.pdf",
+      "postalStreetSourceDescription": "Edital municipal: Avenida das Juritis | Paraíso (Polvilho) | 07793-530",
+      "unitNumberSource": "Número 146 informado; imóvel e titularidade pendentes",
+      "businessAddressConflict": "App público Pizzaria La Itália anuncia Avenida dos Juritis, 146; confirmar marca/ocupação",
+      "businessAddressConflictSource": "https://play.google.com/store/apps/details?hl=pt&id=com.wabiz.delivery.laitalia",
+      "verifiedOn": "2026-11-21",
+      "legalOrOccupancyVerified": false
+    }
   },
   "pizzaFlavors": [
     {

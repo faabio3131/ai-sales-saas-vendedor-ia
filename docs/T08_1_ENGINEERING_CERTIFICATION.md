@@ -4,7 +4,8 @@
 **Classificação:** **ENGENHARIA INTERNA T08.1 CERTIFICADA**; **NÃO é aceite real da proprietária** e **não autoriza T08.2**.
 
 ## Contratos construídos
-- Pré-cadastro extraído de fonte fornecida pelo usuário: 58 sabores com ingredientes, cinco combos com valores impressos (não homologados), número 61 preservado, endereço parcial e dois telefones (segundo não confirmado).
+- Pré-cadastro extraído de fonte fornecida pelo usuário: 58 sabores com ingredientes, cinco combos com preços impressos (não homologados), número 61 preservado, nº 146 e dois telefones (segundo não confirmado).
+- Endereço pesquisado em 21/11/2026: Cajamar/SP confirmado pelo Diretor, **Avenida das Juritis — Paraíso (Polvilho) — CEP 07793-530** em [documento municipal](https://cajamar.sp.gov.br/concursos/wp-content/uploads/sites/7/indepac_cajamar-edital-cp-05-2023_28_12_23.pdf). App de [outra pizzaria](https://play.google.com/store/apps/details?hl=pt&id=com.wabiz.delivery.laitalia) informa nº 146; proprietário precisa validar marca e ocupação antes do gate.
 - Cadastro tenant/unidade imutável por revisão com transações Firestore CAS, estado DRAFT e somente aceites reais OWNER_ATTESTED.
 - Painel interativo de cadastro e aprovação exclusivo OWNER, não exposto como funcionalidade operacional para funcionários, com modo explicitamente escolhido.
 - Validação de cardápio T03 (inclui 58 sabores por pizza), alinhamento de preços/taxas/horários/perfis/CEP, decisões por modo e evidência de versão.

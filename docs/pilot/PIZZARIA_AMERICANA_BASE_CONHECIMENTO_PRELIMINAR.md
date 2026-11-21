@@ -4,7 +4,9 @@
 
 ## Identificação
 - Nome: Pizzaria Americana.
-- Endereço: Avenida dos Juritis, 146. Município, bairro e CEP pendentes.
+- Endereço informado: Avenida dos Juritis, 146. **Cajamar/SP confirmado pelo Diretor em 21/11/2026**; logradouro oficial **Avenida das Juritis**, bairro postal **Paraíso (Polvilho)**, **CEP 07793-530**. O CEP é do logradouro, sem prova de titularidade da pizzaria.
+- Fonte: [Prefeitura de Cajamar](https://cajamar.sp.gov.br/concursos/wp-content/uploads/sites/7/indepac_cajamar-edital-cp-05-2023_28_12_23.pdf).
+- **Divergência de marca no mesmo endereço:** [Pizzaria La Itália](https://play.google.com/store/apps/details?hl=pt&id=com.wabiz.delivery.laitalia) também anuncia nº 146. Confirmar com proprietária antes de associar marca ou CNPJ.
 - WhatsApp principal informado: +55 11 97569-1385.
 - Telefone adicional impresso no cardápio: +55 11 99849-5454 (confirmar uso).
 - Fonte: três imagens fornecidas pelo responsável; disponibilidade e preços vigentes pendentes de validação pela proprietária.
