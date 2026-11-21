@@ -4,7 +4,7 @@ type Period='day'|'week'|'month';
 interface FinanceData {
  tenantId:string;unitId:string;generatedAt:string;
  coverage:string;source:string;
- window:{period:Period;timezone:string;startInclusive:string;endExclusive:string;asOf:string};
+ window:{period:Period;timezone:string;startLocalDate:string;endLocalDate:string;startInclusive:string;endExclusive:string;asOf:string};
  metrics:{
   orderCount:number;grossSalesMinor:number;discountsMinor:number;netSalesMinor:number;
   confirmedReceiptsMinor:number;refundsMinor:number;netReceiptsMinor:number;
