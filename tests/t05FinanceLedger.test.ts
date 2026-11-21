@@ -285,7 +285,7 @@ describe('T05 — admin natural language and HTTP isolation',()=>{
   expect(JSON.stringify(request)).not.toContain('14000');
  });
  it('redacts customer PII before optional cognitive classification and rejects instruction injection',async()=>{
-  const f=fixture(),execute=vi.fn(async()=>({ok:true,data:{
+  const f=fixture(),execute=vi.fn(async(_request:unknown)=>({ok:true,data:{
    provider:'stub',model:'intent',structuredData:{metric:'orderCount'}}}));
   const q=new FinanceQuestionService(f.service,{execute} as unknown as AIRouterInterface);
   const question='Mostre estatísticas para email cliente@example.com';
