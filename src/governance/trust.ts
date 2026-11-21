@@ -33,7 +33,11 @@ export class FirestoreTrustedInboundRepository implements TrustedInboundReposito
    .doc(key(event.tenantId,event.unitId,orderId)):null;
   await db.runTransaction(async tx=>{
    const old=(await tx.get(ref)).data() as TrustedInboundReceipt|undefined;
-   if(old&&JSON.stringify(old)!==JSON.stringify(event))
+   if(old&&(old.tenantId!==event.tenantId||old.unitId!==event.unitId||
+     old.customerId!==event.customerId||old.conversationId!==event.conversationId||
+     old.messageId!==event.messageId||old.externalMessageId!==event.externalMessageId||
+     old.recipient!==event.recipient||old.proofRef!==event.proofRef||
+     old.verifiedAt!==event.verifiedAt||old.provenance!==event.provenance))
     throw new Error('AUTONOMY_TRUST_RECEIPT_CONFLICT');
    let prior:{signals?:string[];status?:string}|undefined;
    if(riskRef)prior=(await tx.get(riskRef)).data() as typeof prior;

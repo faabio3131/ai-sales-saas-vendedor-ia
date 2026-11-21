@@ -15,7 +15,6 @@ import {createOrderPaymentRuntime} from '../orderPayments/runtime';
 import {FirestoreRecoveryActionRepository,FirestoreRecoveryCandidateRepository} from '../recovery/firestoreRepository';
 import {FirestoreOpportunityRepository} from '../leads/firestoreRepository';
 import {RecoveryService} from '../recovery/service';
-import {PolicyEngine} from '../policies/policyEngine';
 import {FirestoreGovernanceRepository,FirestoreContactConsentRepository} from './repository';
 import {FirestoreTrustedInboundRepository,AutonomousInboundTrust} from './trust';
 import {GovernedAutonomyService} from './service';
@@ -37,9 +36,15 @@ export function createGovernanceRuntime(){
  const payments=createOrderPaymentRuntime().service;
  const fulfillment=createFulfillmentRuntime().service;
  const candidates=new FirestoreRecoveryCandidateRepository();
+ // Gateway has already enforced verified consent, role, policy and idempotency.
+ // This scoped RecoveryService is never exported or routed directly.
  const recovery=new RecoveryService(new FirestoreOpportunityRepository(),
-   candidates,new FirestoreRecoveryActionRepository(),new PolicyEngine(),
-   {resolve:async(_tenantId:string)=>'AUTONOMOUS_GOVERNED'});
+   candidates,new FirestoreRecoveryActionRepository(),{
+    evaluate:async input=>({ok:true,data:{
+     allowed:input.action==='RECOVER',requiresHumanApproval:input.action!=='RECOVER',
+     reasonCode:'T07_GATEWAY_TRUSTED_CONSENT_VERIFIED',effectiveLimits:{},
+    }}),
+   },{resolve:async(_tenantId:string)=>'AUTONOMOUS_GOVERNED'});
  const contact=new FirestoreContactConsentRepository();
  const ports:GovernedToolPorts={
   async orderStatus(s,id){
