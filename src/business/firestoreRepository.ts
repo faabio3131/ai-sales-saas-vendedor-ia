@@ -48,6 +48,23 @@ export class FirestoreBusinessProfileRepository implements BusinessProfileReposi
       if(current.exists&&(current.get('tenantId')!==next.tenantId||current.get('unitId')!==next.unitId))conflict('BUSINESS_SCOPE_CONFLICT');
       const v=current.exists?Number(current.get('latestVersion')):0;
       if(v!==expectedVersion||next.version!==v+1)conflict('BUSINESS_VERSION_CONFLICT');
+      if(v>0){
+        const currentRevision=(await tx.get(ref.collection('versions').doc(String(v))))
+          .data() as BusinessProfileRevision|undefined;
+        if(currentRevision&&currentRevision.capabilityRegistry.operationMode!==
+          next.capabilityRegistry.operationMode){
+          // Profile changes and production release both read/write Orders.
+          // With a transaction this blocks a concurrent mode change during
+          // a confirmed, unfinished order. 201+ records: fail closed.
+          const pending=await tx.get(db().collection('orders')
+            .where('tenantId','==',next.tenantId)
+            .where('unitId','==',next.unitId)
+            .where('status','==','CONFIRMED').limit(201));
+          if(pending.size>200||pending.docs.some(d=>
+            d.get('productionState')!=='COMPLETED'))
+            conflict('BUSINESS_OPERATION_MODE_ACTIVE_ORDER');
+        }
+      }
       const nextRef=ref.collection('versions').doc(String(next.version));
       tx.create(nextRef,next);
       tx.set(ref,{tenantId:next.tenantId,unitId:next.unitId,latestVersion:next.version,updatedAt:next.createdAt});

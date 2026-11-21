@@ -4,8 +4,8 @@ import type { OperationMode } from '../business/model';
 export type FulfillmentOption='PICKUP'|'DELIVERY';
 export type OrderStatus='DRAFT'|'CONFIRMED'|'CANCELLED';
 export type PaymentState='NOT_REQUESTED'|'PENDING'|'CONFIRMED'|'FAILED'|'EXPIRED'|'REFUND_PENDING'|'REFUNDED';
-export type ProductionState='NOT_DISPATCHED';
-export type DeliveryState='NOT_STARTED';
+export type ProductionState='NOT_DISPATCHED'|'AWAITING_ACK'|'QUEUED'|'IN_PREPARATION'|'READY'|'COMPLETED'|'MANUAL_REVIEW_REQUIRED';
+export type DeliveryState='NOT_STARTED'|'OUT_FOR_DELIVERY'|'COMPLETED'|'PICKED_UP';
 export interface OrderLineSelection {
   catalogItemId:string;quantity:number;
   variantId?:string;sizeId?:string;

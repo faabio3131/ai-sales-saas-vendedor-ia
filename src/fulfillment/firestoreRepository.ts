@@ -64,9 +64,22 @@ export class FirestoreOperationRepository implements OperationRepository{
   const order=orderRef(next.orderId),settings=settingsRef(next.tenantId,next.unitId);
   const index=database().collection('orderPaymentByOrder').doc(hash(next.tenantId,next.unitId,next.orderId));
   return database().runTransaction(async tx=>{
-   const [existing,ord,conf,idx]=await Promise.all([
-    tx.get(op),tx.get(order),tx.get(settings),tx.get(index),
+   const profileRoot=database().collection('businessProfiles')
+     .doc(hash(next.tenantId,next.unitId));
+   const effectiveProfile=profileRoot.collection('versions')
+     .where('effectiveFrom','<=',next.updatedAt)
+     .orderBy('effectiveFrom','desc').limit(1);
+   const [existing,ord,conf,idx,profileResults]=await Promise.all([
+    tx.get(op),tx.get(order),tx.get(settings),tx.get(index),tx.get(effectiveProfile),
    ]);
+   const activeProfile=profileResults.docs[0]?.data() as
+     import('../business/model').BusinessProfileRevision|undefined;
+   if(!activeProfile||activeProfile.tenantId!==next.tenantId||
+     activeProfile.unitId!==next.unitId||
+     (activeProfile.expiresAt&&activeProfile.expiresAt<=next.updatedAt)||
+     activeProfile.capabilityRegistry.operationMode!==next.operationMode||
+     !activeProfile.capabilityRegistry.capabilities.includes('PRODUCTION'))
+     rejected('FULFILLMENT_PROFILE_CHANGED_DURING_RELEASE');
    const previous=existing.data() as OperationRecord|undefined;
    if(previous){
     if(previous.tenantId!==next.tenantId||previous.unitId!==next.unitId||

@@ -201,6 +201,8 @@ export class OrderService {
   Promise<OrderDispatchIntent>{
     const order=await this.get(ctx,unitId,orderId);
     if(order.status!=='CONFIRMED')catalogError('ORDER_NOT_CONFIRMED','CONFLICT');
+    if(order.productionState!=='NOT_DISPATCHED')
+      catalogError('ORDER_ALREADY_RELEASED_TO_PRODUCTION','CONFLICT');
     return {tenantId:order.tenantId,unitId:order.unitId,
       orderId:order.id,orderNumber:order.orderNumber,
       operationMode:order.operationMode,status:'NOT_DISPATCHED',dispatchEnabled:false};
