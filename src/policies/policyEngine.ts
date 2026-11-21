@@ -10,7 +10,11 @@ export class PolicyEngine implements PolicyEngineInterface {
     if (!input.tenantId?.trim()) return createErrorResult('VALIDATION', 'POLICY_TENANT_REQUIRED', 'Tenant is required.', false);
 
     if (HUMAN_ONLY_ACTIONS.includes(input.action)) {
-      return { ok: true, data: { allowed: true, requiresHumanApproval: true, reasonCode: 'HUMAN_APPROVAL_REQUIRED', effectiveLimits: {} } };
+      // A generic AI sales decision has no verified order ID/total. It cannot
+      // authorize financial execution. Only OrderPaymentPolicyEngine checks a
+      // confirmed, persisted order and authenticated operator for CREATE_PAYMENT.
+      return { ok: true, data: { allowed: false, requiresHumanApproval: true,
+        reasonCode: 'CONFIRMED_ORDER_REQUIRED', effectiveLimits: {} } };
     }
 
     if (input.autonomyMode === 'ASSIST') {
