@@ -170,6 +170,37 @@ export class OrderPaymentService {
       denyPayment('ORDER_PAYMENT_CREATION_UNCERTAIN','PROVIDER');
     }
   }
+  /** Recover an ambiguous PSP create by supplying a reference independently
+   * verified against the merchant-bound provider GET. Never calls createPix.
+   */
+  async recoverUnknown(ctx:TenantContext,unitId:string,orderId:string,input:{
+    expectedVersion:number;providerPaymentId:string;
+  }):Promise<OrderPayment>{
+    this.policy.owner(ctx);
+    allowKeys(input,['expectedVersion','providerPaymentId']);
+    if(!isVersion(input.expectedVersion))denyPayment('ORDER_PAYMENT_VERSION_INVALID','VALIDATION');
+    const providerPaymentId=paymentId(input.providerPaymentId);
+    const record=await this.get(ctx,unitId,orderId);
+    if(!record||record.status!=='RECONCILIATION_REQUIRED'||
+      record.providerPaymentId||record.version!==input.expectedVersion)
+      denyPayment('ORDER_PAYMENT_RECOVERY_NOT_ALLOWED');
+    if(record.provider==='OFFLINE')denyPayment('ORDER_PAYMENT_RECOVERY_NOT_ALLOWED');
+    const provider=await this.resolver.forRecordedPayment(record);
+    const verified=await provider.getPaymentStatus(providerPaymentId);
+    providerVerified(record,verified);
+    if(verified.providerPaymentId!==providerPaymentId||
+      !['PENDING','CONFIRMED','FAILED','EXPIRED','CANCELLED'].includes(verified.status))
+      denyPayment('ORDER_PAYMENT_RECOVERY_PSP_MISMATCH');
+    const status=verified.status as OrderPaymentStatus;
+    const now=this.clock().toISOString();
+    return this.store.transition({...record,status,version:record.version+1,
+      providerPaymentId,updatedAt:now,
+      ...(status==='CONFIRMED'?{confirmedAt:now,verificationSource:'PSP_GET' as const}:{}),
+      ...(verified.pixCode?{pixCode:verified.pixCode}:{}),
+      ...(verified.expiresAt?{expiresAt:verified.expiresAt}:{}),
+      ...(verified.paymentUrl?{paymentUrl:verified.paymentUrl}:{}),
+    },record.version,statusEvent(status));
+  }
   async refresh(ctx:TenantContext,unitId:string,paymentIdValue:string):Promise<OrderPayment>{
     const scope=this.authorize(ctx,unitId);
     paymentId(paymentIdValue);
