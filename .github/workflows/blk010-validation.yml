@@ -58,6 +58,32 @@ jobs:
           STATUS=$(curl --silent --output /tmp/large-response.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @/tmp/large.json http://127.0.0.1:3000/api/auth/login)
           test "$STATUS" = "413"
           node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('/tmp/large-response.json','utf8'));if(r?.error?.code!=='PAYLOAD_TOO_LARGE')throw new Error('payload limit not normalized');"
+      - name: Payment reconciler deployment config gate
+        env:
+          ATENDEVENDE_IMAGE: example.invalid/vendedor-ia@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          FIREBASE_PROJECT_ID: ci-project
+          PAYMENT_FIREBASE_CREDENTIAL_FILE: /tmp/ci-firebase-identity.json
+          PAYMENT_BANK_SECRET_DIR: /tmp/ci-merchant-secrets
+        run: |
+          docker compose -f deploy/payment-reconciler.compose.yaml config --format json > /tmp/reconciler-gcp.json
+          docker compose -f deploy/payment-reconciler.compose.yaml -f deploy/payment-reconciler.mounted-vault.compose.yaml config --format json > /tmp/reconciler-mounted.json
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const fs=require('node:fs');
+          const gcp=JSON.parse(fs.readFileSync('/tmp/reconciler-gcp.json','utf8')).services['payment-reconciler'];
+          const mounted=JSON.parse(fs.readFileSync('/tmp/reconciler-mounted.json','utf8')).services['payment-reconciler'];
+          const bankMounts=service=>(service.volumes||[]).filter(v=>v.target==='/run/secrets/atendevende-payments');
+          assert.equal(gcp.environment.PAYMENT_VAULT_BACKEND,'GOOGLE_SECRET_MANAGER');
+          assert.equal(mounted.environment.PAYMENT_VAULT_BACKEND,'MOUNTED');
+          assert.equal(bankMounts(gcp).length,0);
+          assert.equal(bankMounts(mounted).length,1);
+          assert.equal(bankMounts(mounted)[0].read_only,true);
+          for(const service of [gcp,mounted]){
+            assert.match(JSON.stringify(service.healthcheck),/payment-reconciler\.last-success/);
+            assert.match(JSON.stringify(service.command),/payment_reconciliation_cycle_failed/);
+            assert.equal(service.read_only,true);
+          }
+          NODE
       - name: Production Docker smoke test
         run: |
           docker build -t vendedor-ia-ci .
