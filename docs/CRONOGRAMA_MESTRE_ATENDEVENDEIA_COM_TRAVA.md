@@ -6,9 +6,9 @@
 **Documento de referência:** `ATENDEVENDEIA_ARQUITETURA_MESTRE_COGNITIVE_CORE_V1.md` (v1.0 — 20/11/2026)  
 **Projeto-piloto:** Pizzaria Americana  
 **Autoridade final:** Diretor/Proprietário da FM Tecnologia IA  
-**Revisão documental:** v1.1 — 21/11/2026  
+**Revisão documental:** v1.2 — 21/11/2026 (separação código/configuração e engenharia/homologação)  
 **Decisão confirmada:** núcleo comercial universal + especialização alimentar prioritária + dois modos operacionais por estabelecimento/unidade.  
-**Status deste aditivo:** ESCOPO E CRONOGRAMA APROVADOS CONCEITUALMENTE PELO DIRETOR; implementação sujeita às travas abaixo, sem autorização automática de deploy ou avanço de tarefa.  
+**Status deste aditivo:** Diretor autorizou a continuidade da ENGENHARIA sem aguardar documentação/credenciais/aceite externos. Persistem travas de certificação interna por bloco e proibição de ativação real sem homologação, credenciais autorizadas e aprovação humana. Nenhuma aprovação comercial é presumida.  
 
 ---
 
@@ -34,9 +34,9 @@
 ### 0.2 Extensão multissetorial sem desvio do piloto
 
 - A base horizontal deve oferecer `BusinessCapabilityRegistry`/perfil por tenant com capabilities explícitas e versionadas (`ORDERING`, `PRODUCTION`, `DELIVERY`, `APPOINTMENTS`, etc.), políticas, canais e conectores; **não implementar uma lista rígida de nichos dentro do Core**.
-- **Depois do piloto alimentar**, estudar e implementar um **Scheduling Engine horizontal** (disponibilidade, agenda, profissionais/recursos, duração, bloqueio transacional de horário, reservas, remarcação, cancelamento, lembretes e sinal de pagamento). Adapters configuráveis atenderão **salões/barbearias** e **clínicas de estética**. Agendamento não é sinônimo de pedido; preservar invariantes e contratos próprios.
+- **Depois da engenharia interna do piloto alimentar**, estudar e implementar um **Scheduling Engine horizontal** (disponibilidade, agenda, profissionais/recursos, duração, bloqueio transacional de horário, reservas, remarcação, cancelamento, lembretes e sinal de pagamento). Adapters configuráveis atenderão **salões/barbearias** e **clínicas de estética**. Agendamento não é sinônimo de pedido; preservar invariantes e contratos próprios.
 - Em estética, o escopo inicial será **atendimento administrativo, agendamento e comercial**. Não fornecer triagem/diagnóstico médico ou recomendações clínicas autônomas; informações sensíveis exigem proteção e autorização específicas.
-- Expansões para lojas e serviços serão novos capability packs, sem reescrever tenancy, pagamento, memória ou IA; **T09+ ficam travadas até T08.5**.
+- Expansões para lojas e serviços serão novos capability packs, sem reescrever tenancy, pagamento, memória ou IA; **T09+ seguem a sequência de engenharia interna após certificação técnica da T08.4, sem depender da homologação externa T08.5**. Go-live de qualquer pack continua condicionado à sua homologação.
 - O planejamento multissetorial não transforma este trabalho em ERP, prontuário, RH, estoque avançado, sistemas contábeis ou produção de cozinha do Kordena.
 
 ### 0.3 Critério de prioridade de implantação
@@ -44,7 +44,7 @@
 1. **Agora:** engenharia integral do Food Service Pack e a jornada fechada da Pizzaria Americana, seguindo T01→T07.
 2. **Nesta semana de preparação com a cliente:** é permitido **levantar e validar dados reais** (cardápio, regras de pizza, modalidades de pagamento, bairros, valores, horários, perfis, modo nativo/integrado), em documento de coleta **sem ativar contas, conexões ou a produção**. Essa coleta não conclui nem destrava T08.1.
 3. **Após T07 certificado:** executar T08.1→T08.5, homologar o modo escolhido com a proprietária, realizar piloto e aprovar o go-live.
-4. **Após piloto aprovado:** executar T09+ de expansão multissetorial, mediante autorização específica do Diretor.
+4. **Após certificação interna das etapas T08.2–T08.4:** o desenvolvimento T09+ pode avançar sequencialmente sem esperar aceite de terceiros ou go-live da pizzaria. A autorização real de operar cada estabelecimento permanece independente.
 
 ---
 
@@ -64,8 +64,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 ### 1.2 Desacoplamento de Dependências Externas
 - **Trilha 1 (`T01` a `T07` — Construção Interna 100%):** Zero bloqueio por órgão externo, credencial real de PSP, conta WhatsApp ou cadastro da Pizzaria Americana. Validação feita por contratos oficiais, adapters sandbox/mock determinístico, testes de isolamento e smoke runtime.
-- **Trilha 2 (`T08.1` a `T08.5` — Piloto Pizzaria Americana & Go-Live):** T07 certificada e T08.1 autorizada em 21/11/2026. O cadastro técnico/fluxo de aceite está implementado, porém **o gate T08.1 continua `NO_GO` até o aceite autenticado da proprietária sobre dados e modo reais**. T08.2–T08.5 seguem bloqueadas; sem habilitar conta, banco, canal ou produção.
-- **Trilha 3 (`T09` a `T12` — Expansão multissetorial):** Permanece **`🔒 BLOQUEADA`** até certificação da **`T08.5`** e autorização expressa; não pode atrasar ou contaminar o piloto alimentar.
+- **Trilha 2 (`T08.1` a `T08.5` — Engenharia alimentar e piloto real):** T07 e engenharia T08.1 certificadas. **T08.2 fica liberada para construção interna**, sem aguardar aceite da proprietária, chaves bancárias ou Meta. T08.3 e T08.4 são liberadas para construção/certificação interna após a conclusão técnica da etapa anterior; **ativação real, homologação dos 10 fluxos reais e T08.5 permanecem `NO_GO`** até autorização e dependências externas. Nunca confundir CI/mocks com credenciais ou aceite reais.
+- **Trilha 3 (`T09` a `T12` — Expansão multissetorial):** implementação inicia sequencialmente após certificação **interna T08.4**, sem vincular o desenvolvimento ao go-live T08.5. Homologação externa de cada setor é uma trava apenas para sua entrada em operação real.
 
 ### 1.3 Regras de emissão, qualidade e congelamento
 - Toda PR da tarefa deverá citar ID da tarefa, dependência concluída, DoD, alterações de contratos, testes, riscos, migração/rollback e evidências. **Sem merge por antecipação** ou marcação de DONE por CI de outra frente.
@@ -96,22 +96,22 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 | ID | Gate / Trava | Etapa do Piloto e Certificação Externa | Prazo Est. | Status | Data Entrega | Evidência (Runbook / Logs / Aprovação) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T08.1** | `✅ Autorizada em 21/11/2026 após T07` | Cadastro real da pizzaria, validação e escolha de modo operacional | 3d | `[x] ENGENHARIA INTERNA CERTIFICADA / [ ] ACEITE REAL PROPRIETÁRIA PENDENTE` | `21/11/2026 (código)` | `PR #19 / SHA 8311a1ce54a2d64c34f7efdb7575af033cc2129c / CI #44960106738 SUCCESS / OWNER NO_GO` |
-| **T08.2** | `🔒 Finalize T08.1` | Credenciais Externas Isoladas (Conta PSP Pix + WhatsApp Oficial) | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Cofre / Teste Pix Real ___` |
-| **T08.3** | `🔒 Finalize T08.2` | Deploy Contabo, Feature Flag do Piloto, Backup e Rollback | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Healthcheck / Rollback ___` |
-| **T08.4** | `🔒 Finalize T08.3` | Certificação E2E das 10 jornadas + modo escolhido e testes dos 2 contratos | 4d | `[ ] BLOQUEADO` | `__/__/____` | `Relatório 10/10 Jornadas ___` |
-| **T08.5** | `🔒 Finalize T08.4` | Aprovação Final do Diretor e Go-Live Controlado do Piloto | 2d | `[ ] BLOQUEADO` | `__/__/____` | `Autorização Formal ___` |
+| **T08.1** | `✅ Engenharia certificada` | Configuração multiempresa/unidade e coleta de dados da Pizzaria Americana | 3d | `[x] ENGENHARIA CONCLUÍDA / [ ] ACEITE CLIENTE EXTERNO NO_GO` | `21/11/2026 (código)` | `PR #19/#20 e API genérica de estabelecimentos; cliente no Firestore` |
+| **T08.2** | `✅ T08.1 engenharia certificada` | Construir conectores seguros, gestão de credenciais por tenant, protocolos Pix/WhatsApp, testes com mocks e sandbox | 3d | `[ ] ENGENHARIA LIBERADA; ATIVAÇÃO PSP/WHATSAPP REAL DEPENDÊNCIA EXTERNA` | `__/__/____` | `Cofre/testes internos ___; teste real pendente` |
+| **T08.3** | `🔒 T08.2 engenharia certificada` | Construir scripts, flags, backup, restauração e rollback; deploy real somente com autorização/infra | 3d | `[ ] AGUARDA GATE INTERNO T08.2; DEPLOY REAL INDEPENDENTE` | `__/__/____` | `Smoke/rollback em staging ___; deploy real pendente` |
+| **T08.4** | `🔒 T08.3 engenharia certificada` | Testar 10 jornadas com doubles/sandbox e os dois modos; homologar jornadas reais separadamente | 4d | `[ ] AGUARDA GATE INTERNO T08.3; PILOTO REAL INDEPENDENTE` | `__/__/____` | `Matriz 10/10 internos ___; 10/10 reais pendentes` |
+| **T08.5** | `🔒 Engenharia T08.4 + aceite/homologação EXTERNA real` | Diretor aprova ou nega go-live após evidência real e rollback | 2d | `[ ] NO_GO REAL, NÃO BLOQUEIA ENGENHARIA FUTURA` | `__/__/____` | `Autorização formal e homologação reais ___` |
 
 ### Trilha 3 — Expansão Horizontal e Agendamentos (Pós-piloto, sem antecipar T08)
 
 | ID | Gate / Trava | Entrega Funcional Consolidada | Prazo Est. | Status | Data Entrega | Evidência (PR / SHA / CI Run) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T09** | `🔒 Finalize T08.5` | Business Capability Registry evoluído, contratos dos packs e configuração multissetorial | 5d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T09** | `🔒 T08.4 engenharia certificada` | Business Capability Registry evoluído, contratos dos packs e configuração multissetorial | 5d | `[ ] AGUARDA GATE INTERNO T08.4, NÃO T08.5 REAL` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T10** | `🔒 Finalize T09` | Scheduling Engine horizontal — agenda, disponibilidade, reserva atômica, reagendamento e lembretes | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T11** | `🔒 Finalize T10` | Service Booking Packs — salão, barbearia e clínica de estética (escopo administrativo) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T12** | `🔒 Finalize T11` | Templates de comércio/serviços, onboarding por capabilities e certificação multissetorial | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 
-> Os prazos são **estimativas de esforço, não datas prometidas**. Não desdobrar T09–T12 em implementação antes de T08.5. A validação de contratos universais mínimos pode ocorrer em T01–T07 apenas quando necessária ao Food Pack, sem antecipar o domínio de agenda.
+> Os prazos são **estimativas de esforço, não datas prometidas**. O desenvolvimento T09–T12 segue a trava de **entregas internas**, sem depender de aceites externos do primeiro restaurante. Nenhum pack é ativado comercialmente antes de homologação própria.
 
 ---
 
@@ -178,8 +178,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Testes adversariais proíbem a IA de modificar `OPERATION_MODE`, habilitar integração externa inexistente, fabricar estado, conceder permissões, acessar finanças administrativas ou realizar estorno sem RBAC.
 - **Evidência de fechamento:** `docs/T07_CLOSURE_CERTIFICATION.md`; commit funcional `588d6ce4491cb14ea4380b8edeedb276dc364c1e`, CI https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44957683634.
 
-### T08 — Piloto Pizzaria Americana (`🔒 T08.1 em validação proprietária; T08.2–T08.5 bloqueadas`)
-- **T08.1:** Engenharia do cadastro concluída sob `src/pilot/onboarding`, com painel proprietário, CAS/versionamento, auditoria, comparação com T02/T03, 58 receitas + 5 combos preliminares preservados, seleção explícita de modo e aceite autenticado. **A validação proprietária REAL (nome da atendente, município/CEP, preços das pizzas/combos, regra meio a meio, horários, taxas, perfis, tenant/unidade e modo escolhido) não foi realizada; nenhum desses dados pode ser inferido de imagens ou fontes públicas. Até o aceite real, `NO_GO` e T08.2 travada.** Ver `docs/T08_1_OWNER_VALIDATION_RUNBOOK.md`.
+### T08 — Engenharia separada do go-live (T08.2 construção liberada; T08.5 real NO_GO)
+- **T08.1:** Cadastro, endereço, telefones, nome da atendente, horários, catálogo e modo são **configurações versionadas por empresa/unidade no Firestore** (`/api/establishments`); código é horizontal. Material específico da Pizzaria Americana é fonte externa para digitação/importação autorizada, **não parte do runtime nem arquivo de dados da aplicação**. Aceite real da proprietária permanece `NO_GO` para ativação da pizzaria, **mas não impede construir T08.2**. Ver `docs/T08_1_OWNER_VALIDATION_RUNBOOK.md`.
 - **T08.2:** Configuração de conta habilitada no PSP Pix no cofre isolado + canal WhatsApp autorizado e webhook HTTPS.
 - **T08.3:** Inspecionar a topologia real antes do deploy: há registro anterior de backend no Google Cloud Run e worker preparado para Contabo; escolher/preservar o destino efetivo mediante aprovação sem migração presumida. Deploy isolado, feature flag do piloto, versão certificada de API/worker, vault compatível, backup testado e rollback.
 - **T08.4:** Certificação evidenciada das **10 Jornadas Obrigatórias de Aceite** (Atendimento, Pedido, Entrega, Pix, Produção, Notificação, Financeiro, Exceções, Isolamento e Resiliência) no **modo escolhido**. Verificação documental dos testes de contrato de ambos os modos. Se o modo for integrado, exigir homologação real do PDV/KDS escolhido antes do aceite; caso nativo, não inventar integração externa.
@@ -202,7 +202,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | Business Capability Registry / configuração por tenant e unidade | `T02`, `T09` | `[x] Contrato/persistência interna T02 certificados; RBAC de unidade futura` |
 | Food Service Pack — operação nativa / painel de produção | `T03`, `T06`, `T07` | `[x] Operação nativa certificada internamente; piloto real T08.4 ainda bloqueado` |
 | Food Service Pack — integração por PDV/KDS/delivery | `T03`, `T06`, `T07`, `T08.4` | `[x] Contratos internos T06/T07 certificados; [ ] conector/ACK real somente em T08.4 se selecionado` |
-| Scheduling Engine / salão / estética / novos setores | `T09`–`T12` | `[ ] Futuro — BLOQUEADO até T08.5` |
+| Scheduling Engine / salão / estética / novos setores | `T09`–`T12` | `[ ] Engenharia futura após gates internos T08.2–T08.4, sem aguardar T08.5 real` |
 
 ### 4.2 10 Jornadas Obrigatórias de Aceite do Piloto (Seção 13.2)
 - [ ] **01. Atendimento:** Responde cardápio, horário e regras cadastradas sem inventar dados (`T02`, `T08.4`).
