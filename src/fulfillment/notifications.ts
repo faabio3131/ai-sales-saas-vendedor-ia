@@ -4,19 +4,29 @@ import type {CustomerRepository} from '../customers/contracts';
 import {FirestoreCustomerRepository} from '../customers/firestoreRepository';
 import type {OperationEvent,OperationRecord,CustomerNoticePort} from './model';
 import {rejected} from './policy';
+import {FirestoreVerifiedCustomerChannelRepository,type VerifiedCustomerChannelRepository} from './trustedChannelIdentity';
 
 export class ChannelCustomerNoticePort implements CustomerNoticePort{
  constructor(private readonly channel:ChannelService,
-   private readonly customers:Pick<CustomerRepository,'findById'>){}
+   private readonly customers:Pick<CustomerRepository,'findById'>,
+   private readonly identities:VerifiedCustomerChannelRepository=new FirestoreVerifiedCustomerChannelRepository()){}
  async send(event:OperationEvent,operation:OperationRecord):Promise<void>{
   if(event.tenantId!==operation.tenantId||event.unitId!==operation.unitId||
     event.orderId!==operation.orderId||event.customerId!==operation.customerId||
     event.operationVersion>operation.version)
     rejected('FULFILLMENT_NOTIFICATION_SCOPE_INVALID','FORBIDDEN');
-  const person=await this.customers.findById(operation.tenantId,operation.customerId);
-  const verified=person?.externalIdentities.find(i=>i.source==='WHATSAPP_VERIFIED');
-  if(person?.status!=='ACTIVE'||!verified?.value.trim()||
-    verified.value!==person.phone)
+  const [person,verified]=await Promise.all([
+    this.customers.findById(operation.tenantId,operation.customerId),
+    this.identities.get(operation.tenantId,operation.customerId,'WHATSAPP'),
+  ]);
+  // Customer.externalIdentities is user-writable via CRM. Only a separate
+  // signed-provider trust record can authorize an outbound WhatsApp notice.
+  if(person?.status!=='ACTIVE'||!verified||verified.revokedAt||
+    verified.tenantId!==operation.tenantId||
+    verified.customerId!==operation.customerId||
+    verified.channel!=='WHATSAPP'||verified.provenance!=='SIGNED_PROVIDER_WEBHOOK'||
+    !verified.proofRef||!Number.isFinite(Date.parse(verified.verifiedAt))||
+    verified.recipient!==person.phone)
     rejected('FULFILLMENT_CUSTOMER_CHANNEL_NOT_VERIFIED','PROVIDER');
   const number=operation.orderNumber;
   const templates:Partial<Record<OperationEvent['name'],string>>={
@@ -31,7 +41,7 @@ export class ChannelCustomerNoticePort implements CustomerNoticePort{
   const body=templates[event.name];
   if(!body)rejected('FULFILLMENT_NOTICE_EVENT_UNSUPPORTED');
   const response=await this.channel.send({
-    tenantId:operation.tenantId,channel:'WHATSAPP',recipient:verified.value,
+    tenantId:operation.tenantId,channel:'WHATSAPP',recipient:verified.recipient,
     type:'TEXT',text:body,idempotencyKey:event.id,
     metadata:{orderId:operation.orderId,unitId:operation.unitId,
       event:event.name,source:'PERSISTED_OPERATION_EVENT'},
