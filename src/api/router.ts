@@ -9,6 +9,7 @@ import { createChannelsRouter } from '../channels/routes';
 import { createConversationRouter } from '../conversations/routes';
 import { createCustomersRouter } from '../customers/routes';
 import { createDashboardRouter } from '../dashboard/routes';
+import {createFinanceRouter} from '../finance/routes';
 import { createFollowUpsRouter } from '../followups/routes';
 import { createLeadsRouter } from '../leads/routes';
 import { aiRealReadinessHandler, aiRealSmokeHandler } from '../operations/aiRealRoutes';
@@ -60,6 +61,7 @@ export function createApiRouter(): Router {
   router.use('/recovery', authenticationMiddleware, tenantAuthorizationMiddleware, createRecoveryRouter());
   router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());
   router.use('/dashboard', authenticationMiddleware, tenantAuthorizationMiddleware, createDashboardRouter());
+  router.use('/finance',authenticationMiddleware,tenantAuthorizationMiddleware,createFinanceRouter());
   router.use('/quotes', authenticationMiddleware, tenantAuthorizationMiddleware, createQuotesRouter());
   router.post('/payments/webhooks/mercadopago', (req,res,next) => {
     mercadoPagoWebhookHandler(req,res).catch(next);
