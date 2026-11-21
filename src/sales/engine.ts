@@ -1,4 +1,5 @@
 import { AIRouterInterface } from '../ai/contracts';
+import { sanitizeCommercialAIInput } from '../ai/cognitiveContext';
 import { createErrorResult } from '../infrastructure/errors';
 import { Result } from '../types/contracts';
 import {
@@ -59,7 +60,7 @@ export class SalesEngine implements SalesEngineInterface {
           tenantId: context.tenantId,
           capability: 'GENERAL_REASONING',
           systemInstructions: 'Suggest only one normalized commercial next action. Never authorize yourself, invent price, discount, product, payment or permission.',
-          input: {
+          input: sanitizeCommercialAIInput({
             customerId: context.customerId,
             leadId: context.leadId,
             opportunityId: context.opportunityId,
@@ -70,7 +71,7 @@ export class SalesEngine implements SalesEngineInterface {
             objection: context.objection,
             sentiment: context.sentiment,
             nextAction: context.nextAction,
-          },
+          }),
           responseSchema: { action: SALES_ACTIONS, reason: 'string', confidence: 'number 0..1?' },
           metadata: { source: 'BLK-090_SALES_ENGINE' },
         });
