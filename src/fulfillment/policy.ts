@@ -85,8 +85,8 @@ export function extractCep(address:string):string{
   if(matches.length!==1)rejected('FULFILLMENT_ADDRESS_CEP_REQUIRED','VALIDATION');
   return matches[0][1]+matches[0][2];
 }
-export function assessDelivery(order:Order,settings:UnitFulfillmentSettings,
-  catalog:UnitCatalogRevision):DeliveryAssessment{
+export function assessDelivery(order:Pick<Order,'fulfillment'|'deliveryFeeMinor'>,
+  settings:UnitFulfillmentSettings,catalog:UnitCatalogRevision):DeliveryAssessment{
   if(order.fulfillment.kind==='PICKUP'){
     if(order.deliveryFeeMinor!==0)
       rejected('FULFILLMENT_PICKUP_FEE_INVALID');
