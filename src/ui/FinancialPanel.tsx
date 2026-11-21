@@ -181,6 +181,7 @@ export function FinancialPanel({tenantId,role}:{tenantId:string;role:string}){
       <p className="mt-2 text-sm text-slate-400">Reconciliação de {snapshot.reconciliation.orders} pedidos e {snapshot.reconciliation.events} eventos transacionais.</p>
       <p className="mt-2 text-sm text-amber-300">Taxas bancárias não verificadas: valor indisponível, não zero.</p>
       <p className="mt-2 text-xs text-slate-500">Custos de IA da FM Tecnologia não são custos do estabelecimento.</p>
+      <p className="mt-2 text-xs text-slate-500">Cobertura atual: pedidos do Order Engine T03/T04. Cotações legadas sem unidade financeira atribuível não integram estes totais.</p>
      </article>
     </div>
    </>}
