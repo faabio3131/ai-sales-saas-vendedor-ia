@@ -21,7 +21,7 @@ export class MerchantPaymentAdapterFactory {
   const secret=await this.vault.load(conn);
   const request=providerTransport(conn.providerId,secret);
   const resolveCustomer=(id:string)=>this.customerMap.resolve(conn.tenantId,conn.providerId,id);
-  if(conn.providerId==='EFI'||conn.providerId==='BANCO_INTER'||conn.providerId==='BANCO_DO_BRASIL'){
+  if(conn.providerId==='EFI'||conn.providerId==='BANCO_INTER'||conn.providerId==='BANCO_DO_BRASIL'||conn.providerId==='SANTANDER'||conn.providerId==='ITAU'){
    if(!secret.pixKey)return this.unconfigured();
    return new PixCobBankProvider({
     bank:conn.providerId,tenantId:conn.tenantId,recipientId:conn.recipientId!,
