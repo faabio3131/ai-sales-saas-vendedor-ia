@@ -75,7 +75,8 @@ function pizza(raw:unknown):PizzaOptions{
   });
   uniqueIds(normalizedSizes);
   const ids=normalizedSizes.map(s=>s.id);
-  const flavors=limitedArray<PizzaOptions['flavors'][number]>(p.flavors,40);
+  // Food Service pilots may contain 58+ flavors on a single pizza SKU.
+  const flavors=limitedArray<PizzaOptions['flavors'][number]>(p.flavors,100);
   if(!flavors.length)catalogError('COMMERCE_PIZZA_INVALID');
   const normalizedFlavors=flavors.map(s=>{
     if(!s||typeof s.active!=='boolean')catalogError('COMMERCE_PIZZA_INVALID');
