@@ -42,8 +42,14 @@ export class FirestoreOperationRepository implements OperationRepository{
   return data?.tenantId===t&&data.unitId===u&&data.orderId===o?data:null;
  }
  async list(t:string,u:string):Promise<OperationRecord[]>{
+  // Only active tickets belong to the operational queue. Counting every
+  // historical COMPLETED ticket eventually made the KDS unusable after 500
+  // lifetime orders, even when no kitchen work remained.
+  const active=['AWAITING_ACK','QUEUED','IN_PREPARATION','READY',
+    'OUT_FOR_DELIVERY','MANUAL_REVIEW_REQUIRED'];
   const all=await database().collection('productionOperations')
-   .where('tenantId','==',t).where('unitId','==',u).limit(500).get();
+   .where('tenantId','==',t).where('unitId','==',u)
+   .where('state','in',active).limit(500).get();
   if(all.size===500)rejected('FULFILLMENT_QUEUE_LIMIT_REACHED');
   return all.docs.map(d=>d.data() as OperationRecord)
    .filter(o=>o.tenantId===t&&o.unitId===u)
