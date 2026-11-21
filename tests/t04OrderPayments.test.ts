@@ -35,6 +35,7 @@ function baseOrder():Order{
 }
 class PSP {
  readonly id='ASAAS';readonly tenantId='pizza-a';readonly recipientId='merchant-receiver';
+ readonly supportedMethods=['PIX','PAYMENT_LINK','CHECKOUT'] as const;
  readonly statuses=new Map<string,ProviderPaymentResult['status']| 'REFUNDED'>();
  calls={pix:0,link:0,checkout:0,read:0,refund:0};
  invalidReference=false;invalidAmount=false;throwCreate=false;allowCheckout=true;allowRefund=true;
