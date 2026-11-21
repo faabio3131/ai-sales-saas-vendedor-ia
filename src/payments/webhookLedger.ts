@@ -2,10 +2,11 @@ import {createHash} from 'node:crypto';
 import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {PaymentStatus} from './model';
+import type {OrderPaymentStatus} from '../orderPayments/model';
 
 export interface VerifiedPaymentWebhookEvent {
  tenantId:string;provider:string;eventId:string;providerPaymentId:string;
- paymentId:string;verifiedStatus:PaymentStatus;
+ paymentId:string;verifiedStatus:PaymentStatus|OrderPaymentStatus;
 }
 export interface VerifiedPaymentWebhookLedger {
  record(event:VerifiedPaymentWebhookEvent):Promise<void>;
