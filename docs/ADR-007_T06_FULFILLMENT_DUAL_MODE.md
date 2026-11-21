@@ -30,7 +30,7 @@ Sem conector homologado instalado, EmptyProductionAdapterRegistry bloqueia INTEG
 
 ## Notificações
 
-Eventos READY, DeliveryDispatched, DeliveryCompleted e OrderPickupCompleted só produzem notificação depois da transação persistida. ChannelCustomerNoticePort exige customer no mesmo tenant e identidade WHATSAPP_VERIFIED igual ao telefone registrado, com idempotencyKey do evento. O canal padrão continua sem credenciais reais nem adapter WhatsApp ativo; o envio permanece pendente/falha segura, não é contabilizado como entregue. O retorno positivo do provedor indica aceitação do envio, não leitura ou entrega definitiva pelo cliente.
+Eventos READY, DeliveryDispatched, DeliveryCompleted e OrderPickupCompleted só produzem notificação depois da transação persistida. ChannelCustomerNoticePort exige customer no mesmo tenant, telefone igual ao registro separado trustedCustomerChannelIdentities com assinatura/proveniência SIGNED_PROVIDER_WEBHOOK, e idempotencyKey do evento. O cadastro comum de externalIdentities é editável e NUNCA comprova WhatsApp; não há endpoint público para gravar prova assinada. Sem prova segura e adaptador de canal real, a mensagem não é emitida. O canal padrão continua sem credenciais reais nem adapter WhatsApp ativo; o envio permanece pendente/falha segura, não é contabilizado como entregue. O retorno positivo do provedor indica aceitação do envio, não leitura ou entrega definitiva pelo cliente.
 
 ## Limites e certificação
 
