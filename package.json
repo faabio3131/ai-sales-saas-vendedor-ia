@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild scripts/paymentReconciliationWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/payment-reconciler.cjs && esbuild scripts/purgeExpiredBusinessMemories.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/purge-business-memories.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild scripts/paymentReconciliationWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/payment-reconciler.cjs && esbuild scripts/purgeExpiredBusinessMemories.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/purge-business-memories.cjs && esbuild scripts/orderPaymentWorkers.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/order-payment-workers.cjs",
     "start": "node dist/server.cjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "reconcile:payments": "node dist/payment-reconciler.cjs",
-    "purge:business-memory": "node dist/purge-business-memories.cjs"
+    "purge:business-memory": "node dist/purge-business-memories.cjs",
+    "reconcile:order-payments": "node dist/order-payment-workers.cjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
