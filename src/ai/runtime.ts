@@ -20,9 +20,14 @@ export function createRuntimeAIRouter(
 ):AIRouterInterface {
   const providers:AIProviderInterface[]=[];
   const cognitive=cognitiveSettingsFromEnv(env);
-  if(cognitive)providers.push(new CognitiveServiceAdapter(cognitive));
+  const cognitiveAdapter=cognitive?new CognitiveServiceAdapter(cognitive):null;
   const geminiTransport=createGeminiHttpTransportFromEnv(env);
-  if(geminiTransport)providers.push(new GeminiAdapter(geminiTransport,GEMINI_RUNTIME_CAPABILITIES));
+  const geminiAdapter=geminiTransport?new GeminiAdapter(geminiTransport,GEMINI_RUNTIME_CAPABILITIES):null;
+  // Preserve an already-connected Gemini provider by default. The read-only
+  // Python baseline is a safe fallback until a model-backed route is approved.
+  if (env.COGNITIVE_ROUTE_PRIORITY==='COGNITIVE_FIRST' && cognitiveAdapter) providers.push(cognitiveAdapter);
+  if (geminiAdapter) providers.push(geminiAdapter);
+  if (cognitiveAdapter && !providers.includes(cognitiveAdapter)) providers.push(cognitiveAdapter);
   return new ResilientAIRouter(providers,{
     meter:meter??(env.COGNITIVE_METERING_ENABLED==='true'?new FirestoreCognitiveMeteringSink():undefined),
   });
