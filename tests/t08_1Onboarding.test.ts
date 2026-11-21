@@ -2,7 +2,6 @@ import {describe,it,expect} from 'vitest';
 import express from 'express';
 import {once} from 'node:events';
 import type {AddressInfo} from 'node:net';
-import {readFileSync} from 'node:fs';
 import type {TenantContext} from '../src/types/contracts';
 import type {BusinessProfileRevision} from '../src/business/model';
 import type {UnitCatalogRevision} from '../src/commerce/model';
@@ -21,10 +20,10 @@ const CODE='owner-approval:explicit-20261121';
 const consent={expectedVersion:2,statement:ATTESTATION_STATEMENT,evidenceRef:CODE};
 function draft():PilotRegistrationDraft{
  const d=defaultPilotDraft();
- d.businessName='Pizzaria Americana';
- d.address={street:'Avenida dos Juritis',number:'146',district:'Bairro Validado',
+ d.businessName='Restaurante Exemplo';
+ d.address={street:'Rua Comercial Teste',number:'44',district:'Bairro Validado',
   municipality:'Municipio de Teste',state:'SP',postalCode:'01001000'};
- d.contact={whatsappE164:'5511975691385',alternatePhoneE164:'5511998495454'};
+ d.contact={whatsappE164:'5511988800000',alternatePhoneE164:'5511988800001'};
  d.assistantName='Assistente da Pizzaria';
  d.schedule=Array.from({length:7},(_,day)=>({day,closed:day===1,
   open:day===1?'':'18:00',close:day===1?'':'23:00'}));
@@ -230,20 +229,20 @@ describe('T08.1 — coleta, validação de proprietário e isolamento de cadastr
   expect(result.items[0].pizza?.flavors).toHaveLength(58);
   expect(result.items[0].pizza?.maxFlavors).toBe(2);
  });
- it('preserves real preliminary recipe numbering, five printed combos and unverified price flags',()=>{
-  const catalog=JSON.parse(readFileSync('docs/pilot/pizzaria-americana.t08-1-preliminary.json','utf8'));
-  expect(catalog.pizzaFlavors).toHaveLength(58);
-  expect(catalog.esfihaCombos).toHaveLength(5);
-  expect(catalog.pizzaFlavors.find((x:{sourceNumber:number})=>x.sourceNumber===61))
-   .toMatchObject({name:'Siciliana',ownerVerified:false,priceMinor:null});
-  expect(catalog.pizzaFlavors.some((x:{priceMinor:unknown})=>x.priceMinor!==null)).toBe(false);
-  expect(catalog.identification).toMatchObject({street:'Avenida das Juritis',
-   streetAsProvided:'Avenida dos Juritis',number:'146',district:'Paraíso (Polvilho)',
-   municipality:'Cajamar',state:'SP',postalCode:'07793530',
-   whatsappE164:'5511975691385',
-   addressSource:{streetCepStatus:'PUBLIC_SOURCE_CONFIRMED_NOT_OWNER_ATTESTED',
-    legalOrOccupancyVerified:false}});
-  expect(catalog.state).toBe('PRELIMINARY_NOT_OWNER_VERIFIED');
+ it('keeps merchant configuration generic without embedding a customer identity in the application',async()=>{
+  const f=setup();
+  const form=draft();
+  form.vertical='RETAIL';
+  form.businessName='Comércio Exemplo';
+  form.contact.whatsappE164='5511988881111';
+  form.address.municipality='Município Exemplo';
+  const saved=await f.service.saveDraft(t(),'main',{expectedVersion:0,data:form});
+  expect(saved.data).toMatchObject({vertical:'RETAIL',businessName:'Comércio Exemplo',
+   contact:{whatsappE164:'5511988881111'},address:{municipality:'Município Exemplo'}});
+  const view=await f.service.get(t(),'main');
+  expect(view.report.checks.find(x=>x.code==='PILOT_FOOD_SERVICE_VERTICAL')?.status)
+   .toBe('MISSING');
+  expect(view.report.operationalActivationAllowed).toBe(false);
  });
  it('exposes protected owner-only HTTP routes with data & mode tampering blocked',async()=>{
   const f=setup(),app=express();app.use(express.json());

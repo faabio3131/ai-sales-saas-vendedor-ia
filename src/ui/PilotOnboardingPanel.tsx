@@ -10,7 +10,7 @@ const PAYMENTS:PilotPaymentPreference[]=['PIX','PAYMENT_LINK','CHECKOUT','PIX_MA
 const ROLES:PilotStaffRole[]=['OWNER','ADMIN','MANAGER','ATTENDANT','OPERATOR','STAFF','CASHIER','DELIVERY'];
 const T08_ATTESTATION='CONFIRMO OS DADOS E O MODO OPERACIONAL DA EMPRESA';
 function fresh():PilotRegistrationDraft{
- return {businessName:'',address:{street:'',number:'',district:'',municipality:'',state:'',postalCode:''},
+ return {vertical:'FOOD_SERVICE',businessName:'',address:{street:'',number:'',district:'',municipality:'',state:'',postalCode:''},
   contact:{whatsappE164:'',alternatePhoneE164:''},assistantName:'',
   schedule:HOURS.map((_,day)=>({day,closed:true,open:'',close:''})),
   menu:{sourceRef:'',catalogVersion:0,pizzaFlavorCount:0,comboCount:0,
@@ -45,7 +45,7 @@ export function PilotOnboardingPanel({tenantId,role}:{tenantId:string;role:strin
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
- const prefix='/api/pilot/units/'+encodeURIComponent(unitId)+'/onboarding';
+ const prefix='/api/establishments/units/'+encodeURIComponent(unitId);
  async function call(path:string,init?:RequestInit){
   const res=await fetch(prefix+path,{...init,credentials:'same-origin',
    headers:{'x-tenant-id':tenantId,...(init?.headers??{})}});
@@ -54,12 +54,13 @@ export function PilotOnboardingPanel({tenantId,role}:{tenantId:string;role:strin
   return p as PilotPayload;
  }
  async function load(signal?:AbortSignal){
-  const res=await fetch(prefix,{signal,credentials:'same-origin',headers:{'x-tenant-id':tenantId}});
+  const res=await fetch(prefix+'/configuration',{signal,credentials:'same-origin',headers:{'x-tenant-id':tenantId}});
   const payload=await res.json() as PilotPayload;
   if(!res.ok||!payload.ok||!payload.data)throw new Error(payload.error?.code??'PILOT_LOAD_FAILED');
   if(signal?.aborted)return;
   setRecord(payload.data.record);setReport(payload.data.report);
-  setForm(payload.data.record?.data??fresh());
+  setForm(payload.data.record?.data?{...payload.data.record.data,
+   vertical:payload.data.record.data.vertical??'FOOD_SERVICE'}:fresh());
   setMode(payload.data.record?.modeDecision?.mode??'UNSELECTED');
   setReason(payload.data.record?.modeDecision?.reason??'');
   setExternal(payload.data.record?.modeDecision?.externalSystemName??'');
@@ -96,18 +97,18 @@ export function PilotOnboardingPanel({tenantId,role}:{tenantId:string;role:strin
     body:JSON.stringify(payload)});
    if(!res.ok)throw new Error('PILOT_REQUEST_FAILED');
    await load();
-   setNotice(path==='/draft'?'Rascunho protegido salvo, sem ativar vendas.':
-    path==='/mode'?'Decisão de modo registrada sem ativar PDV ou cozinha.':
+   setNotice(path==='/configuration'?'Configurações da unidade salvas sem ativar vendas.':
+    path==='/operation-mode'?'Decisão de modo registrada sem ativar PDV ou cozinha.':
     'Aceite da proprietária registrado. Confira o relatório do gate.');
   }catch(e){setError(e instanceof Error?e.message:'Falha de autorização, validação ou versão.');}
   finally{setBusy(false);}
  }
  const input='mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-sky-500';
  const small='text-xs text-slate-400';
- return <section className="mt-6 rounded-3xl border border-violet-500/20 bg-slate-900/65 p-5 sm:p-6" aria-label="Cadastro e validação do piloto">
+ return <section className="mt-6 rounded-3xl border border-violet-500/20 bg-slate-900/65 p-5 sm:p-6" aria-label="Configurações do estabelecimento">
   <div className="flex flex-wrap justify-between gap-3">
-   <div><h2 className="flex items-center gap-2 text-xl font-bold text-white"><Building2 className="h-5 w-5 text-violet-400"/> Cadastro real do estabelecimento — T08.1</h2>
-    <p className="mt-1 text-sm text-slate-400">Pré-cadastro versionado. Somente o proprietário autenticado pode escolher o modo e validar os dados. Nenhuma cobrança, mensagem ou integração é ativada aqui.</p></div>
+   <div><h2 className="flex items-center gap-2 text-xl font-bold text-white"><Building2 className="h-5 w-5 text-violet-400"/> Configurações do estabelecimento</h2>
+    <p className="mt-1 text-sm text-slate-400">Dados particulares de cada empresa/unidade, salvos no banco de dados com versões. Somente o proprietário autenticado pode escolher o modo e confirmar o cadastro; nenhuma cobrança, mensagem ou integração é ativada aqui.</p></div>
    <form onSubmit={e=>{e.preventDefault();if(/^[A-Za-z0-9_-]{1,96}$/.test(unitField))setUnitId(unitField);else setError('Unidade inválida.');}} className="flex items-end gap-2">
     <label className={small}>Unidade<input aria-label="Unidade do piloto" value={unitField} onChange={e=>setUnitField(e.target.value)} className={input}/></label>
     <button type="submit" className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200">Abrir</button>
@@ -121,9 +122,19 @@ export function PilotOnboardingPanel({tenantId,role}:{tenantId:string;role:strin
   </div>
   {error&&<p role="alert" className="mt-4 rounded-lg border border-rose-800 p-3 text-sm text-rose-300">{error}</p>}
   {notice&&<p role="status" className="mt-4 rounded-lg border border-sky-800 p-3 text-sm text-sky-300">{notice}</p>}
-  <form className="mt-5 space-y-5" onSubmit={(e:FormEvent)=>{e.preventDefault();void send('/draft',{expectedVersion:record?.version??0,data:form},'PUT');}}>
+  <form className="mt-5 space-y-5" onSubmit={(e:FormEvent)=>{e.preventDefault();void send('/configuration',{expectedVersion:record?.version??0,data:form},'PUT');}}>
    <fieldset className="grid gap-3 md:grid-cols-2">
     <legend className="mb-3 font-semibold text-white">Identificação e contato</legend>
+    <label className={small}>Segmento do negócio
+     <select className={input} value={form.vertical} onChange={e=>setForm(v=>({...v,vertical:e.target.value as PilotRegistrationDraft['vertical']}))}>
+      <option value="FOOD_SERVICE">Alimentação / restaurantes</option>
+      <option value="RETAIL">Varejo / comércio</option>
+      <option value="SERVICES">Serviços</option>
+      <option value="BEAUTY">Beleza</option>
+      <option value="HEALTH_SERVICE">Serviços de saúde</option>
+      <option value="OTHER">Outro setor</option>
+     </select>
+    </label>
     <label className={small}>Nome do estabelecimento<input value={form.businessName} onChange={e=>setForm(v=>({...v,businessName:e.target.value}))} className={input}/></label>
     <label className={small}>Nome escolhido para atendente IA<input value={form.assistantName} onChange={e=>setForm(v=>({...v,assistantName:e.target.value}))} className={input}/></label>
     {(['street','number','district','municipality','state','postalCode'] as const).map((key)=>
@@ -146,7 +157,7 @@ export function PilotOnboardingPanel({tenantId,role}:{tenantId:string;role:strin
      </div>;})}</div>
    </fieldset>
    <fieldset className="grid gap-3 md:grid-cols-2">
-    <legend className="mb-2 font-semibold text-white">Cardápio, preços e segurança alimentar</legend>
+    <legend className="mb-2 font-semibold text-white">{form.vertical==='FOOD_SERVICE'?'Cardápio, preços e segurança alimentar':'Catálogo de serviços/produtos (pack específico a certificar)'}</legend>
     <label className={small}>Referência do cardápio aprovado<input value={form.menu.sourceRef} onChange={e=>setForm(v=>({...v,menu:{...v.menu,sourceRef:e.target.value}}))} className={input}/></label>
     <label className={small}>Versão real do catálogo T03<input type="number" min="0" value={form.menu.catalogVersion} onChange={e=>setForm(v=>({...v,menu:{...v.menu,catalogVersion:Number(e.target.value)}}))} className={input}/></label>
     <label className={small}>Quantidade de sabores verificados<input type="number" min="0" value={form.menu.pizzaFlavorCount} onChange={e=>setForm(v=>({...v,menu:{...v.menu,pizzaFlavorCount:Number(e.target.value)}}))} className={input}/></label>
@@ -188,7 +199,7 @@ export function PilotOnboardingPanel({tenantId,role}:{tenantId:string;role:strin
   <div className="mt-6 rounded-2xl border border-violet-500/20 bg-slate-950/50 p-4">
    <h3 className="flex items-center gap-2 font-semibold text-white"><ShieldCheck className="h-4 w-4 text-violet-300"/> Decisão explícita da proprietária</h3>
    <p className="mt-2 text-xs text-slate-400">Escolher um modo aqui não altera a operação real. O integrado só poderá funcionar após certificação de conector em T08.4.</p>
-   <form className="mt-3 space-y-3" onSubmit={e=>{e.preventDefault();if(mode!=='UNSELECTED')void send('/mode',{
+   <form className="mt-3 space-y-3" onSubmit={e=>{e.preventDefault();if(mode!=='UNSELECTED')void send('/operation-mode',{
     expectedVersion:record?.version??0,mode,reason,
     ...(mode==='INTEGRATED_OPERATIONS'?{externalSystemName:external}:{})},'POST');}}>
     <label className={small}>Modo operacional
@@ -201,14 +212,15 @@ export function PilotOnboardingPanel({tenantId,role}:{tenantId:string;role:strin
    </form>
   </div>
   <div className="mt-5 rounded-2xl border border-amber-600/20 bg-slate-950/50 p-4">
-   <h3 className="flex items-center gap-2 font-semibold text-white"><ClipboardCheck className="h-4 w-4 text-amber-300"/> Critérios de homologação T08.1</h3>
+   <h3 className="flex items-center gap-2 font-semibold text-white"><ClipboardCheck className="h-4 w-4 text-amber-300"/> Critérios para homologação real do piloto alimentar</h3>
+   <p className="mt-1 text-xs text-slate-400">A configuração pode ser salva independentemente da homologação externa. Setores adicionais terão critérios próprios de ativação.</p>
    <div className="mt-3 grid gap-2 md:grid-cols-2">{(report?.checks??[]).map(c=>
     <div key={c.code} className="rounded-lg border border-slate-800 p-3 text-xs">
      <strong className={c.status==='READY'?'text-emerald-300':'text-amber-300'}>{c.status==='READY'?'✓':'!'} {c.code}</strong>
      <p className="mt-1 text-slate-400">{c.detail}</p>
     </div>)}</div>
    {!report&&<p className="text-xs text-slate-400">Consulte os critérios após criar o rascunho.</p>}
-   <form className="mt-4 space-y-3" onSubmit={e=>{e.preventDefault();void send('/attest',{
+   <form className="mt-4 space-y-3" onSubmit={e=>{e.preventDefault();void send('/owner-approval',{
     expectedVersion:record?.version??0,statement:T08_ATTESTATION,evidenceRef},'POST');}}>
     <label className={small}>Referência da confirmação/documento da proprietária (document:... ou owner-approval:...)
      <input className={input} value={evidenceRef} onChange={e=>setEvidenceRef(e.target.value)} placeholder="owner-approval:referencia-validada"/></label>

@@ -1,7 +1,7 @@
 # PILOT RUNBOOK — AI Sales SaaS / Vendedor IA
 
 ## Objetivo
-Executar um piloto controlado com baixo risco, evidência verificável e possibilidade de rollback antes do release comercial.
+Executar um piloto controlado com baixo risco, evidência verificável e possibilidade de rollback antes do release comercial. **Trava de go-live é diferente de trava de engenharia:** falta de dados/credenciais/aprovações externas não paralisa construção, testes em mocks/sandbox ou merge com CI verde. São proibidos apenas ativação, cobranças ou declarações de homologação real sem evidência.
 
 ## Go / No-Go obrigatório
 Antes de habilitar uma empresa real:

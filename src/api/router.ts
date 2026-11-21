@@ -21,6 +21,7 @@ import { mercadoPagoWebhookHandler } from '../payments/webhook';
 import {PaymentWebhookProcessor,handleBankWebhook} from '../payments/providerWebhooks';
 import {createBankPaymentRuntime} from '../payments/bankRuntime';
 import { createPilotRouter } from '../pilot/routes';
+import {createEstablishmentSettingsRouter} from '../establishments/routes';
 import { createPlansRouter } from '../plans/routes';
 import { createQuotesRouter } from '../quotes/routes';
 import { createRecoveryRouter } from '../recovery/routes';
@@ -80,6 +81,7 @@ export function createApiRouter(): Router {
   router.use('/revenue-expansion', authenticationMiddleware, tenantAuthorizationMiddleware, createRevenueExpansionRouter());
   router.use('/plans', authenticationMiddleware, tenantAuthorizationMiddleware, createPlansRouter());
   router.use('/pilot', authenticationMiddleware, tenantAuthorizationMiddleware, createPilotRouter());
+  router.use('/establishments', authenticationMiddleware, tenantAuthorizationMiddleware, createEstablishmentSettingsRouter());
   router.use('/release', authenticationMiddleware, tenantAuthorizationMiddleware, createReleaseRouter());
   return router;
 }

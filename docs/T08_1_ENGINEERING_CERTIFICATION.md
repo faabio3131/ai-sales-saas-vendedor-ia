@@ -1,17 +1,18 @@
 # T08.1 — Certificação de engenharia e pendências de validação real
 
 **Data de preparação:** 21/11/2026.  
-**Classificação:** **ENGENHARIA INTERNA T08.1 CERTIFICADA**; **NÃO é aceite real da proprietária** e **não autoriza T08.2**.
+**Classificação:** **ENGENHARIA INTERNA T08.1 CERTIFICADA**; aceite da proprietária segue externo e **não impede construir T08.2**. Apenas ativação real permanece sem autorização.
 
 ## Contratos construídos
-- Pré-cadastro extraído de fonte fornecida pelo usuário: 58 sabores com ingredientes, cinco combos com preços impressos (não homologados), número 61 preservado, nº 146 e dois telefones (segundo não confirmado).
+- O material real original foi preservado na Library do usuário, não no código-fonte da aplicação; dados específicos do cliente devem ser introduzidos via painel autenticado e revistos pelo OWNER antes de sua publicação.
 - Endereço pesquisado em 21/11/2026: Cajamar/SP confirmado pelo Diretor, **Avenida das Juritis — Paraíso (Polvilho) — CEP 07793-530** em [documento municipal](https://cajamar.sp.gov.br/concursos/wp-content/uploads/sites/7/indepac_cajamar-edital-cp-05-2023_28_12_23.pdf). App de [outra pizzaria](https://play.google.com/store/apps/details?hl=pt&id=com.wabiz.delivery.laitalia) informa nº 146; proprietário precisa validar marca e ocupação antes do gate.
 - Cadastro tenant/unidade imutável por revisão com transações Firestore CAS, estado DRAFT e somente aceites reais OWNER_ATTESTED.
 - Painel interativo de cadastro e aprovação exclusivo OWNER, não exposto como funcionalidade operacional para funcionários, com modo explicitamente escolhido.
 - Validação de cardápio T03 (inclui 58 sabores por pizza), alinhamento de preços/taxas/horários/perfis/CEP, decisões por modo e evidência de versão.
-- Readiness do piloto fechado por T08.1, T08.3, T08.4 e T08.5.
+- Readiness de **ativação comercial** permanece fechado por T08.1, T08.3, T08.4 e T08.5. **Construção interna** de T08.2+ não depende dessas evidências externas.
 - Segurança multi-tenant, reprovação de dados incompletos, alteração de revisão, falso preço, permissão não autorizada, tentativa de injetar estado READY/OWNER_ATTESTED, mismatch de origem e seleção automática de modo.
 - Nenhum cadastro real persistido sem tenant/membership comprovados, nem promoção/PSP/canal externo ativado.
+- Atualização de arquitetura após objeção do Diretor: campos e segmento por estabelecimento no Firestore; API genérica `/api/establishments/units/:unitId/*`; documentação preliminar específica removida da árvore ativa de código; testes configuráveis multi-tenant.
 
 ## Critério de entrada do aceite real
 - [ ] Identidade real do tenant e da unidade informada e verificada.
@@ -35,6 +36,6 @@
 - **Demais gates:** typecheck, build Vite/esbuild, isolamento de API e autenticação HTTP 401, configuração do worker reconciliador, Docker API e Docker cognitivo aprovados.
 - **Certificação acumulada:** T01–T07 preservada, novo fluxo T08.1 validado; validação real da proprietária não está incluída no escopo desta CI.
 
-**Bloqueio externo, não de engenharia:** nenhum item da lista de aceite real acima pode ser marcado como realizado só porque existiu pré-cadastro ou teste em CI. A engenharia foi certificada, mas o fechamento do gate T08.1 e o início da T08.2 dependem de evidência externa da proprietária. A seleção de modo na interface é intenção, não acionamento do sistema nativo ou PDV.
+**Pendência externa, NÃO bloqueio de engenharia:** nenhum aceite real pode ser inventado com testes CI. A engenharia T08.1 está certificada e a construção de T08.2 pode iniciar imediatamente; somente ativação de canais e a homologação real do estabelecimento dependem da proprietária. A seleção de modo na interface é intenção, não acionamento nativo/PDV.
 
 **Documentação de operação:** docs/T08_1_OWNER_VALIDATION_RUNBOOK.md.

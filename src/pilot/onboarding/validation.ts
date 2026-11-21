@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {ApplicationError} from '../../infrastructure/errors';
 import type {TenantContext} from '../../types/contracts';
+import {BUSINESS_VERTICALS,type BusinessVertical} from '../../business/model';
 import {requireBusinessScope} from '../../business/service';
 import type {PilotRegistrationDraft,PilotPostalFee,PilotWeeklyHour,
  PilotPaymentPreference,PilotStaffRole,PilotRegistrationRecord} from './model';
@@ -71,7 +72,7 @@ function postal(raw:unknown):PilotPostalFee[]{
  return ranges;
 }
 export function validateDraft(input:unknown):PilotRegistrationDraft{
- only(input,['businessName','address','contact','assistantName','schedule','menu',
+ only(input,['vertical','businessName','address','contact','assistantName','schedule','menu',
  'fulfillment','preferredPaymentMethods','plannedStaffRoles'],'PILOT_DRAFT_INVALID');
  only(input.address,['street','number','district','municipality','state','postalCode'],'PILOT_ADDRESS_INVALID');
  only(input.contact,['whatsappE164','alternatePhoneE164'],'PILOT_CONTACT_INVALID');
@@ -80,6 +81,8 @@ export function validateDraft(input:unknown):PilotRegistrationDraft{
  only(input.fulfillment,['pickupEnabled','deliveryEnabled','postalFees',
   'prepMinutes','deliveryMinutes','pickupMinutes'],'PILOT_DELIVERY_INVALID');
  const a=input.address,c=input.contact,m=input.menu,f=input.fulfillment;
+ const vertical=input.vertical===undefined?'FOOD_SERVICE':input.vertical;
+ if(!BUSINESS_VERTICALS.includes(vertical as BusinessVertical))rejected('PILOT_VERTICAL_INVALID');
  if(!Array.isArray(input.preferredPaymentMethods)||input.preferredPaymentMethods.length>METHODS.length||
    input.preferredPaymentMethods.some(v=>!METHODS.includes(v as PilotPaymentPreference)))
   rejected('PILOT_PAYMENT_PREFERENCES_INVALID');
@@ -93,6 +96,7 @@ export function validateDraft(input:unknown):PilotRegistrationDraft{
  const methods=unique([...input.preferredPaymentMethods] as PilotPaymentPreference[],'PILOT_PAYMENT_PREFERENCES_DUPLICATE');
  const roles=unique([...input.plannedStaffRoles] as PilotStaffRole[],'PILOT_ROLE_PLAN_DUPLICATE');
  return {
+  vertical:vertical as BusinessVertical,
   businessName:printable(input.businessName,120),address:{
    street:printable(a.street,160),number:printable(a.number,20),
    district:printable(a.district,80),municipality:printable(a.municipality,80),
@@ -113,7 +117,7 @@ export function validateDraft(input:unknown):PilotRegistrationDraft{
  };
 }
 export function defaultPilotDraft():PilotRegistrationDraft{
- return {businessName:'',address:{street:'',number:'',district:'',municipality:'',state:'',postalCode:''},
+ return {vertical:'FOOD_SERVICE',businessName:'',address:{street:'',number:'',district:'',municipality:'',state:'',postalCode:''},
   contact:{whatsappE164:'',alternatePhoneE164:''},assistantName:'',schedule:[],
   menu:{sourceRef:'',catalogVersion:0,pizzaFlavorCount:0,comboCount:0,
    halfHalfPricing:null,ingredientsReviewed:false,allergenEscalationAcknowledged:false},

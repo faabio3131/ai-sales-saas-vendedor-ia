@@ -1,65 +1,38 @@
-# T08.1 — Cadastro proprietário real e escolha exclusiva do modo
+# Cadastro de estabelecimentos — configuração multiempresa e validação externa T08.1
 
-**Situação da entrega:** motor de coleta e certificação interna implementado; **validação proprietária real ainda não efetuada**.  
-**Critério de saída de T08.1:** uma proprietária autenticada no tenant correto deve conferir dados operacionais e catálogo publicado e registrar um aceite imutável. Este documento **não atesta** que ela já fez isso.
+## Separação fundamental
 
-## Evidência disponível, sem falsificação
+**Software:** motor horizontal e interfaces genéricas que armazenam uma configuração distinta para cada par `tenantId`/`unitId` no Firestore. O código-fonte nunca deve conter endereço, telefone, CEP, cardápio, Pix ou credenciais operacionais de clientes específicos.
 
-O material do usuário de 20/11/2026 foi preservado integralmente em:
-- `docs/pilot/PIZZARIA_AMERICANA_BASE_CONHECIMENTO_PRELIMINAR.md`;
-- `docs/pilot/pizzaria-americana.t08-1-preliminary.json`.
+**Dados do cliente:** alimentados e revisados pelo proprietário autenticado no painel **Configurações do estabelecimento**; salvos em revisões versionadas no banco de dados do cliente. O cadastro pode permanecer em `DRAFT` e ser editado sem aprovação externa ou sistema financeiro ativo. Não inferir preço, estoque ou alérgenos de um arquivo informal.
 
-A origem contém **58 pizzas numeradas** (a Siciliana é nº 61; 58–60 não constam do original), ingredientes descritos e **5 combos de esfiha**, com preços anunciados de R$ 36,00, R$ 56,00, R$ 80,00, R$ 67,00 e R$ 115,00. Esses preços e todos os ingredientes precisam de conferência pela proprietária: **o arquivo não é catálogo de vendas ativado** e não prova ausência de alérgenos.
+**Validação externa:** confirmação da proprietária da Pizzaria Americana sobre dados e modo, credenciais PSP/WhatsApp autorizadas, pilotagem real e aceite final. Essas dependências **NÃO bloqueiam o desenvolvimento e a certificação interna de T08.2, T08.3, T08.4 e, na sequência apropriada, T09+**. Elas bloqueiam exclusivamente ativação/homologação comercial.
 
-Dados de identificação fornecidos:
-- Nome informado: Pizzaria Americana.
-- Endereço informado: Avenida dos Juritis, 146; município **Cajamar/SP** confirmado pelo Diretor.
-- Grafia postal: **Avenida das Juritis**, bairro **Paraíso (Polvilho)**, CEP **07793-530**, segundo [Prefeitura de Cajamar](https://cajamar.sp.gov.br/concursos/wp-content/uploads/sites/7/indepac_cajamar-edital-cp-05-2023_28_12_23.pdf).
-- Outra marca, [Pizzaria La Itália](https://play.google.com/store/apps/details?hl=pt&id=com.wabiz.delivery.laitalia), divulga o mesmo número. Exigir confirmação de localização, operação e titularidade da Pizzaria Americana.
-- WhatsApp informado: +55 11 97569-1385.
-- Segundo telefone impresso: +55 11 99849-5454, ainda não confirmado como ativo.
+A base textual original fornecida pelo usuário sobre a Pizzaria Americana está preservada na Library do projeto (`PIZZARIA_AMERICANA_BASE_CONHECIMENTO.md`); ela não é mais carregada ou versionada como cadastro dentro do repositório. Para usá-la de verdade, a proprietária deverá conferir o conteúdo, registrar uma conta OWNER real e publicar o catálogo no banco do tenant/unidade selecionados.
 
-O município foi confirmado pelo Diretor; bairro postal e CEP pesquisados em fonte oficial. **Ainda faltam comprovação de titularidade da operação no imóvel, vínculo com usuário OWNER do tenant, confirmação proprietária do endereço, nome da atendente, horários, preços por tamanho, regra de pizza meio a meio, combos, taxas de entrega/CEP, pagamentos, equipe operacional e escolha do modo.** Nenhum CNPJ encontrado em busca aberta pode ser atribuído à pizzaria sem correspondência inequívoca e verificação da proprietária. Não presumir que ela está em Americana/SP ou em Praia Grande/SP pelo nome.
+## Configuração acessível por UI/API
 
-## Engenharia entregue
+Todas as rotas exigem sessão autenticada, membership do tenant e papel `OWNER`:
+- `GET /api/establishments/units/:unitId/configuration` — retorna a configuração daquela unidade, versão e checks independentes;
+- `PUT /api/establishments/units/:unitId/configuration` — salva `{expectedVersion, data}` com controle transacional de concorrência;
+- `POST /api/establishments/units/:unitId/operation-mode` — registra `NATIVE_OPERATIONS` ou `INTEGRATED_OPERATIONS` por dono/unidade sem ativar produção;
+- `POST /api/establishments/units/:unitId/owner-approval` — aceite somente do cliente OWNER autorizado, com evidência e versões reais do perfil T02 e catálogo T03.
 
-`src/pilot/onboarding/*` usa um **documento por par tenant/unidade** com chave SHA-256 e snapshots versionados imutáveis no Firestore, comparando versão esperada em transação (CAS). O painel em `src/ui/PilotOnboardingPanel.tsx` aparece exclusivamente para membership **OWNER** autenticada. A API está sob cookie de sessão e membership real:
-- `GET /api/pilot/units/:unitId/onboarding` — relatório de lacunas e versão atual.
-- `PUT /api/pilot/units/:unitId/onboarding/draft` — dados e histórico, sem ativar vendas ou atualizar catálogo.
-- `POST /api/pilot/units/:unitId/onboarding/mode` — escolha **explícita da proprietária**, motivo e nome do sistema existente quando o modo for integrado; nunca ativa conector ou muda automaticamente o perfil T02.
-- `POST /api/pilot/units/:unitId/onboarding/attest` — aceite somente de OWNER autenticado, com `expectedVersion`, declaração exata e referência de aprovação/documento. A aprovação amarra hash integral dos dados e da decisão, versão efetiva do catálogo T03 e versão do perfil T02; mudanças revogam a prontidão.
+As rotas antigas `/api/pilot/units/:unitId/onboarding/*` continuam como alias de compatibilidade sobre o **mesmo** repositório Firestore, nunca como uma segunda fonte de verdade.
 
-### Dependências verificadas no aceite
+Campos: segmento (`FOOD_SERVICE`, `RETAIL`, `SERVICES`, `BEAUTY`, `HEALTH_SERVICE`, `OTHER`), nome, endereço, telefones, nome da atendente, horários por dia, opções de atendimento, preços/áreas de entrega, preferências de pagamento, equipe, catálogo e modo. O cardápio e os preços efetivos de venda são publicados somente via **T03 /api/commerce**; o formulário de estabelecimento guarda referência e aceita dados parciais, sem gerar produtos de preço fictício. O motor de pagamentos é configurado separadamente e nunca aceita chave Pix nos campos de contato.
 
-1. Dados cadastrais completos, município/UF/CEP e WhatsApp com DDI/DDD; nome de persona configurável pelo cliente.
-2. Horários com estado de todos os sete dias.
-3. `menu.catalogVersion` igual à revisão T03 existente; quantidade exata de sabores de pizza e combos ativos; preços positivos por tamanho e itens; regra meio a meio consistente com todas as pizzas; revisão de ingredientes/alérgenos declarada.
-4. Retirada e/ou entrega, previsão operacional, cobertura por CEP e taxas equivalentes ao catálogo publicado.
-5. Preferências de pagamentos coletadas **sem criar cobrança nem ativar Pix**.
-6. Papéis planejados, sem criar memberships silenciosamente; acesso administrativo depende do tenant.
-7. Escolha de `NATIVE_OPERATIONS` ou `INTEGRATED_OPERATIONS` explícita, coerente com o perfil T02. A integração externa **continua sem conector instalado** até T08.4; o modo nativo também exige settings T06 adequados antes da operação.
-8. Aprovação vinculada a usuário OWNER, versão e dados vigentes. Referência documental registrada é **declarada**: não é verificação jurídica independente de identidade nem substitui a checagem real da proprietária.
+## Segurança e invariantes
 
-### Limitação conhecida do T03 resolvida
+1. O serviço recusa payload que tente impor tenant, nome de outra empresa, papel de segurança, estado `OWNER_ATTESTED` ou modo fora da allowlist.
+2. Os dados armazenados são exclusivos do tenant/unidade autenticados. Alterar informações faz nova revisão, revogando aprovação anterior; concorrência CAS impede perda silenciosa.
+3. Selecionar um modo é registrar intenção do cliente, não uma integração ativa: configurações e status canônicos T02, T03, T06 e conectores continuam protegidos. Integrado exige conector homologado antes do envio a PDV.
+4. O formulário aceita draft incompleto de qualquer segmento. O piloto alimentar T08 valida `FOOD_SERVICE`; outros setores aguardam seus próprios capability packs.
+5. O aceite da proprietária depende de perfil/catalogo efetivos, preços, horários, taxas, regras, prova de identidade e modo, mas **não é um requisito para concluir código e testes da próxima tarefa**.
+6. T08.5 go-live permanece `NO_GO` até todas as evidências reais, sem forçar ativação por variável de ambiente, mock ou documentos internos.
 
-O `src/commerce/service.ts` permitia apenas 40 sabores por item PIZZA. O limite passa a **100 sabores** (mantendo dois sabores máximos por pedido), para comportar os 58 sabores do cardápio sem truncamento, e com teste de regressão dedicado.
+## Situação da Pizzaria Americana
 
-### Trava de produção e segurança
+Cajamar/SP e CEP do logradouro 07793-530 foram apurados em fonte municipal. A associação do número 146 e a titularidade do estabelecimento exigem confirmação proprietária. Nada disso é escrito automaticamente no perfil de outro cliente ou em um banco de produção sem sessão autenticada. O nome da atendente, modo, preços e demais campos continuam editáveis pela proprietária no painel.
 
-- Apenas dados **reais, conferidos e publicados nas fontes canônicas** podem atingir `OWNER_ATTESTED`; não existe autoaceite de um arquivo preliminar ou sinal derivado de IA.
-- Nenhum tenant ID, conta OWNER, CPF/CNPJ, endereço completo, CEP, telefone verificado, senha, segredo de PSP, canal WhatsApp, equipe ou escolha de modo é gerado artificialmente.
-- Não publicar o arquivo de receitas em catálogo de vendas, não ativar promoção expirada, não declarar isenção de alérgenos e não inventar preço de pizza. Os combos têm preços impressos **não homologados**.
-- O antigo readiness estrutural deixa de promover `GO` só com credenciais de ambiente: T08.1 aceite + T08.3 deploy/rollback + T08.4 dez jornadas reais + T08.5 autorização do Diretor são necessários.
-- T08.2, T08.3, T08.4 e T08.5 continuam **NO_GO** até seus respectivos gates, sem ativação de provedores ou produção.
-
-## Procedimento para finalizar o cadastro real
-
-1. Confirmar a identificação real do tenant/unidade e a membership autenticada `OWNER` da proprietária. Não criar usuário ou associação sem identidade comprovada.
-2. Abrir o painel **Cadastro real do estabelecimento — T08.1** no workspace da empresa correta. Usar os dados recuperados somente como pré-cadastro; solicitar conferência, especialmente cidade e endereço.
-3. Completar os sete dias, regras de pizza e cobrança de meio a meio, tamanhos e preços válidos, combos, CEP/taxas, modalidades de entrega, meios de pagamento e papéis.
-4. Publicar perfil T02 e catálogo T03 versionados pelos endpoints governados existentes, com os dados conferidos, sem inventar defaults. O cadastro T08.1 referencia essas versões **vigentes** (não apenas futuras ou expiradas), não cria promoções ou pagamentos.
-5. A proprietária escolhe **explicitamente** o modo: painel interno nativo para operação sem PDV ou integração quando usa sistema externo. No integrado, informar nome do PDV/KDS e aguardar homologação em T08.4.
-6. Conferir todos os checks `READY` exceto `OWNER_SIGNOFF`. Proprietária autenticada registra o documento/aceite real, repete a declaração e assina a revisão. O sistema armazena evidência e passa para `OWNER_ATTESTED` somente se os dados forem consistentes.
-7. Conferir a prontidão novamente. O estado do onboarding pode ser `OWNER_ATTESTED`, **mas** `operationalActivationAllowed` permanece **false**. Só a autorização específica do Diretor pode liberar trabalho de T08.2.
-
-**Certificação interna e evidências de CI:** `docs/T08_1_ENGINEERING_CERTIFICATION.md`.
+**Trava sequencial corrigida:** T08.1 engenharia concluída; **T08.2 liberada para engenharia**, mas seu uso real depende de credenciais/aceite externo. T08.3 e T08.4 seguem certificação técnica sequencial; T08.5 é autorização real.

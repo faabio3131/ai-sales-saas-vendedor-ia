@@ -1,11 +1,12 @@
 import type {HalfHalfPricingRule} from '../../commerce/model';
-import type {OperationMode} from '../../business/model';
+import type {OperationMode,BusinessVertical} from '../../business/model';
 
 export type PilotPaymentPreference='PIX'|'PAYMENT_LINK'|'CHECKOUT'|'PIX_MANUAL'|'CASH_ON_DELIVERY'|'CARD_ON_DELIVERY';
 export type PilotStaffRole='OWNER'|'ADMIN'|'MANAGER'|'ATTENDANT'|'OPERATOR'|'STAFF'|'CASHIER'|'DELIVERY';
 export interface PilotWeeklyHour {day:number;closed:boolean;open:string;close:string;}
 export interface PilotPostalFee {zoneId:string;fromCep:string;toCep:string;feeMinor:number;}
 export interface PilotRegistrationDraft {
+ vertical:BusinessVertical;
  businessName:string;
  address:{street:string;number:string;district:string;municipality:string;state:string;postalCode:string};
  contact:{whatsappE164:string;alternatePhoneE164:string};
