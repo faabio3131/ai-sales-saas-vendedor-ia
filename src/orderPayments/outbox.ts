@@ -73,8 +73,12 @@ export class FirestoreOrderFinancialEventConsumer implements FinancialEventConsu
     };
     try{await ref.create(entry);}
     catch(error){
+      // Firestore need not retain object key insertion order. Compare canonical
+      // immutable event fields, never raw JSON.stringify of two objects.
       const existing=await ref.get();
-      if(!existing.exists||JSON.stringify(existing.data())!==JSON.stringify(entry))throw error;
+      const stored=existing.data() as Record<string,unknown>|undefined;
+      if(!stored||Object.entries(entry).some(([key,value])=>stored[key]!==value))
+        throw error;
     }
   }
 }
