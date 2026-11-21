@@ -8,8 +8,7 @@ import {FulfillmentWorker} from '../src/fulfillment/worker';
 import {createFulfillmentRouter} from '../src/fulfillment/routes';
 import {ChannelCustomerNoticePort} from '../src/fulfillment/notifications';
 import {ChannelService} from '../src/channels/service';
-import type {ChannelInterface} from '../src/channels/contracts';
-import type {VerifiedProductionStatus} from '../src/fulfillment/model';
+import type {ChannelInterface,OutboundChannelMessage} from '../src/channels/contracts';
 import {parseSettings,extractCep,stateProjection,assessDelivery} from '../src/fulfillment/policy';
 import {errorHandler} from '../src/api/middleware/errorHandler';
 import {ProductionBoard} from '../src/ui/ProductionBoard';
@@ -199,7 +198,7 @@ describe('T06 — deterministic delivery, native KDS, payment gates and isolatio
    {expectedVersion:status.version,action:'READY'});
   const op=await e.service.get(ctx(),'main',e.order.id);
   const event=e.operations.events.find(e=>e.name==='OrderReady')!;
-  const sendMessage=vi.fn(async()=>({ok:true,data:{
+  const sendMessage=vi.fn(async(_message:OutboundChannelMessage)=>({ok:true,data:{
    channel:'WHATSAPP' as const,externalMessageId:'sent-1',acceptedAt:NOW,
   }}));
   const channel:ChannelInterface={
