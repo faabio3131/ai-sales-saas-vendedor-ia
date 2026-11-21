@@ -44,7 +44,7 @@ export interface ProviderPaymentRequest {
 export interface ProviderPaymentResult {
   provider: string;
   providerPaymentId: string;
-  status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
+  status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED';
   paymentUrl?: string;
   pixCode?: string;
   pixQrCodeBase64?: string;
