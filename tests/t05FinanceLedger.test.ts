@@ -3,6 +3,7 @@ import {once} from 'node:events';
 import type {AddressInfo} from 'node:net';
 import express from 'express';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {createElement} from 'react';
 import type {Order} from '../src/orders/model';
 import type {OutboxRecord} from '../src/orderPayments/model';
 import type {TenantContext} from '../src/types/contracts';
@@ -311,8 +312,8 @@ describe('T05 — admin natural language and HTTP isolation',()=>{
   }finally{server.close();await once(server,'close');}
  });
  it('does not render confidential finance UI for a non-admin role',()=>{
-  expect(renderToStaticMarkup(<FinancialPanel tenantId="pizza-a" role="VIEWER"/>)).toBe('');
-  expect(renderToStaticMarkup(<FinancialPanel tenantId="pizza-a" role="OWNER"/>))
+  expect(renderToStaticMarkup(createElement(FinancialPanel,{tenantId:'pizza-a',role:'VIEWER'}))).toBe('');
+  expect(renderToStaticMarkup(createElement(FinancialPanel,{tenantId:'pizza-a',role:'OWNER'})))
    .toContain('Gestão financeira comercial');
  });
 });
