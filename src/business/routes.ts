@@ -3,6 +3,8 @@ import { ApplicationError } from '../infrastructure/errors';
 import { FirestoreCustomerRepository } from '../customers/firestoreRepository';
 import { FirestoreConversationRepository,FirestoreMessageRepository } from '../conversations/firestoreRepository';
 import { FirestoreCatalogRepository } from '../catalog/firestoreRepository';
+import { FirestoreUnitCatalogRepository } from '../commerce/firestoreRepository';
+import type { UnitCatalogRepository } from '../commerce/model';
 import type { BusinessProfileRepository,ScopedMemoryRepository } from './contracts';
 import { FirestoreBusinessProfileRepository,FirestoreScopedMemoryRepository } from './firestoreRepository';
 import { BusinessProfileService } from './service';
@@ -18,6 +20,7 @@ export interface BusinessRouteDependencies {
   memories?:ScopedMemoryRepository;
   customers?:CustomerRepository;
   catalog?:CatalogRepository;
+  unitCatalog?:UnitCatalogRepository;
   verifier?:MemorySourceVerifier;
 }
 function auth(req:Request){
@@ -35,7 +38,7 @@ export function createBusinessRouter(deps:BusinessRouteDependencies={}):Router{
   const catalog=deps.catalog??new FirestoreCatalogRepository();
   const verifier=deps.verifier??new ConversationMemorySourceVerifier(new FirestoreConversationRepository(),new FirestoreMessageRepository());
   const profile=new BusinessProfileService(profiles);
-  const grounding=new BusinessGroundingService(profiles,catalog);
+  const grounding=new BusinessGroundingService(profiles,catalog,deps.unitCatalog??new FirestoreUnitCatalogRepository());
   const memory=new BusinessMemoryService(customers,profiles,memories,verifier);
   const customerContext=new CommercialCustomerContextService(grounding,memory);
 
