@@ -6,6 +6,7 @@ import type {Payment,PaymentStatus} from './model';
 import type {MerchantProviderConnectionRepository} from './connections';
 import type {MerchantCredentialsVault} from './merchantVault';
 import type {PaymentRepository} from './contracts';
+import type {VerifiedPaymentWebhookLedger} from './webhookLedger';
 
 type Headers=Record<string,string|string[]|undefined>;
 type EventDetails={paymentIds:string[];eventId:string};
@@ -92,6 +93,7 @@ export interface PaymentWebhookRuntime {
  vault:MerchantCredentialsVault;
  payments:PaymentRepository;
  service:WebhookRefreshService;
+ audit?:VerifiedPaymentWebhookLedger;
 }
 export class PaymentWebhookProcessor {
  constructor(private readonly runtime:PaymentWebhookRuntime){}
@@ -113,6 +115,10 @@ export class PaymentWebhookProcessor {
    // The event's status is ignored; only an authenticated provider GET can
    // advance payment state and dispatch the fiscal confirmation observer.
    const result=await this.runtime.service.refresh({tenantId,requestId:'bank-webhook'},persisted.id);
+   await this.runtime.audit?.record({
+    tenantId,provider,eventId:event.eventId,providerPaymentId,
+    paymentId:persisted.id,verifiedStatus:result.status,
+   });
    statuses.push(result.status);
   }
   return statuses;

@@ -6,6 +6,7 @@ import type {MerchantCredentialsVault} from '../src/payments/merchantVault';
 import type {PaymentRepository} from '../src/payments/contracts';
 import type {Payment} from '../src/payments/model';
 import {PaymentReconciliationWorker} from '../src/payments/reconciliation';
+import {InMemoryVerifiedWebhookLedger} from '../src/payments/webhookLedger';
 import type {PaymentReconciliationRepository} from '../src/payments/reconciliation';
 
 const secret='distinct-and-long-test-secret';
@@ -42,10 +43,12 @@ describe('Provider-specific payment webhook authentication',()=>{
   expect(authorizePaymentWebhook({provider:'ASAAS',tenantId:tenant,headers:headers({'asaas-access-token':'wrong'}),
    rawBody:raw,secret})).toBe(false);
   const refresh=vi.fn(async()=>({...payment,status:'CONFIRMED' as const}));
-  const processor=new PaymentWebhookProcessor({connections,vault,payments,service:{refresh}});
+  const audit=new InMemoryVerifiedWebhookLedger();
+  const processor=new PaymentWebhookProcessor({connections,vault,payments,service:{refresh},audit});
   const result=await processor.process({provider:'ASAAS',tenantId:tenant,headers:asaasHeaders,
    rawBody:raw,payload:JSON.parse(raw.toString('utf8'))});
   expect(result).toEqual(['CONFIRMED']);
+  expect(audit.events.size).toBe(1);
   expect(refresh).toHaveBeenCalledWith({tenantId:tenant,requestId:'bank-webhook'},payment.id);
   await expect(processor.process({provider:'ASAAS',tenantId:'attacker',headers:asaasHeaders,
    rawBody:raw,payload:JSON.parse(raw.toString('utf8'))})).rejects.toMatchObject({code:'PAYMENT_WEBHOOK_UNAUTHORIZED'});
