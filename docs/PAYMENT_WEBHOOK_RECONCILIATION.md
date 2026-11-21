@@ -20,7 +20,7 @@ O tenantId na URL é **somente seletor não confiável**. A conexão deve existi
 
 ## Reconciliação contínua
 `npm run reconcile:payments` executa uma rodada independente:
-- Busca até 100 pagamentos online Pix pendentes por rodada no Firestore.
+- Varre cobranças por estado com cursores persistentes e rotativos em Firestore, evitando starvation por grandes volumes de pagamentos offline; processa até 100 por rodada.
 - Reserva lease transacional por paymentId por até 2 min, evitando que dois workers operem simultaneamente.
 - Consulta o provedor **original** usando conexão tenant-scoped e recupera estado oficial.
 - Verifica valor/referência, registra estado e aciona observer fiscal idempotente.

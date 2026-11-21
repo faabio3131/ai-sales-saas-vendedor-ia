@@ -1,5 +1,5 @@
 import {getApps,initializeApp} from 'firebase-admin/app';
-import {getFirestore,FieldValue} from 'firebase-admin/firestore';
+import {getFirestore,FieldValue,FieldPath} from 'firebase-admin/firestore';
 import type {Payment} from './model';
 import type {WebhookRefreshService} from './providerWebhooks';
 
@@ -20,15 +20,25 @@ export class FirestoreReconciliationRepository implements PaymentReconciliationR
   const db=database();
   const max=Math.max(1,Math.min(limit,MAX_BATCH));
   const entries:Payment[]=[];
-  // Query by status only; avoids tenant-specific composite index requirements.
+  // Rotate a durable cursor per status; otherwise a large backlog of offline
+  // payments could permanently starve later online Pix transactions.
   for(const status of STATUS){
-   const results=await db.collection('payments').where('status','==',status).limit(max).get();
-   for(const doc of results.docs){
+   const scanRef=db.collection('paymentReconciliationScanCursors').doc(status);
+   const saved=await scanRef.get();
+   const cursor=saved.data()?.afterId as string|undefined;
+   const base=db.collection('payments').where('status','==',status)
+    .orderBy(FieldPath.documentId()).limit(Math.max(1,Math.ceil(max/STATUS.length)));
+   let result=await (cursor?base.startAfter(cursor):base).get();
+   if(result.empty&&cursor)result=await base.get();
+   if(!result.empty){
+    const last=result.docs[result.docs.length-1];
+    await scanRef.set({afterId:last.id,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+   }
+   for(const doc of result.docs){
     const payment=doc.data() as Payment;
     if(payment.providerPaymentId&&payment.provider!=='OFFLINE'&&payment.method==='PIX')entries.push(payment);
     if(entries.length>=max)break;
    }
-   if(entries.length>=max)break;
   }
   return entries;
  }
