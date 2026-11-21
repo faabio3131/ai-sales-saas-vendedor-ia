@@ -118,6 +118,10 @@ export class OrderPaymentService {
     if(provider&&input.method!=='PIX'&&
       !provider.supportedMethods?.includes(input.method as 'PAYMENT_LINK'|'CHECKOUT'))
       denyPayment('ORDER_PAYMENT_ONLINE_METHOD_UNSUPPORTED','PROVIDER');
+    const request={tenantId:scope.tenantId,customerId:order.customerId,
+      referenceId:order.id,amountMinor:order.totalMinor,currency:'BRL' as const,
+      idempotencyKey:key,...(input.payerEmail?{payerEmail:input.payerEmail}:{})};
+    if(provider&&input.method==='PIX')await provider.preflightPix?.(request);
     const now=this.clock().toISOString();
     const draft:OrderPayment={
       ...scope,orderId,customerId:order.customerId,id:'opay_'+randomUUID().replace(/-/g,''),
@@ -135,9 +139,6 @@ export class OrderPaymentService {
         updatedAt:this.clock().toISOString()},record.version,'PAYMENT_AWAITING_VERIFICATION');
     }
     try {
-      const request={tenantId:scope.tenantId,customerId:order.customerId,
-        referenceId:order.id,amountMinor:order.totalMinor,currency:'BRL' as const,
-        idempotencyKey:key,...(input.payerEmail?{payerEmail:input.payerEmail}:{})};
       const issued=input.method==='PIX'?await provider.createPix(request):
         input.method==='CHECKOUT'?await provider.createCheckout(request):
         await provider.createPaymentLink(request);
@@ -236,7 +237,7 @@ export class OrderPaymentService {
   async collect(ctx:TenantContext,unitId:string,orderId:string,
     input:ConfirmOfflineCollectionInput):Promise<OrderPayment>{
     this.policy.collect(ctx);
-    allowKeys(input,['expectedVersion','amountMinor','receiptRef']);
+    allowKeys(input,['expectedVersion','amountMinor','receiptRef','receivedMinor']);
     if(!isVersion(input.expectedVersion))denyPayment('ORDER_PAYMENT_VERSION_INVALID','VALIDATION');
     const payment=await this.get(ctx,unitId,orderId);
     if(!payment)denyPayment('ORDER_PAYMENT_NOT_FOUND','NOT_FOUND');
@@ -250,9 +251,19 @@ export class OrderPaymentService {
     // numbers, CVV and payer input are never valid settlement evidence.
     if(!/^(?=.*[A-Za-z])[A-Za-z0-9_:-]{8,96}$/.test(receiptRef))
       denyPayment('ORDER_PAYMENT_RECEIPT_INVALID','VALIDATION');
+    let actualTendered:number|undefined;
+    if(payment.method==='CASH_ON_DELIVERY'){
+      if(input.receivedMinor===undefined)
+        denyPayment('ORDER_PAYMENT_CASH_RECEIVED_REQUIRED','VALIDATION');
+      actualTendered=safeInteger(input.receivedMinor,payment.amountMinor);
+    }else if(input.receivedMinor!==undefined){
+      denyPayment('ORDER_PAYMENT_CARD_CASH_FIELD_INVALID','VALIDATION');
+    }
     const now=this.clock().toISOString();
     return this.store.transition({...payment,version:payment.version+1,status:'CONFIRMED',
       updatedAt:now,confirmedAt:now,verifiedBy:ctx.userId!,
+      ...(actualTendered!==undefined?{cashTenderedMinor:actualTendered,
+        changeMinor:actualTendered-payment.amountMinor}:{}),
       verificationSource:'OPERATOR_COD',receiptRef},payment.version,'PAYMENT_CONFIRMED');
   }
   async refund(ctx:TenantContext,unitId:string,orderId:string,
