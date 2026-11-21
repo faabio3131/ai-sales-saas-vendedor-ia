@@ -1,4 +1,4 @@
-import {useEffect,useState,type FormEvent} from 'react';
+import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {BarChart3,LockKeyhole,CalendarDays,RefreshCw,Send,Wallet} from 'lucide-react';
 type Period='day'|'week'|'month';
 interface FinanceData {
@@ -36,9 +36,12 @@ export function FinancialPanel({tenantId,role}:{tenantId:string;role:string}){
  const [answer,setAnswer]=useState<Answer|null>(null);
  const [pending,setPending]=useState(false);
  const [queryPending,setQueryPending]=useState(false);
+ const queryEpoch=useRef(0);
  const [error,setError]=useState<string|null>(null);
  const admin=role==='OWNER'||role==='ADMIN';
  useEffect(()=>{
+  queryEpoch.current++;
+  setQueryPending(false);
   if(!admin||!validUnit(unitId))return;
   const ctrl=new AbortController();
   setSnapshot(null);setAnswer(null);setError(null);setPending(true);
@@ -61,6 +64,7 @@ export function FinancialPanel({tenantId,role}:{tenantId:string;role:string}){
  async function sendQuestion(e:FormEvent){
   e.preventDefault();
   if(!validUnit(unitId)||question.trim().length<4||queryPending)return;
+  const epoch=++queryEpoch.current;
   setAnswer(null);setQueryPending(true);setError(null);
   try{
    const response=await api(tenantId,unitId,'/ask',{
@@ -71,9 +75,12 @@ export function FinancialPanel({tenantId,role}:{tenantId:string;role:string}){
    const result=await response.json() as {ok:boolean;data:Answer};
    if(!result.ok||result.data.source!=='DETERMINISTIC_LEDGER')
     throw new Error('Resultado sem evidência financeira.');
-   setAnswer(result.data);
-  }catch{setError('Não foi possível responder com dados financeiros verificados.');}
-  finally{setQueryPending(false);}
+   if(queryEpoch.current===epoch)setAnswer(result.data);
+  }catch{
+   if(queryEpoch.current===epoch)setError('Não foi possível responder com dados financeiros verificados.');
+  }finally{
+   if(queryEpoch.current===epoch)setQueryPending(false);
+  }
  }
  async function setWeekStart(value:number){
   if(!prefs)return;
@@ -108,7 +115,9 @@ export function FinancialPanel({tenantId,role}:{tenantId:string;role:string}){
       Indicadores de pedidos e pagamentos confirmados, calculados no servidor. Valores não são lucro nem extrato bancário.
      </p>
     </div>
-    <form onSubmit={e=>{e.preventDefault();if(validUnit(unitDraft))setUnitId(unitDraft);else setError('Unidade inválida.');}}
+    <form onSubmit={e=>{e.preventDefault();if(validUnit(unitDraft)){
+      queryEpoch.current++;setAnswer(null);setQueryPending(false);setUnitId(unitDraft);
+     }else setError('Unidade inválida.');}}
      className="flex items-end gap-2">
      <label className="text-xs text-slate-400">Unidade
       <input value={unitDraft} onChange={e=>setUnitDraft(e.target.value)} maxLength={96}
