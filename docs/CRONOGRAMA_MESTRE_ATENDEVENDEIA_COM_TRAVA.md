@@ -96,7 +96,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 | ID | Gate / Trava | Etapa do Piloto e Certificação Externa | Prazo Est. | Status | Data Entrega | Evidência (Runbook / Logs / Aprovação) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T08.1** | `✅ Autorizada em 21/11/2026 após T07` | Cadastro real da pizzaria, validação e escolha de modo operacional | 3d | `[ ] ENGENHARIA INTERNA PRONTA; ACEITE REAL PROPRIETÁRIA PENDENTE` | `21/11/2026 (código)` | `docs/T08_1_ENGINEERING_CERTIFICATION.md / owner approval ainda NO_GO` |
+| **T08.1** | `✅ Autorizada em 21/11/2026 após T07` | Cadastro real da pizzaria, validação e escolha de modo operacional | 3d | `[x] ENGENHARIA INTERNA CERTIFICADA / [ ] ACEITE REAL PROPRIETÁRIA PENDENTE` | `21/11/2026 (código)` | `PR #19 / SHA 8311a1ce54a2d64c34f7efdb7575af033cc2129c / CI #44960106738 SUCCESS / OWNER NO_GO` |
 | **T08.2** | `🔒 Finalize T08.1` | Credenciais Externas Isoladas (Conta PSP Pix + WhatsApp Oficial) | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Cofre / Teste Pix Real ___` |
 | **T08.3** | `🔒 Finalize T08.2` | Deploy Contabo, Feature Flag do Piloto, Backup e Rollback | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Healthcheck / Rollback ___` |
 | **T08.4** | `🔒 Finalize T08.3` | Certificação E2E das 10 jornadas + modo escolhido e testes dos 2 contratos | 4d | `[ ] BLOQUEADO` | `__/__/____` | `Relatório 10/10 Jornadas ___` |

@@ -1,7 +1,7 @@
 # T08.1 — Certificação de engenharia e pendências de validação real
 
 **Data de preparação:** 21/11/2026.  
-**Classificação:** implementação interna de cadastro e validação executada em branch; **NÃO é aceite real da proprietária** e **não autoriza T08.2**.
+**Classificação:** **ENGENHARIA INTERNA T08.1 CERTIFICADA**; **NÃO é aceite real da proprietária** e **não autoriza T08.2**.
 
 ## Contratos construídos
 - Pré-cadastro extraído de fonte fornecida pelo usuário: 58 sabores com ingredientes, cinco combos com valores impressos (não homologados), número 61 preservado, endereço parcial e dois telefones (segundo não confirmado).
@@ -25,13 +25,15 @@
 - [ ] Relatório de prontidão T08.1 OWNER_ATTESTED, ainda sem habilitar produção real.
 
 ## Evidências de CI
-- PR: pendente de CI e merge (a preencher após certificação)
-- Baseline de testes do primeiro HEAD, antes do refinamento de vigência: [CI integral #44959737750](https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44959737750) — SUCCESS.
-- 349 testes TypeScript PASS em 59 arquivos no runner Node; 7 testes Python PASS.
-- Smoke Docker: 348 TS PASS + 1 SKIP identificado por ambiente; sem falhas.
-- Typecheck, build Vite/esbuild, fronteira de segurança HTTP, containers API e cognitivo aprovados.
-- O HEAD final com validação de vigência de catálogo/perfil será certificado novamente antes do merge.
+- **PR #19:** https://github.com/faabio3131/ai-sales-saas-vendedor-ia/pull/19
+- **SHA funcional certificado:** `8311a1ce54a2d64c34f7efdb7575af033cc2129c`.
+- **CI integral do SHA:** [#44960106738 — SUCCESS](https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44960106738).
+- **Testes TypeScript:** 350 PASS em 59 arquivos no runner Node, zero falhas.
+- **Testes Python:** 7 PASS, zero falhas.
+- **Smoke Docker:** 349 testes TypeScript PASS, 1 SKIP por ambiente, zero falhas.
+- **Demais gates:** typecheck, build Vite/esbuild, isolamento de API e autenticação HTTP 401, configuração do worker reconciliador, Docker API e Docker cognitivo aprovados.
+- **Certificação acumulada:** T01–T07 preservada, novo fluxo T08.1 validado; validação real da proprietária não está incluída no escopo desta CI.
 
-**Bloqueio externo, não de engenharia:** nenhum item da lista de aceite real acima pode ser marcado como realizado só porque existiu pré-cadastro ou teste em CI. A implementação pode ser integrada à main após testes aprovados, mas o fechamento do gate T08.1 e o início da T08.2 dependem de evidência externa da proprietária.
+**Bloqueio externo, não de engenharia:** nenhum item da lista de aceite real acima pode ser marcado como realizado só porque existiu pré-cadastro ou teste em CI. A engenharia foi certificada, mas o fechamento do gate T08.1 e o início da T08.2 dependem de evidência externa da proprietária. A seleção de modo na interface é intenção, não acionamento do sistema nativo ou PDV.
 
 **Documentação de operação:** docs/T08_1_OWNER_VALIDATION_RUNBOOK.md.
