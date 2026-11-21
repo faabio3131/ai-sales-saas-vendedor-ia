@@ -1,7 +1,18 @@
 import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {MerchantCustomerMapRepository} from './adapterFactory';
+import type {PagBankCustomer} from './pagbank';
 export class FirestoreMerchantCustomerMap implements MerchantCustomerMapRepository {
+ async resolvePagBankCustomer(tenantId:string,customerId:string):Promise<PagBankCustomer|null>{
+  if(!tenantId||!customerId)return null;
+  if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
+  const doc=await getFirestore().collection('merchantCustomerBillingProfiles')
+   .doc([tenantId,customerId].map(encodeURIComponent).join('__')).get();
+  const x=doc.data();
+  if(x?.tenantId!==tenantId||x?.customerId!==customerId||!x?.pagbank)return null;
+  return x.pagbank as PagBankCustomer;
+ }
+
  async resolve(tenantId:string,providerId:string,customerId:string):Promise<string|null> {
   if(!tenantId||!providerId||!customerId)return null;
   if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);

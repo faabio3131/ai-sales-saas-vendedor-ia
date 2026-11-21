@@ -9,6 +9,7 @@ import { PaymentMethodsService } from './methods';
 import type {PaymentProviderResolver} from './resolver';
 import type {PaymentCreationIntentRepository} from './creationIntent';
 import {pagarmeOrderReference} from './pagarme';
+import {createHash as bankHash} from 'node:crypto';
 
 export class PaymentService {
   constructor(
@@ -142,11 +143,13 @@ export class PaymentService {
 
   private assertVerified(payment:Payment, result: import('./model').ProviderPaymentResult):void {
     if(result.provider!==payment.provider || result.providerPaymentId!==payment.providerPaymentId ||
-      (['MERCADOPAGO','EFI','ASAAS','BANCO_INTER','BANCO_DO_BRASIL','PAGARME'].includes(payment.provider) &&
+      (['MERCADOPAGO','EFI','ASAAS','BANCO_INTER','BANCO_DO_BRASIL','PAGARME','PAGBANK'].includes(payment.provider) &&
         (result.amountMinor!==payment.amountMinor ||
          result.referenceId!==(payment.provider==='PAGARME'
            ? pagarmeOrderReference(payment.tenantId,payment.quoteId)
-           : payment.tenantId+':'+payment.quoteId)))) {
+           : payment.provider==='PAGBANK'
+            ? 'av-'+bankHash('sha256').update(payment.tenantId+':'+payment.quoteId).digest('hex').slice(0,32)
+            : payment.tenantId+':'+payment.quoteId)))) {
       throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_PROVIDER_RECONCILIATION_FAILED',message:'Payment verification failed.'});
     }
   }

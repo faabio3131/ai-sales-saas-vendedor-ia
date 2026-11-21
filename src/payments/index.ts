@@ -19,3 +19,5 @@ export * from './bankTransport';
 export * from './adapterFactory';
 export * from './customerMap';
 export * from './creationIntent';
+export * from './pagbank';
+export * from './bankContractCandidates';
