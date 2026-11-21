@@ -63,7 +63,7 @@ function describe(snapshot:FinanceSnapshot,metric:FinanceMetric):string{
  const m=snapshot.metrics;
  const period=snapshot.window.period==='day'?'dia':
   snapshot.window.period==='week'?'semana':'mês';
- const pre='No '+period+' iniciado em '+snapshot.window.startInclusive.slice(0,10)+', ';
+ const pre='No '+period+' iniciado em '+snapshot.window.startLocalDate+', ';
  switch(metric){
   case 'grossSales':return pre+'as vendas brutas antes de descontos totalizaram '+brl(m.grossSalesMinor)+'.';
   case 'netSales':return pre+'as vendas confirmadas após descontos totalizaram '+
