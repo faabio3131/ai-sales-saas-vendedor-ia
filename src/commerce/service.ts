@@ -100,7 +100,7 @@ function pizza(raw:unknown):PizzaOptions{
 }
 function items(raw:unknown):UnitCatalogItem[]{
   const list=limitedArray<UnitCatalogItem>(raw,100);
-  const result=list.map(i=>{
+  const result:UnitCatalogItem[]=list.map(i=>{
     if(!i||typeof i.active!=='boolean'||!['ITEM','PIZZA','COMBO'].includes(i.kind))
       catalogError('COMMERCE_ITEM_INVALID');
     const common={id:catalogId(i.id),name:catalogText(i.name),active:i.active,kind:i.kind};
