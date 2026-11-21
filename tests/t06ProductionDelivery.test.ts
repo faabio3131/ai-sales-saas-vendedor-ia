@@ -291,5 +291,11 @@ describe('T06 — deterministic delivery, native KDS, payment gates and isolatio
   expect(renderToStaticMarkup(createElement(ProductionBoard,{
    tenantId:'pizza-a',role:'STAFF',
   }))).toContain('Cozinha, retirada e delivery');
+  const ownerBoard=renderToStaticMarkup(createElement(ProductionBoard,{
+   tenantId:'pizza-a',role:'OWNER',
+  }));
+  expect(ownerBoard).toContain('Adicionar faixa de CEP');
+  expect(ownerBoard).toContain('CEP inicial');
+  expect(ownerBoard).toContain('Remover faixa');
  });
 });
