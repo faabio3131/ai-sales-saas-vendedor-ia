@@ -75,5 +75,5 @@ export interface OrderRepository {
   updateAtomic(next:Order,expectedVersion:number):Promise<Order>;
 }
 export interface OrderConfirmationEvidence {
-  verify(tenantId:string,customerId:string,reference:string):Promise<boolean>;
+  verify(tenantId:string,customerId:string,reference:string,orderId:string,totalMinor:number):Promise<boolean>;
 }
