@@ -66,6 +66,8 @@ export function computeCommercialSnapshot(input:{
   if(!original||!original.customerConfirmation||
     original.customerId===undefined||original.totalMinor!==e.amountMinor)
     corrupt('FINANCE_EVENT_ORDER_MISMATCH');
+  if(e.occurredAt<original.customerConfirmation!.at)
+    corrupt('FINANCE_EVENT_BEFORE_CONFIRMATION');
   if(paymentToOrder.has(e.paymentId)&&paymentToOrder.get(e.paymentId)!==e.orderId)
     corrupt('FINANCE_PAYMENT_MULTIPLE_ORDERS');
   if(orderToPayment.has(e.orderId)&&orderToPayment.get(e.orderId)!==e.paymentId)
