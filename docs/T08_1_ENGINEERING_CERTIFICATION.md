@@ -26,9 +26,11 @@
 
 ## Evidências de CI
 - PR: pendente de CI e merge (a preencher após certificação)
-- Commit funcional: pendente
-- Testes TypeScript cumulativos: pendente
-- Testes Python e Docker: pendente
+- Baseline de testes do primeiro HEAD, antes do refinamento de vigência: [CI integral #44959737750](https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44959737750) — SUCCESS.
+- 349 testes TypeScript PASS em 59 arquivos no runner Node; 7 testes Python PASS.
+- Smoke Docker: 348 TS PASS + 1 SKIP identificado por ambiente; sem falhas.
+- Typecheck, build Vite/esbuild, fronteira de segurança HTTP, containers API e cognitivo aprovados.
+- O HEAD final com validação de vigência de catálogo/perfil será certificado novamente antes do merge.
 
 **Bloqueio externo, não de engenharia:** nenhum item da lista de aceite real acima pode ser marcado como realizado só porque existiu pré-cadastro ou teste em CI. A implementação pode ser integrada à main após testes aprovados, mas o fechamento do gate T08.1 e o início da T08.2 dependem de evidência externa da proprietária.
 

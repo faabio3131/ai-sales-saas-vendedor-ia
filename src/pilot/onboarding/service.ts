@@ -38,8 +38,8 @@ export interface PilotRegistrationView {
 }
 export class PilotRegistrationService{
  constructor(private readonly repository:PilotRegistrationRepository,
-  private readonly profiles:Pick<BusinessProfileRepository,'effective'>,
-  private readonly catalog:Pick<UnitCatalogRepository,'latest'>,
+  private readonly profiles:Pick<BusinessProfileRepository,'effective'|'latest'>,
+  private readonly catalog:Pick<UnitCatalogRepository,'latest'|'effective'>,
   private readonly clock:()=>Date=()=>new Date()){}
  async get(ctx:TenantContext,unitId:string):Promise<PilotRegistrationView>{
   const s=ownerScope(ctx,unitId);
@@ -145,11 +145,19 @@ export class PilotRegistrationService{
    'Owner must explicitly choose NATIVE_OPERATIONS or INTEGRATED_OPERATIONS.');
   // Never equate an owner mode choice with a certified PDV/KDS connector.
   const now=this.clock().toISOString();
-  const [profile,catalog]=await Promise.all([
+  const [profile,latestProfile,catalog,effectiveCatalog]=await Promise.all([
    this.profiles.effective(s.tenantId,s.unitId,now),
+   this.profiles.latest(s.tenantId,s.unitId),
    this.catalog.latest(s.tenantId,s.unitId),
+   this.catalog.effective(s.tenantId,s.unitId,now),
   ]);
   profileVersion=profile?.version??0;catalogVersion=catalog?.version??0;
+  add('EFFECTIVE_PROFILE_REVISION',!!profile&&
+   !!latestProfile&&latestProfile.version===profile.version,
+   'Future, expired or otherwise inactive T02 profile revisions cannot authorize an owner signoff.',true);
+  add('EFFECTIVE_CATALOG_REVISION',!!catalog&&
+   !!effectiveCatalog&&effectiveCatalog.version===catalog.version,
+   'A future or expired T03 catalog cannot authorize the current pilot.',true);
   add('PUBLISHED_BUSINESS_PROFILE',!!profile&&
    profile.capabilityRegistry.vertical==='FOOD_SERVICE'&&
    profile.identity.assistantName===d.assistantName&&

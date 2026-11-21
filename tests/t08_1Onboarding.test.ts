@@ -77,9 +77,17 @@ function setup(){
    integrationStatus:'NOT_CONFIGURED'},
  } as BusinessProfileRevision, catalog:catalog()};
  const service=new PilotRegistrationService(repo,{
-  effective:async(t,u)=>t==='pizza-a'&&u==='main'?state.profile:null,
- },{latest:async(t,u)=>t==='pizza-a'&&u==='main'?state.catalog:null},
- ()=>new Date('2026-11-21T18:00:00.000Z'));
+  latest:async(t,u)=>t==='pizza-a'&&u==='main'?state.profile:null,
+  effective:async(t,u)=>t==='pizza-a'&&u==='main'&&
+   (!state.profile.effectiveFrom||state.profile.effectiveFrom<='2026-11-21T18:00:00.000Z')?
+   state.profile:null,
+ },{
+  latest:async(t,u)=>t==='pizza-a'&&u==='main'?state.catalog:null,
+  effective:async(t,u)=>t==='pizza-a'&&u==='main'&&
+   state.catalog.effectiveFrom<='2026-11-21T18:00:00.000Z'&&
+   (!state.catalog.expiresAt||state.catalog.expiresAt>'2026-11-21T18:00:00.000Z')?
+   state.catalog:null,
+ },()=>new Date('2026-11-21T18:00:00.000Z'));
  return {repo,state,service};
 }
 async function draftAndMode(f=setup(),mode:'NATIVE_OPERATIONS'|'INTEGRATED_OPERATIONS'='NATIVE_OPERATIONS'){
@@ -166,6 +174,19 @@ describe('T08.1 — coleta, validação de proprietário e isolamento de cadastr
    .rejects.toMatchObject({code:'PILOT_VERSION_CONFLICT'});
   expect((await f.service.get(t('pizza-b'),'main')).record).toBeNull();
  });
+ it('refuses proprietor approval of scheduled-future or expired catalog and business revisions',async()=>{
+  const f=await draftAndMode();
+  f.state.catalog={...f.state.catalog,effectiveFrom:'2027-01-01T00:00:00.000Z'};
+  expect((await f.service.get(t(),'main')).report.checks.find(x=>
+   x.code==='EFFECTIVE_CATALOG_REVISION')?.status).toBe('CONFLICT');
+  await expect(f.service.attest(t(),'main',consent))
+   .rejects.toMatchObject({code:'PILOT_OWNER_REVIEW_INCOMPLETE'});
+  f.state.catalog={...f.state.catalog,effectiveFrom:NOW};
+  f.state.profile={...f.state.profile,effectiveFrom:'2027-01-01T00:00:00.000Z'};
+  expect((await f.service.get(t(),'main')).report.checks.find(x=>
+   x.code==='EFFECTIVE_PROFILE_REVISION')?.status).toBe('CONFLICT');
+ });
+
  it('invalidates approval immediately if canonical catalog price, revision or profile changes',async()=>{
   const f=await draftAndMode();
   await f.service.attest(t(),'main',consent);
