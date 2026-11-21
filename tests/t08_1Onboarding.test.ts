@@ -20,10 +20,10 @@ const CODE='owner-approval:explicit-20261121';
 const consent={expectedVersion:2,statement:ATTESTATION_STATEMENT,evidenceRef:CODE};
 function draft():PilotRegistrationDraft{
  const d=defaultPilotDraft();
- d.businessName='Pizzaria Americana';
- d.address={street:'Avenida dos Juritis',number:'146',district:'Bairro Validado',
+ d.businessName='Restaurante Exemplo';
+ d.address={street:'Rua Comercial Teste',number:'44',district:'Bairro Validado',
   municipality:'Municipio de Teste',state:'SP',postalCode:'01001000'};
- d.contact={whatsappE164:'5511975691385',alternatePhoneE164:'5511998495454'};
+ d.contact={whatsappE164:'5511988800000',alternatePhoneE164:'5511988800001'};
  d.assistantName='Assistente da Pizzaria';
  d.schedule=Array.from({length:7},(_,day)=>({day,closed:day===1,
   open:day===1?'':'18:00',close:day===1?'':'23:00'}));
