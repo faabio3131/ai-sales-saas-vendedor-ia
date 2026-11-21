@@ -56,13 +56,13 @@ export interface GovernedToolPorts {
     status:string;paymentState:string;productionState:string;version:number;
   }>;
   draft(ctx:import('../types/contracts').TenantContext,unitId:string,payload:Record<string,unknown>,
-    idempotencyKey:string):Promise<Record<string,unknown>>;
+    idempotencyKey:string):Promise<{id:string;totalMinor:number;version:number;status:string}>;
   confirm(ctx:import('../types/contracts').TenantContext,unitId:string,payload:Record<string,unknown>):
-    Promise<Record<string,unknown>>;
+    Promise<{id:string;version:number;status:string}>;
   payment(ctx:import('../types/contracts').TenantContext,unitId:string,payload:Record<string,unknown>,
-    idempotencyKey:string):Promise<Record<string,unknown>>;
+    idempotencyKey:string):Promise<{id:string;version:number;status:string;method:string}>;
   release(ctx:import('../types/contracts').TenantContext,unitId:string,orderId:string):
-    Promise<Record<string,unknown>>;
+    Promise<{version:number;state:string;operationMode:string}>;
   recovery(ctx:import('../types/contracts').TenantContext,candidateId:string):
     Promise<{id:string;customerId:string;status:string}>;
   recoveryCustomer(tenantId:string,candidateId:string):Promise<string|null>;
