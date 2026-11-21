@@ -41,6 +41,12 @@ export class FirestoreOperationRepository implements OperationRepository{
   const data=(await operationRef(t,u,o).get()).data() as OperationRecord|undefined;
   return data?.tenantId===t&&data.unitId===u&&data.orderId===o?data:null;
  }
+ async hasInbox(t:string,u:string,o:string,inboxKey:string):Promise<boolean>{
+  const doc=await database().collection('productionInbox')
+   .doc(hash(t,u,o,inboxKey)).get();
+  return doc.exists&&doc.get('tenantId')===t&&doc.get('unitId')===u&&
+   doc.get('orderId')===o;
+ }
  async list(t:string,u:string):Promise<OperationRecord[]>{
   // Only active tickets belong to the operational queue. Counting every
   // historical COMPLETED ticket eventually made the KDS unusable after 500
