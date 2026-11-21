@@ -84,8 +84,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 | ID | Gate / Trava | Entrega Funcional Consolidada | Prazo Est. | Status | Data Entrega | Evidência (PR / SHA / CI Run) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T01** | `🔓 LIBERADO` | Integração Cognitiva (ADR-001/002: FM Core Base + Padrões NFCore + Adaptador TS) | 7d | `[ ] PENDENTE` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
-| **T02** | `🔒 Finalize T01` | Conhecimento e Memória por Estabelecimento (Tenant) | 5d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T01** | `✅ ENTREGUE` | Integração Cognitiva (ADR-001/002: FM Core Base + Padrões NFCore + Adaptador TS) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #11 / SHA c150420e9d7cb66ca4335baadd5796fea6fd761a / CI #44906758883 SUCCESS` |
+| **T02** | `🔒 Aprovação humana pós-T01` | Conhecimento e Memória por Estabelecimento (Tenant) | 5d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T03** | `🔒 Finalize T02` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T04** | `🔒 Finalize T03` | Payment Engine (Pix Dinâmico, Checkout, Webhooks e Reconciliação) | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T05** | `🔒 Finalize T04` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
@@ -117,13 +117,13 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 ## 3. Detalhamento Técnico e Critérios de Aceite (DoD)
 
-### T01 — Integração Cognitiva (`🔓 LIBERADO`)
+### T01 — Integração Cognitiva (`✅ ENTREGUE — 21/11/2026`)
 - **Escopo:** Auditar SHAs e inventário dos 3 repositórios (`FM-Core-Base-`, `cognitivo-nfcore-inteligencia-fiscal`, `ai-sales-saas-vendedor-ia`); reconciliar drift com runtime; formalizar ADR-002 (serviço cognitivo Python interno + adaptador TypeScript preservando `AIRouterInterface`, sem escrita direta no banco comercial); integrar roteamento, Context Pack Builder, Output Guard, proveniência, redaction, resiliência (deadline, circuit breaker, bulkhead, fallback) e FinOps.
 - **Critério de Aceite (DoD):**
-  - [ ] Jornada comercial existente exercita a fundação cognitiva de ponta a ponta.
-  - [ ] Saída estruturada validada, timeout/fallback, isolamento de tenant e segurança testados.
-  - [ ] Build, typecheck, suíte cumulativa e smoke runtime aprovados no mesmo HEAD.
-  - [ ] Contratos simulados registrados separadamente de credenciais reais de provedor.
+  - [x] Jornada comercial existente exercita a fundação cognitiva de ponta a ponta.
+  - [x] Saída estruturada validada, timeout/fallback, isolamento de tenant e segurança testados.
+  - [x] Build, typecheck, suíte cumulativa e smoke runtime aprovados no mesmo HEAD.
+  - [x] Contratos simulados registrados separadamente de credenciais reais de provedor.
 
 ### T02 — Conhecimento e Memória por Estabelecimento (`🔒 Travado em T01`)
 - **Escopo:** Definir e validar o `BusinessCapabilityRegistry` mínimo por tenant/unidade (`FOOD_SERVICE`, `ORDERING`, `PRODUCTION`, `DELIVERY`, `OPERATION_MODE`, flags versionadas) como contrato horizontal reutilizável; não implementar o Scheduling Engine nesta tarefa. Implementar `BusinessKnowledge` e `PolicyProfile` versionados com vigência; catálogo e regras como fontes de verdade; `Memory Layer` com histórico, preferências e retenção configurável por cliente/tenant; identidade configurável da atendente; tratamento de lacunas e contradições.
@@ -249,7 +249,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 - **21/11/2026 — PR #8** integrada à `main` (`7459e9fd1146851d7990c7a20abc22889006296a`), CI pós-merge `#44897716369` **SUCCESS**: webhooks autenticados de 5 provedores, conciliação e worker; sem mTLS/credenciais/conta real homologadas.
 - **21/11/2026 — PR #9** integrada à `main` (`8a365ee76a0767a571088adb2f255659b2dbfe7a`), CI pós-merge `#44900431427` **SUCCESS**: modos de vault no Compose e saúde do worker; sem implantação/ativação na Contabo.
-- Essas entregas são **evidência parcial prévia relevante para T04**, mas não certificam o vínculo `Order→Payment`, outbox, estorno, Food Pack ou o DoD integral T04. **T01–T08 mantêm os estados do painel até certificação própria**. Nenhuma tarefa deve ser retroativamente marcada `[x] ENTREGUE` apenas por estas CIs.
+- Essas entregas são **evidência parcial prévia relevante para T04**, mas não certificam o vínculo `Order→Payment`, outbox, estorno, Food Pack ou o DoD integral T04. **T01–T08 mantêm os estados do painel até certificação própria**. Nenhuma tarefa deve ser retroativamente marcada `[x] ENTREGUE` apenas por estas CIs. **Atualização posterior:** a T01 foi certificada integralmente pela PR #11 / CI #44906758883; T02–T08 permanecem bloqueadas por suas travas e autorização do Diretor. Consulte `docs/T01_CLOSURE_CERTIFICATION.md`.
 - **Progresso documental desta revisão:** decisão multissetorial e dois modos adicionados ao cronograma. Nenhum código de domínio, ativação bancária, alteração de tenant ou deploy foi executado nesta revisão.
 
 ---

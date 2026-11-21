@@ -24,8 +24,24 @@ jobs:
         run: npm run build
       - name: Typecheck
         run: npm run typecheck
+      - name: Python cognitive S2S contract and security tests
+        run: python3 -m unittest cognitive_service.test_core -v
       - name: Tests
-        run: npm test
+        env:
+          COGNITIVE_TEST_URL: http://127.0.0.1:8185
+          COGNITIVE_S2S_SECRET: ci-cognitive-service-secret-0123456789abc
+        run: |
+          python3 -m cognitive_service.server > /tmp/atendevende-cognitive.log 2>&1 &
+          COG_PID=$!
+          trap 'kill "$COG_PID" >/dev/null 2>&1 || true' EXIT
+          READY=0
+          for i in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8185/health > /tmp/cognitive-health.json; then READY=1; break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          node -e "const h=require('/tmp/cognitive-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
+          npm test
       - name: Runtime security boundaries
         env:
           NODE_ENV: production
@@ -110,3 +126,24 @@ jobs:
           echo 'Production container did not become healthy in time.'
           docker logs vendedor-ia-ci || true
           exit 1
+
+      - name: Private Python cognitive Docker smoke
+        env:
+          COGNITIVE_S2S_SECRET: ci-cognitive-service-secret-0123456789abc
+        run: |
+          docker build -f cognitive_service/Dockerfile -t atendevende-cognitive-ci .
+          docker run --rm -d --name atendevende-cognitive-ci \
+            --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            -e COGNITIVE_S2S_SECRET \
+            -e COGNITIVE_SERVICE_HOST=0.0.0.0 \
+            -e COGNITIVE_ALLOW_NON_LOOPBACK=true \
+            -p 127.0.0.1:18185:8185 atendevende-cognitive-ci
+          cleanup() { docker logs atendevende-cognitive-ci || true; docker rm -f atendevende-cognitive-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          READY=0
+          for i in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:18185/health > /tmp/cognitive-docker-health.json; then READY=1; break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          node -e "const h=require('/tmp/cognitive-docker-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
