@@ -95,7 +95,7 @@ export function providerTransport(
   const token=await accessToken();
   if(!cfg.pixPrefix)throw new Error('Missing bank Pix prefix');
   const actualPath=path.startsWith('/v2/')?cfg.pixPrefix+path.slice(3):path;
-  const additional=providerId==='BANCO_DO_BRASIL'&&secret.applicationKey?{'gw-dev-app-key':secret.applicationKey}:{};
+  const additional:Record<string,string>=providerId==='BANCO_DO_BRASIL'&&secret.applicationKey?{'gw-dev-app-key':secret.applicationKey}:{};
   if(providerId==='BANCO_DO_BRASIL'&&!secret.applicationKey)throw new ApplicationError({
    category:'FORBIDDEN',code:'BANK_APPLICATION_KEY_REQUIRED',message:'Banco do Brasil application key required.'});
   return http(cfg.api+actualPath,method,body,{Authorization:'Bearer '+token,...additional},tls);

@@ -1,7 +1,6 @@
 import {ApplicationError} from '../infrastructure/errors';
 import type {MerchantProviderConnection} from './connections';
 import type {PaymentProviderInterface} from './contracts';
-import type {PaymentProviderId} from './providerCatalog';
 import {GoogleSecretManagerMerchantVault} from './merchantVault';
 import {providerTransport} from './bankTransport';
 import {PixCobBankProvider} from './pixCobBanks';
