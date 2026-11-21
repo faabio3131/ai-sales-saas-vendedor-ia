@@ -22,7 +22,7 @@ export interface FinanceSettingsRepository {
 }
 export interface FinancialWindow {
   period:FinancePeriod;anchor:string;timezone:string;weekStartsOn:number;
-  startInclusive:string;endExclusive:string;asOf:string;
+  startLocalDate:string;endLocalDate:string;startInclusive:string;endExclusive:string;asOf:string;
 }
 export interface ProductRank {
   catalogItemId:string;name:string;quantity:number;grossItemSalesMinor:number;
