@@ -20,6 +20,11 @@ export function createOrderPaymentsRouter(service:OrderPaymentService=createOrde
       req.params.unitId,req.params.orderId,req.body)});}
     catch(error){next(error);}
   });
+  router.post('/units/:unitId/orders/:orderId/recover',async(req:Request,res:Response,next)=>{
+    try{res.json({ok:true,data:await service.recoverUnknown(context(req),
+      req.params.unitId,req.params.orderId,req.body)});}
+    catch(error){next(error);}
+  });
   router.post('/units/:unitId/payments/:id/refresh',async(req:Request,res:Response,next)=>{
     try{res.json({ok:true,data:await service.refresh(context(req),req.params.unitId,req.params.id)});}
     catch(error){next(error);}
