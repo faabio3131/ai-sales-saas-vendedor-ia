@@ -46,6 +46,7 @@ export function redactCommercialText(input: string): string {
 /** Recursively remove credential-bearing fields before any external model or S2S call. */
 function sanitizeUnknown(value:unknown,depth=0):unknown {
   if(depth>8)throw new Error('Cognitive input nesting limit.');
+  if(value===undefined)return null; // JSON arrays preserve slots as null; object keys are omitted below.
   if(typeof value==='string')return bounded(value,16384);
   if(value===null||typeof value==='boolean')return value;
   if(typeof value==='number') {
@@ -63,6 +64,7 @@ function sanitizeUnknown(value:unknown,depth=0):unknown {
     if(entries.length>100)throw new Error('Cognitive object too large.');
     const cleaned:Record<string,unknown>={};
     for(const [key,v] of entries) {
+      if(v===undefined)continue;
       if(key.length>128||key==='__proto__'||key==='constructor'||key==='prototype')
         throw new Error('Invalid cognitive object key.');
       cleaned[key]=/(?:password|senha|secret|token|api[_-]?key|authorization|clientsecret|privatekey|email|phone|telefone|cpf|cnpj)/i.test(key)
