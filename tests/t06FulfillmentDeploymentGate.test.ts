@@ -12,6 +12,7 @@ describe('T06 — build and deployment manifests remain fail-closed',()=>{
   const expected=[
    ['orders',['tenantId','unitId','status']],
    ['productionOperations',['tenantId','unitId']],
+   ['productionOperations',['tenantId','unitId','state']],
    ['productionOutbox',['deliveryStatus','nextAttemptAt']],
    ['productionOutbox',['deliveryStatus','leaseUntil']],
   ] as const;
