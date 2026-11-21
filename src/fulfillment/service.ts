@@ -187,7 +187,12 @@ export class FulfillmentService {
     before.correlationId!==status.correlationId||!validText(status.proofRef,200)||
     !validText(status.providerEventId,128))
     rejected('FULFILLMENT_EXTERNAL_STATUS_UNVERIFIED','FORBIDDEN');
-  if(before.lastVerifiedExternalEventId===status.providerEventId)return before;
+  // A provider may retry an earlier event after a newer event was applied.
+  // Check the entire durable inbox, not just the most recent event ID.
+  const inboxKey='external:'+status.connectorId+':'+status.providerEventId;
+  if(before.lastVerifiedExternalEventId===status.providerEventId||
+    await this.dep.operations.hasInbox(status.tenantId,status.unitId,status.orderId,inboxKey))
+    return before;
   const nextState:OperationState=status.status==='OUT_FOR_DELIVERY'?
     'OUT_FOR_DELIVERY':status.status;
   const valid=(before.state==='QUEUED'&&nextState==='IN_PREPARATION')||
@@ -203,8 +208,7 @@ export class FulfillmentService {
   const detail=eventFor(nextState,before.fulfillment.kind);
   return this.dep.operations.advance(next,before.version,
     event(next,detail.name,status.connectorId),
-    detail.notify?'CUSTOMER_NOTICE':undefined,
-    'external:'+status.connectorId+':'+status.providerEventId);
+    detail.notify?'CUSTOMER_NOTICE':undefined,inboxKey);
  }
  async escalate(ctx:TenantContext,unitId:string,orderId:string,input:unknown){
   operationalScope(ctx,unitId,ADMIN);
