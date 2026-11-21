@@ -13,6 +13,11 @@ const policies=()=>db().collection('governanceUnitPolicies');
 const approvals=()=>db().collection('governanceApprovals');
 const receipts=()=>db().collection('governanceToolReceipts');
 export class FirestoreGovernanceRepository implements GovernanceRepository {
+ async getReceipt(t:string,u:string,idempotencyKey:string){
+  const doc=await receipts().doc(receiptId({tenantId:t,unitId:u},idempotencyKey)).get();
+  const v=doc.data() as ToolReceipt|undefined;
+  return v?.tenantId===t&&v.unitId===u&&v.idempotencyKey===idempotencyKey?v:null;
+ }
  async getPolicy(t:string,u:string){
   const d=await policies().doc(key(t,u)).get();const v=d.data() as AutonomyPolicy|undefined;
   return v?.tenantId===t&&v.unitId===u?v:null;

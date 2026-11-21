@@ -65,6 +65,15 @@ export class GovernedAutonomyService{
  async execute(ctx:TenantContext,unitId:string,raw:unknown):Promise<ToolReceipt>{
   const s=this.scope(ctx,unitId);
   const command=validateToolRequest(raw);
+  // A committed receipt wins over any later state/policy changes: retrying a
+  // confirmed order or payment never creates a second operation.
+  const previous=await this.store.getReceipt(s.tenantId,s.unitId,command.idempotencyKey);
+  if(previous){
+   if(previous.requestHash!==hashRequest(s,command)||previous.actorId!==ctx.userId||
+     previous.tool!==command.tool)deny('AUTONOMY_IDEMPOTENCY_CONFLICT','CONFLICT');
+   if(previous.status!=='COMPLETED')deny('AUTONOMY_REPLAY_REQUIRES_HUMAN_REVIEW','CONFLICT');
+   return previous;
+  }
   const policy=await this.policy(ctx,unitId);
   if(!policy.allowedTools.includes(command.tool))deny('AUTONOMY_TOOL_NOT_ENABLED');
   const p=command.payload;
@@ -112,6 +121,7 @@ export class GovernedAutonomyService{
     amount>policy.maxOrderMinor)
   );
   if(requiresApproval&&!command.approvalId)deny('AUTONOMY_HUMAN_APPROVAL_REQUIRED');
+  if(!requiresApproval&&command.approvalId)deny('AUTONOMY_SUPERFLUOUS_APPROVAL','VALIDATION');
   // An approval never lifts the hard constraints above, and a configuration
   // change never grants the model privileged tools or modifies operationMode.
   const now=this.clock().toISOString();

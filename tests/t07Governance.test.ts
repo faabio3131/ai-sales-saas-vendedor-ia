@@ -29,6 +29,10 @@ class Store implements GovernanceRepository {
  grants=new Map<string,HumanApproval>();
  k(t:string,u:string){return t+':'+u;}
  async getPolicy(t:string,u:string){return this.policies.get(this.k(t,u))??null;}
+ async getReceipt(t:string,u:string,idempotencyKey:string){
+  const receipt=[...this.receipts.values()].find(r=>r.tenantId===t&&r.unitId===u&&
+   r.idempotencyKey===idempotencyKey);return receipt??null;
+ }
  async publishPolicy(p:AutonomyPolicy,v:number){
   const k=this.k(p.tenantId,p.unitId);
   if((this.policies.get(k)?.version??0)!==v)deny('AUTONOMY_POLICY_VERSION_CONFLICT','CONFLICT');
@@ -161,8 +165,14 @@ describe('T07 — transações governadas, aprovação e fluxo completo',()=>{
   expect(d.result).toMatchObject({status:'DRAFT',totalMinor:7200});
   expect((await f.service.execute(actor(),'main',draft())).id).toBe(d.id);
   expect(f.events.filter(x=>x.startsWith('draft'))).toHaveLength(1);
-  expect((await f.service.execute(actor(),'main',confirm())).result).toMatchObject({status:'CONFIRMED'});
-  expect((await f.service.execute(actor(),'main',payment())).result).toMatchObject({status:'PENDING'});
+  const confirmed=await f.service.execute(actor(),'main',confirm());
+  expect(confirmed.result).toMatchObject({status:'CONFIRMED'});
+  expect((await f.service.execute(actor(),'main',confirm())).id).toBe(confirmed.id);
+  expect(f.events.filter(x=>x==='confirm')).toHaveLength(1);
+  const billed=await f.service.execute(actor(),'main',payment());
+  expect(billed.result).toMatchObject({status:'PENDING'});
+  expect((await f.service.execute(actor(),'main',payment())).id).toBe(billed.id);
+  expect(f.events.filter(x=>x.startsWith('payment'))).toHaveLength(1);
   await expect(f.service.execute(actor(),'main',release()))
    .rejects.toMatchObject({code:'AUTONOMY_EXECUTION_UNCERTAIN'});
   f.orders.get('order_111')!.paymentState='CONFIRMED';

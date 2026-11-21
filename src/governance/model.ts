@@ -40,6 +40,7 @@ export interface TrustedContactConsent {
 }
 export interface GovernanceRepository {
   getPolicy(tenantId:string,unitId:string):Promise<AutonomyPolicy|null>;
+  getReceipt(tenantId:string,unitId:string,idempotencyKey:string):Promise<ToolReceipt|null>;
   publishPolicy(next:AutonomyPolicy,expectedVersion:number):Promise<AutonomyPolicy>;
   createApproval(next:HumanApproval):Promise<HumanApproval>;
   getApproval(tenantId:string,unitId:string,id:string):Promise<HumanApproval|null>;
