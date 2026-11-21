@@ -38,7 +38,9 @@ export function createBusinessRouter(deps:BusinessRouteDependencies={}):Router{
   const catalog=deps.catalog??new FirestoreCatalogRepository();
   const verifier=deps.verifier??new ConversationMemorySourceVerifier(new FirestoreConversationRepository(),new FirestoreMessageRepository());
   const profile=new BusinessProfileService(profiles);
-  const grounding=new BusinessGroundingService(profiles,catalog,deps.unitCatalog??new FirestoreUnitCatalogRepository());
+  // Explicit legacy-catalog test adapters remain isolated. Production defaults to unit-scoped T03 catalog.
+  const unitCatalog=deps.unitCatalog??(deps.catalog?undefined:new FirestoreUnitCatalogRepository());
+  const grounding=new BusinessGroundingService(profiles,catalog,unitCatalog);
   const memory=new BusinessMemoryService(customers,profiles,memories,verifier);
   const customerContext=new CommercialCustomerContextService(grounding,memory);
 
