@@ -1,4 +1,5 @@
 import type {ProviderPaymentRequest,ProviderPaymentResult} from './model';
+import {createHash} from 'node:crypto';
 import {PixOnlyProvider,ProviderTransport,fail,obj,str,minor,reference} from './bankCommon';
 export interface PagarmeSettings {
  tenantId:string;recipientId:string;request:ProviderTransport;
@@ -35,7 +36,8 @@ export class PagarmePixProvider extends PixOnlyProvider {
    payments:[{payment_method:'pix',pix:{expires_in:3600}}],
    closed:true,
   };
-  const result=this.normalize(await this.cfg.request('/core/v5/orders','POST',payload));
+  const idempotency=createHash('sha256').update(input.tenantId+'\x00'+input.idempotencyKey).digest('hex');
+  const result=this.normalize(await this.cfg.request('/core/v5/orders','POST',payload,{'Idempotency-Key':idempotency}));
   if(result.amountMinor!==input.amountMinor||result.referenceId!==reference(input))return fail('PAGARME_CHARGE_MISMATCH');
   if(!result.pixCode)return fail('PAGARME_QR_UNAVAILABLE');
   return result;

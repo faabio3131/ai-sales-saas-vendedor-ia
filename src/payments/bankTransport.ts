@@ -78,7 +78,7 @@ export function providerTransport(
   expiresAt=Date.now()+Math.min(3600,Math.max(120,Number(payload.expires_in)||300))*1000;
   return bearer;
  };
- return async(path,method,body)=>{
+ return async(path,method,body,additionalHeaders)=>{
   if(!/^\/(?:v2|v3|core\/v5|pix\/v2)\/[a-zA-Z0-9_/-]+$/.test(path)||path.includes('..')) {
    throw new ApplicationError({category:'VALIDATION',code:'BANK_ENDPOINT_INVALID',message:'Invalid bank endpoint.'});
   }
@@ -89,7 +89,11 @@ export function providerTransport(
   }
   if(providerId==='PAGARME'){
    if(!secret.apiKey)throw new ApplicationError({category:'FORBIDDEN',code:'PAGARME_API_KEY_REQUIRED',message:'Pagar.me credentials unavailable.'});
-   return http(cfg.api+path,method,body,{Authorization:'Basic '+Buffer.from(secret.apiKey+':').toString('base64')});
+   const key=additionalHeaders?.['Idempotency-Key'];
+   if(additionalHeaders&&Object.keys(additionalHeaders).some(k=>k!=='Idempotency-Key'))throw new Error('Forbidden provider header');
+   if(method==='POST'&&!key)throw new ApplicationError({category:'VALIDATION',code:'PAGARME_IDEMPOTENCY_REQUIRED',message:'Idempotency is required.'});
+   return http(cfg.api+path,method,body,{Authorization:'Basic '+Buffer.from(secret.apiKey+':').toString('base64'),
+     ...(key?{'Idempotency-Key':key}:{})});
   }
   if(!tls)throw new ApplicationError({category:'FORBIDDEN',code:'BANK_MTLS_REQUIRED',message:'A verified bank client certificate is required.'});
   const token=await accessToken();

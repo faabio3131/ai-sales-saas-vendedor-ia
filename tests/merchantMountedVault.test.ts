@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {mkdtemp,mkdir,writeFile,chmod,rm,symlink} from 'node:fs/promises';
+import {mkdtemp,writeFile,chmod,rm,symlink} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {MountedMerchantCredentialsVault,mountedSecretReference} from '../src/payments/mountedVault';

@@ -15,6 +15,7 @@ import {GoogleSecretManagerMerchantVault} from './merchantVault';
 import {MountedMerchantCredentialsVault} from './mountedVault';
 import {MerchantPaymentAdapterFactory} from './adapterFactory';
 import {FirestoreMerchantCustomerMap} from './customerMap';
+import {FirestorePaymentCreationIntentRepository} from './creationIntent';
 
 function requireContext(req: Request) {
   if (!req.tenantContext) throw new ApplicationError({ category:'FORBIDDEN', code:'TENANT_CONTEXT_REQUIRED', message:'Tenant context is required.' });
@@ -49,6 +50,7 @@ export function createPaymentsRouter(): Router {
     fiscalObserver,
     methodSettings,
     resolver,
+    new FirestorePaymentCreationIntentRepository(),
   );
 
   router.post('/webhook/mercadopago', async (_req, _res, next) => {

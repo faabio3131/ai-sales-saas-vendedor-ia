@@ -18,3 +18,4 @@ export * from './merchantVault';
 export * from './bankTransport';
 export * from './adapterFactory';
 export * from './customerMap';
+export * from './creationIntent';

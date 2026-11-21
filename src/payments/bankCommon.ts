@@ -4,7 +4,7 @@ import type {PaymentProviderInterface} from './contracts';
 import type {ProviderPaymentRequest,ProviderPaymentResult,NormalizedPaymentWebhook} from './model';
 
 export type ProviderJson=Record<string,unknown>;
-export type ProviderTransport=(path:string,method:string,body?:ProviderJson)=>Promise<ProviderJson>;
+export type ProviderTransport=(path:string,method:string,body?:ProviderJson,headers?:Record<string,string>)=>Promise<ProviderJson>;
 export function fail(code:string, message='Payment provider operation unavailable.'):never {
  throw new ApplicationError({category:'PROVIDER',code,message,retryable:false});
 }
