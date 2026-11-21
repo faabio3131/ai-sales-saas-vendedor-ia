@@ -1,4 +1,4 @@
-import type { PaymentProviderInterface,PaymentProviderResolver } from '../payments/contracts';
+import type { PaymentProviderInterface } from '../payments/contracts';
 import type { PaymentMethod } from '../payments/model';
 export type OrderPaymentMethod=Extract<PaymentMethod,
   'PIX'|'PAYMENT_LINK'|'CHECKOUT'|'PIX_MANUAL'|'CARD_ON_DELIVERY'|'CASH_ON_DELIVERY'>;
@@ -57,4 +57,3 @@ export interface OrderPaymentProviderResolver {
   forNewPayment(tenantId:string,providerId?:string):Promise<PaymentProviderInterface>;
   forRecordedPayment(record:{tenantId:string;provider:string}):Promise<PaymentProviderInterface>;
 }
-export type {PaymentProviderResolver};
