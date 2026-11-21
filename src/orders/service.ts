@@ -3,7 +3,7 @@ import type { TenantContext } from '../types/contracts';
 import type { CustomerRepository } from '../customers/contracts';
 import type { BusinessProfileRepository } from '../business/contracts';
 import { requireBusinessScope } from '../business/service';
-import { catalogError,catalogDate,catalogId,catalogText } from '../commerce/service';
+import { catalogError,catalogId,catalogText } from '../commerce/service';
 import type { UnitCatalogRepository } from '../commerce/model';
 import { priceOrder } from './pricing';
 import type {
