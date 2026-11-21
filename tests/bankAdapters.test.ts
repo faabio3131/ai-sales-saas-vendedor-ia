@@ -69,6 +69,6 @@ describe('Five Pix provider adapters',()=>{
  });
  it('does not list placeholders as implemented',()=>{
   const active=PAYMENT_PROVIDER_CATALOG.filter(x=>x.status==='ADAPTER_IMPLEMENTED').map(x=>x.id);
-  expect(active).toEqual(['MERCADOPAGO','EFI','ASAAS','PAGARME','BANCO_INTER','BANCO_DO_BRASIL']);
+  expect(active).toEqual(['MERCADOPAGO','EFI','ASAAS','PAGARME','BANCO_INTER','BANCO_DO_BRASIL','PAGBANK']);
  });
 });
