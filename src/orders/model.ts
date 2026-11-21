@@ -3,7 +3,7 @@ import type { OperationMode } from '../business/model';
 
 export type FulfillmentOption='PICKUP'|'DELIVERY';
 export type OrderStatus='DRAFT'|'CONFIRMED'|'CANCELLED';
-export type PaymentState='NOT_REQUESTED';
+export type PaymentState='NOT_REQUESTED'|'PENDING'|'CONFIRMED'|'FAILED'|'EXPIRED'|'REFUND_PENDING'|'REFUNDED';
 export type ProductionState='NOT_DISPATCHED';
 export type DeliveryState='NOT_STARTED';
 export interface OrderLineSelection {
