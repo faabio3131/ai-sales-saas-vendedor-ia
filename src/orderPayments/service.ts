@@ -246,6 +246,10 @@ export class OrderPaymentService {
     if(input.amountMinor!==payment.amountMinor)
       denyPayment('ORDER_PAYMENT_COLLECTION_AMOUNT_MISMATCH');
     const receiptRef=paymentId(input.receiptRef);
+    // Require a recognizable POS/cash-register receipt identifier; bare card
+    // numbers, CVV and payer input are never valid settlement evidence.
+    if(!/^(?=.*[A-Za-z])[A-Za-z0-9_:-]{8,96}$/.test(receiptRef))
+      denyPayment('ORDER_PAYMENT_RECEIPT_INVALID','VALIDATION');
     const now=this.clock().toISOString();
     return this.store.transition({...payment,version:payment.version+1,status:'CONFIRMED',
       updatedAt:now,confirmedAt:now,verifiedBy:ctx.userId!,
