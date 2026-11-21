@@ -6,6 +6,8 @@ import type { UnitCatalogRepository } from '../commerce/model';
 import type { BusinessProfileRepository } from '../business/contracts';
 import type { CustomerRepository } from '../customers/contracts';
 import { FirestoreUnitCatalogRepository } from '../commerce/firestoreRepository';
+import type {FulfillmentSettingsRepository} from '../fulfillment/model';
+import {FirestoreFulfillmentSettingsRepository} from '../fulfillment/firestoreRepository';
 import { FirestoreBusinessProfileRepository } from '../business/firestoreRepository';
 import { FirestoreCustomerRepository } from '../customers/firestoreRepository';
 import { FirestoreConversationRepository,FirestoreMessageRepository } from '../conversations/firestoreRepository';
@@ -19,6 +21,7 @@ export interface OrderRouteDependencies {
   businesses?:BusinessProfileRepository;
   customers?:CustomerRepository;
   confirmation?:OrderConfirmationEvidence;
+  fulfillmentSettings?:Pick<FulfillmentSettingsRepository,'get'>;
 }
 function context(req:Request):TenantContext{
   if(!req.tenantContext)throw new ApplicationError({category:'FORBIDDEN',
@@ -34,6 +37,9 @@ export function createOrdersRouter(deps:OrderRouteDependencies={}):Router{
     deps.customers??new FirestoreCustomerRepository(),
     deps.confirmation??new ConversationOrderConfirmationVerifier(
       new FirestoreConversationRepository(),new FirestoreMessageRepository()),
+    ()=>new Date(),
+    deps.fulfillmentSettings??(deps.orders||deps.catalog||deps.businesses?
+      undefined:new FirestoreFulfillmentSettingsRepository()),
   );
   router.get('/units/:unitId',async(req:Request,res:Response,next)=>{
     try{res.json({ok:true,data:await service.list(context(req),req.params.unitId)});}
