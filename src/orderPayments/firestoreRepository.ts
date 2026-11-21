@@ -109,7 +109,7 @@ export class FirestoreOrderPaymentRepository implements OrderPaymentRepository {
         fingerprint:next.fingerprint,paymentId:next.id});
       tx.create(orderIndex,{tenantId:next.tenantId,unitId:next.unitId,
         paymentId:next.id,orderId:next.orderId});
-      tx.update(order,updated);
+      tx.set(order,updated);
       tx.create(db().collection('orderPaymentOutbox').doc(hash(next.id,String(next.version))),
         eventOf(next,'PAYMENT_INTENT_RESERVED'));
       return {payment:next,created:true};
@@ -136,7 +136,7 @@ export class FirestoreOrderPaymentRepository implements OrderPaymentRepository {
         denyPayment('ORDER_PAYMENT_REFUND_EVIDENCE_REQUIRED');
       if(next.status==='CONFIRMED'&&order.status==='CANCELLED')
         denyPayment('ORDER_PAYMENT_CANCELLED_ORDER','CONFLICT');
-      tx.update(p,next);
+      tx.set(p,next);
       tx.update(o,{paymentState:projection(next.status),version:order.version+1,
         updatedAt:next.updatedAt});
       tx.create(db().collection('orderPaymentOutbox').doc(hash(next.id,String(next.version))),
