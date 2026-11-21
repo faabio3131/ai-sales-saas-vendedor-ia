@@ -9,6 +9,8 @@ import { estimateModelCost } from '../src/ai/cognitiveFinops';
 import type { CognitiveMeteringEvent } from '../src/ai/cognitiveFinops';
 import { PolicyEngine } from '../src/policies/policyEngine';
 import { SalesEngine } from '../src/sales/engine';
+import { SalesDecisionService } from '../src/sales/service';
+import type { LeadRepository, OpportunityRepository } from '../src/leads/contracts';
 
 const SECRET = 'ci-cognitive-service-secret-0123456789abc';
 const req = (overrides:Partial<AIRequest>={}):AIRequest=>({
@@ -98,6 +100,26 @@ describe('T01: Cognitive context, S2S, routing and governed sales integration',(
     const decision=await engine.decide({tenantId:'tenant-a',leadId:'lead-a',customerId:'cust-a',stage:'QUALIFICADO',autonomyMode:'ASSIST'});
     expect(decision).toMatchObject({ok:true,data:{action:'CREATE_QUOTE',source:'DETERMINISTIC',requiresHumanApproval:true}});
   });
+  it('runs the commercial service with scoped lead lookup and Python proposal without bypassing RBAC',async()=>{
+    const transport=mockedTransport();
+    const router=new ResilientAIRouter([new CognitiveServiceAdapter({
+      endpoint:'http://127.0.0.1:8185',secret:SECRET,fetchImpl:transport as unknown as typeof fetch,
+    })]);
+    const leads={
+      findById:async(tenantId:string,id:string)=>tenantId==='tenant-a'&&id==='lead-a'
+        ? {id:'lead-a',tenantId:'tenant-a',customerId:'cust-a',stage:'QUALIFICADO',
+          createdAt:'2026-11-21T00:00:00.000Z',updatedAt:'2026-11-21T00:00:00.000Z'}:null,
+    } as LeadRepository;
+    const service=new SalesDecisionService(leads,{} as OpportunityRepository,new PolicyEngine(),router,{
+      resolve:async()=> 'ASSIST',
+    });
+    const result=await service.decide({tenantId:'tenant-a',requestId:'request-1'}, {leadId:'lead-a'});
+    expect(result).toMatchObject({action:'CREATE_QUOTE',requiresHumanApproval:true,source:'DETERMINISTIC'});
+    await expect(service.decide({tenantId:'tenant-b',requestId:'request-2'},{leadId:'lead-a'}))
+      .rejects.toMatchObject({code:'LEAD_NOT_FOUND'});
+    expect(transport).toHaveBeenCalledOnce();
+  });
+
   it('falls back to second provider when first errors and never exposes the exception',async()=>{
     const meter:CognitiveMeteringEvent[]=[];
     const failed:AIProviderInterface={
