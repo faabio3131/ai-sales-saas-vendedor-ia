@@ -203,21 +203,7 @@ describe('T03 — order lifecycle, idempotency and commercial safety',()=>{
             {...f,pricesBySize:{...f.pricesBySize,g:9000}}:f)}};
       }),
     });
-    await e.service.list(ctx(),'main');
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    await e.service.get(ctx(),'main',first.id);
-    // Publish at the real service's configured base clock.
-    await e.service.get(ctx(),'main',first.id);
+    // Changes to catalog do not mutate the original immutable order snapshot.
     const { UnitCatalogService }=await import('../src/commerce/service');
     await new UnitCatalogService(e.repo,profiles,()=>new Date(NOW)).publish(ctx(),'main',revised);
     e.setNow('2026-11-23T00:00:00.000Z');
