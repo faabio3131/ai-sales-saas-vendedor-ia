@@ -278,7 +278,7 @@ describe('T06 — deterministic delivery, native KDS, payment gates and isolatio
    expect((await released.json()).data.state).toBe('QUEUED');
    const duplicated=await fetch(root+'/orders/'+e.order.id+'/release',{method:'POST'});
    expect((await duplicated.json()).data.version).toBe(1);
-   expect((await fetch(root+'/queue',{headers:{'x-test-tenant':'pizza-b'}})).json()
+   await expect((await fetch(root+'/queue',{headers:{'x-test-tenant':'pizza-b'}})).json()
      .then(v=>v.data)).resolves.toEqual([]);
    expect((await fetch('http://127.0.0.1:'+(server.address() as AddressInfo).port+
     '/ops/external-event',{method:'POST'})).status).toBe(404);
