@@ -9,6 +9,7 @@ import { BusinessProfileService } from './service';
 import { BusinessGroundingService } from './grounding';
 import { BusinessMemoryService,type MemorySourceVerifier } from './memoryService';
 import { ConversationMemorySourceVerifier } from './consentVerifier';
+import { CommercialCustomerContextService } from './customerContext';
 import type { CustomerRepository } from '../customers/contracts';
 import type { CatalogRepository } from '../catalog/contracts';
 
@@ -36,6 +37,7 @@ export function createBusinessRouter(deps:BusinessRouteDependencies={}):Router{
   const profile=new BusinessProfileService(profiles);
   const grounding=new BusinessGroundingService(profiles,catalog);
   const memory=new BusinessMemoryService(customers,profiles,memories,verifier);
+  const customerContext=new CommercialCustomerContextService(grounding,memory);
 
   router.get('/units/:unitId/active',async(req:Request,res:Response,next)=>{
     try{res.json({ok:true,data:await profile.effective(auth(req),req.params.unitId,timestamp(req.query.at))});}catch(e){next(e);}
@@ -51,6 +53,9 @@ export function createBusinessRouter(deps:BusinessRouteDependencies={}):Router{
   });
   router.get('/units/:unitId/context',async(req:Request,res:Response,next)=>{
     try{res.json({ok:true,data:await grounding.evidence(auth(req),req.params.unitId)});}catch(e){next(e);}
+  });
+  router.post('/units/:unitId/customers/:customerId/cognitive-context',async(req:Request,res:Response,next)=>{
+    try{res.json({ok:true,data:await customerContext.aiRequest(auth(req),req.params.unitId,req.params.customerId,req.body?.input)});}catch(e){next(e);}
   });
   router.get('/units/:unitId/customers/:customerId/memory',async(req:Request,res:Response,next)=>{
     try{res.json({ok:true,data:await memory.get(auth(req),req.params.unitId,req.params.customerId)});}catch(e){next(e);}
