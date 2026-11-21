@@ -20,6 +20,8 @@ export async function executeOrderPaymentWorkers(){
 if(process.argv[1]&&/order-payment-workers(?:\.ts|\.cjs)$/.test(process.argv[1])){
   executeOrderPaymentWorkers().then(result=>{
     console.log(JSON.stringify({type:'order-payment-worker-completed',...result}));
+    if(result.payments.failed||result.payments.manualReview||result.events.failed)
+      process.exitCode=1;
   }).catch(()=>{
     console.error(JSON.stringify({type:'order-payment-worker-failed'}));
     process.exitCode=1;
