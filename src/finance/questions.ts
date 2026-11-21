@@ -135,7 +135,8 @@ export class FinanceQuestionService {
   const period=recognizePeriod(text,today,defaultPeriod as FinancePeriod);
   const snapshot=period.period==='day'&&(!period.anchor||period.anchor===today)?
     bootstrap:await this.financial.snapshot(context,unitId,period);
-  return {metric,question:input.question,answer:describe(snapshot,metric),
+  return {metric,question:input.question,
+    answer:describe(snapshot,metric)+' Cobertura: pedidos T03/T04, sem cotações legadas não vinculadas à unidade.',
     source:'DETERMINISTIC_LEDGER',snapshot};
  }
 }
