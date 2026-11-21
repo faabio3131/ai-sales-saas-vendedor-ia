@@ -11,6 +11,7 @@ const ENDPOINTS:Record<string,Endpoints>={
  BANCO_DO_BRASIL:{api:'https://api-pix.bb.com.br',oauth:'https://oauth.bb.com.br/oauth/token',pixPrefix:'/pix/v2'},
  ASAAS:{api:'https://api.asaas.com'},
  PAGARME:{api:'https://api.pagar.me'},
+ PAGBANK:{api:'https://api.pagseguro.com'},
 };
 export function bankEndpoints(providerId:PaymentProviderId):Endpoints {
  const endpoints=ENDPOINTS[providerId];
@@ -79,13 +80,20 @@ export function providerTransport(
   return bearer;
  };
  return async(path,method,body,additionalHeaders)=>{
-  if(!/^\/(?:v2|v3|core\/v5|pix\/v2)\/[a-zA-Z0-9_/-]+$/.test(path)||path.includes('..')) {
+  if(!/^\/(?:v2|v3|core\/v5|pix\/v2|orders)(?:\/[a-zA-Z0-9_/-]+)?$/.test(path)||path.includes('..')) {
    throw new ApplicationError({category:'VALIDATION',code:'BANK_ENDPOINT_INVALID',message:'Invalid bank endpoint.'});
   }
   if(method!=='POST'&&method!=='PUT'&&method!=='GET')throw new Error('Invalid provider operation');
   if(providerId==='ASAAS'){
    if(!secret.apiKey)throw new ApplicationError({category:'FORBIDDEN',code:'ASAAS_API_KEY_REQUIRED',message:'Asaas credentials unavailable.'});
    return http(cfg.api+path,method,body,{access_token:secret.apiKey});
+  }
+  if(providerId==='PAGBANK'){
+   if(!secret.apiKey)throw new ApplicationError({category:'FORBIDDEN',code:'PAGBANK_API_KEY_REQUIRED',message:'PagBank credentials unavailable.'});
+   const key=additionalHeaders?.['x-idempotency-key'];
+   if(additionalHeaders&&Object.keys(additionalHeaders).some(k=>k!=='x-idempotency-key'))throw new Error('Forbidden provider header');
+   if(method==='POST'&&!key)throw new ApplicationError({category:'VALIDATION',code:'PAGBANK_IDEMPOTENCY_REQUIRED',message:'Idempotency key required.'});
+   return http(cfg.api+path,method,body,{Authorization:'Bearer '+secret.apiKey,...(key?{'x-idempotency-key':key}:{})});
   }
   if(providerId==='PAGARME'){
    if(!secret.apiKey)throw new ApplicationError({category:'FORBIDDEN',code:'PAGARME_API_KEY_REQUIRED',message:'Pagar.me credentials unavailable.'});

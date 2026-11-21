@@ -6,9 +6,11 @@ import {providerTransport} from './bankTransport';
 import {PixCobBankProvider} from './pixCobBanks';
 import {AsaasPixProvider} from './asaas';
 import {PagarmePixProvider} from './pagarme';
+import {PagBankPixProvider} from './pagbank';
 import {MercadoPagoPixProvider} from './mercadoPago';
 export interface MerchantCustomerMapRepository {
  resolve(tenantId:string,providerId:string,customerId:string):Promise<string|null>;
+ resolvePagBankCustomer?(tenantId:string,customerId:string):Promise<import('./pagbank').PagBankCustomer|null>;
 }
 export class MerchantPaymentAdapterFactory {
  constructor(
@@ -19,7 +21,7 @@ export class MerchantPaymentAdapterFactory {
   const secret=await this.vault.load(conn);
   const request=providerTransport(conn.providerId,secret);
   const resolveCustomer=(id:string)=>this.customerMap.resolve(conn.tenantId,conn.providerId,id);
-  if(conn.providerId==='EFI'||conn.providerId==='BANCO_INTER'||conn.providerId==='BANCO_DO_BRASIL'){
+  if(conn.providerId==='EFI'||conn.providerId==='BANCO_INTER'||conn.providerId==='BANCO_DO_BRASIL'||conn.providerId==='SANTANDER'||conn.providerId==='ITAU'){
    if(!secret.pixKey)return this.unconfigured();
    return new PixCobBankProvider({
     bank:conn.providerId,tenantId:conn.tenantId,recipientId:conn.recipientId!,
@@ -29,6 +31,10 @@ export class MerchantPaymentAdapterFactory {
    tenantId:conn.tenantId,recipientId:conn.recipientId!,request,resolveCustomer});
   if(conn.providerId==='PAGARME')return new PagarmePixProvider({
    tenantId:conn.tenantId,recipientId:conn.recipientId!,request,resolveCustomer});
+  if(conn.providerId==='PAGBANK')return new PagBankPixProvider({
+    tenantId:conn.tenantId,recipientId:conn.recipientId!,request,
+    resolveCustomer:async id=>this.customerMap.resolvePagBankCustomer?.(conn.tenantId,id)??null,
+  });
   if(conn.providerId==='MERCADOPAGO'){
    if(!secret.apiKey||!secret.clientSecret)return this.unconfigured();
    return new MercadoPagoPixProvider({

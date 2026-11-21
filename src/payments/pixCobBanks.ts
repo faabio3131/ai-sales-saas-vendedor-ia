@@ -1,7 +1,7 @@
 import type {ProviderPaymentRequest,ProviderPaymentResult} from './model';
 import {PixOnlyProvider,ProviderTransport,obj,str,minor,money,reference,txid,fail} from './bankCommon';
 
-export type PixCobBank='EFI'|'BANCO_INTER'|'BANCO_DO_BRASIL';
+export type PixCobBank='EFI'|'BANCO_INTER'|'BANCO_DO_BRASIL'|'SANTANDER'|'ITAU';
 export interface PixCobSettings {
  tenantId:string; recipientId:string; pixKey:string; bank:PixCobBank;
  request:ProviderTransport; // authenticated, mTLS-capable, pinned-host transport
