@@ -81,7 +81,9 @@ export class FirestoreOperationRepository implements OperationRepository{
      activeProfile.unitId!==next.unitId||
      (activeProfile.expiresAt&&activeProfile.expiresAt<=next.updatedAt)||
      activeProfile.capabilityRegistry.operationMode!==next.operationMode||
-     !activeProfile.capabilityRegistry.capabilities.includes('PRODUCTION'))
+     !activeProfile.capabilityRegistry.capabilities.includes('PRODUCTION')||
+     (next.fulfillment.kind==='DELIVERY'&&
+      !activeProfile.capabilityRegistry.capabilities.includes('DELIVERY')))
      rejected('FULFILLMENT_PROFILE_CHANGED_DURING_RELEASE');
    const previous=existing.data() as OperationRecord|undefined;
    if(previous){
