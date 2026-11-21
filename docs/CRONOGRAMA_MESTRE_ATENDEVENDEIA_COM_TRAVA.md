@@ -85,8 +85,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | ID | Gate / Trava | Entrega Funcional Consolidada | Prazo Est. | Status | Data Entrega | Evidência (PR / SHA / CI Run) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
 | **T01** | `✅ ENTREGUE` | Integração Cognitiva (ADR-001/002: FM Core Base + Padrões NFCore + Adaptador TS) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #11 / SHA c150420e9d7cb66ca4335baadd5796fea6fd761a / CI #44906758883 SUCCESS` |
-| **T02** | `🔒 Aprovação humana pós-T01` | Conhecimento e Memória por Estabelecimento (Tenant) | 5d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
-| **T03** | `🔒 Finalize T02` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T02** | `✅ ENTREGUE` | Conhecimento e Memória por Estabelecimento (Tenant) | 5d | `[x] ENTREGUE` | `21/11/2026` | `PR #12 / SHA 5a89a5580ede7e3c45041008808deebf692691d7 / CI #44917033763 SUCCESS` |
+| **T03** | `🔒 Aprovação humana pós-T02` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T04** | `🔒 Finalize T03` | Payment Engine (Pix Dinâmico, Checkout, Webhooks e Reconciliação) | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T05** | `🔒 Finalize T04` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T06** | `🔒 Finalize T05` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
@@ -125,13 +125,13 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Build, typecheck, suíte cumulativa e smoke runtime aprovados no mesmo HEAD.
   - [x] Contratos simulados registrados separadamente de credenciais reais de provedor.
 
-### T02 — Conhecimento e Memória por Estabelecimento (`🔒 Travado em T01`)
+### T02 — Conhecimento e Memória por Estabelecimento (`✅ ENTREGUE — 21/11/2026`)
 - **Escopo:** Definir e validar o `BusinessCapabilityRegistry` mínimo por tenant/unidade (`FOOD_SERVICE`, `ORDERING`, `PRODUCTION`, `DELIVERY`, `OPERATION_MODE`, flags versionadas) como contrato horizontal reutilizável; não implementar o Scheduling Engine nesta tarefa. Implementar `BusinessKnowledge` e `PolicyProfile` versionados com vigência; catálogo e regras como fontes de verdade; `Memory Layer` com histórico, preferências e retenção configurável por cliente/tenant; identidade configurável da atendente; tratamento de lacunas e contradições.
 - **Critério de Aceite (DoD):**
-  - [ ] Dois tenants distintos configurados com cardápios e políticas diferentes, zero vazamento cruzado.
-  - [ ] Respostas fundamentadas em evidências reais, sem invenção de preços ou horários.
-  - [ ] Alterações respeitam versão e vigência; memória persistida e governada.
-  - [ ] O perfil de negócio e o modo operacional são persistidos e versionados por tenant/unidade, com alteração autorizada, fail-closed e teste de isolamento. Nenhum nicho é hardcoded no Core.
+  - [x] Dois tenants distintos configurados com cardápios e políticas diferentes, zero vazamento cruzado.
+  - [x] Respostas fundamentadas em evidências reais, sem invenção de preços ou horários.
+  - [x] Alterações respeitam versão e vigência; memória persistida e governada.
+  - [x] O perfil de negócio e o modo operacional são persistidos e versionados por tenant/unidade, com alteração autorizada, fail-closed e teste de isolamento. Nenhum nicho é hardcoded no Core.
 
 ### T03 — Motor de Pedidos e Regras Comerciais (`🔒 Travado em T02`)
 - **Escopo:** Completar `Catalog Engine` (produtos, variantes, tamanhos, bordas, adicionais, combos, múltiplos sabores e regra configurável de meio a meio) e `Order Engine` (valores em centavos inteiros BRL, snapshot imutável do catálogo, numeração atômica única por tenant/unidade, separação das dimensões Pedido/Pagamento/Entrega e cotação básica de entrega).
@@ -192,13 +192,13 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | Componente | Tarefa Responsável | Cobertura |
 | :--- | :---: | :---: |
 | Commercial Cognitive Core (Router, Context Pack, Output Guard, Resilience, FinOps) | `T01`, `T07` | `[ ] DoD da evolução não certificado` |
-| Business Knowledge & Memory Layer (Multi-tenant) | `T02` | `[ ] DoD da evolução não certificado` |
+| Business Knowledge & Memory Layer (Multi-tenant) | `T02` | `[x] T02 certificada (código interno; sem ativação externa)` |
 | Catalog Engine & Order Engine | `T03` | `[ ] DoD da evolução não certificado` |
 | Payment Engine (Pix Dinâmico, Checkout, Webhooks, Reconciliação) | `T04` | `[ ] DoD da evolução não certificado` |
 | Financial Engine & Admin Cognitive Queries | `T05` | `[ ] DoD da evolução não certificado` |
 | Delivery, Production & Notification Engine | `T06` | `[ ] DoD da evolução não certificado` |
 | Customer, Sales, Recovery & Autonomous Governance | `T01`, `T02`, `T07` | `[ ] DoD da evolução não certificado` |
-| Business Capability Registry / configuração por tenant e unidade | `T02`, `T09` | `[ ] Não certificado para a evolução` |
+| Business Capability Registry / configuração por tenant e unidade | `T02`, `T09` | `[x] Contrato/persistência interna T02 certificados; RBAC de unidade futura` |
 | Food Service Pack — operação nativa / painel de produção | `T03`, `T06`, `T07` | `[ ] Não certificado para a evolução` |
 | Food Service Pack — integração por PDV/KDS/delivery | `T03`, `T06`, `T07`, `T08.4` | `[ ] Contratos e runtime real não homologados` |
 | Scheduling Engine / salão / estética / novos setores | `T09`–`T12` | `[ ] Futuro — BLOQUEADO até T08.5` |
@@ -259,3 +259,9 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - Não implementar folha de pagamento, compras, estoque avançado ou escrituração contábil.
 - Não intermediar fundos pela FM Tecnologia IA (recebimento direto na conta do estabelecimento no PSP contratado).
 - Não exigir contratação do NFCore ou do Kordena para operar o AtendeVendeIA.
+
+## 8. Certificação T02 — Registro pós-evolução
+- **21/11/2026 — T02 entregue internamente:** PR #12, SHA funcional `5a89a5580ede7e3c45041008808deebf692691d7`, CI `#44917033763` SUCCESS; 226 testes TS, 7 Python, segurança, build e Docker aprovados.
+- Evidência detalhada: `docs/T02_CLOSURE_CERTIFICATION.md`, `docs/ADR-003_T02_BUSINESS_KNOWLEDGE_MEMORY.md` e `docs/T02_BUSINESS_PROFILE_RUNBOOK.md`.
+- O catálogo existente ainda é tenant-scoped; ajustes por unidade e Food Pack operacional pertencem a T03/T06. Sem deploy/WhatsApp bancário real.
+- **T03 permanece bloqueada** até aprovação humana explícita após certificação e revisão de encerramento da T02.
