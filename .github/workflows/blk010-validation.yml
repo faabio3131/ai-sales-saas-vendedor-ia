@@ -24,8 +24,24 @@ jobs:
         run: npm run build
       - name: Typecheck
         run: npm run typecheck
+      - name: Python cognitive S2S contract and security tests
+        run: python3 -m unittest cognitive_service.test_core -v
       - name: Tests
-        run: npm test
+        env:
+          COGNITIVE_TEST_URL: http://127.0.0.1:8185
+          COGNITIVE_S2S_SECRET: ci-cognitive-service-secret-0123456789abc
+        run: |
+          python3 -m cognitive_service.server > /tmp/atendevende-cognitive.log 2>&1 &
+          COG_PID=$!
+          trap 'kill "$COG_PID" >/dev/null 2>&1 || true' EXIT
+          READY=0
+          for i in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8185/health > /tmp/cognitive-health.json; then READY=1; break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          node -e "const h=require('/tmp/cognitive-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
+          npm test
       - name: Runtime security boundaries
         env:
           NODE_ENV: production
