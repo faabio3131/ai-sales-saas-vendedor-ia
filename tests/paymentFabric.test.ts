@@ -13,12 +13,12 @@ const owner={tenantId:'pizza',role:'OWNER',requestId:'1'};
 describe('Tenant-bound multi-PSP payment fabric',()=>{
  it('makes no unsupported provider available for use',()=>{
    expect(PAYMENT_PROVIDER_CATALOG.length).toBe(10);
-   expect(PAYMENT_PROVIDER_CATALOG.filter(p=>p.status==='ADAPTER_IMPLEMENTED').map(p=>p.id)).toEqual(['MERCADOPAGO']);
+   expect(PAYMENT_PROVIDER_CATALOG.filter(p=>p.status==='ADAPTER_IMPLEMENTED').map(p=>p.id)).toEqual(['MERCADOPAGO','EFI','ASAAS','PAGARME','BANCO_INTER','BANCO_DO_BRASIL']);
  });
  it('fails closed without a selected or active provider',async()=>{
    await expect(resolver.forNewPayment('pizza')).rejects.toMatchObject({code:'PAYMENT_PROVIDER_SELECTION_REQUIRED'});
    await expect(resolver.forNewPayment('other','MERCADOPAGO')).rejects.toMatchObject({code:'PAYMENT_CONNECTION_NOT_ACTIVE'});
-   await expect(resolver.forNewPayment('pizza','BANCO_INTER')).rejects.toMatchObject({code:'PAYMENT_PROVIDER_NOT_IMPLEMENTED'});
+   await expect(resolver.forNewPayment('pizza','BANCO_INTER')).rejects.toMatchObject({code:'PAYMENT_CONNECTION_NOT_ACTIVE'});
  });
  it('allows owner preference while hiding credentials from tenant API',async()=>{
    const service=new MerchantPaymentConnectionsService(repo);
@@ -31,7 +31,7 @@ describe('Tenant-bound multi-PSP payment fabric',()=>{
    expect((await resolver.forNewPayment('pizza')).id).toBe('MERCADOPAGO');
  });
  it('never switches a recorded payment to another provider',async()=>{
-   await expect(resolver.forRecordedPayment({tenantId:'pizza',provider:'BANCO_INTER'} as never)).rejects.toMatchObject({code:'PAYMENT_PROVIDER_NOT_IMPLEMENTED'});
+   await expect(resolver.forRecordedPayment({tenantId:'pizza',provider:'BANCO_INTER'} as never)).rejects.toMatchObject({code:'PAYMENT_CONNECTION_NOT_ACTIVE'});
  });
  it('checks recipient and tenant identity against adapter',async()=>{
    const broken=new TenantPaymentProviderResolver(repo,new Map([['MERCADOPAGO',{id:'MERCADOPAGO',tenantId:'pizza',recipientId:'wrong'} as never]]));
