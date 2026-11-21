@@ -13,11 +13,13 @@ A origem contém **58 pizzas numeradas** (a Siciliana é nº 61; 58–60 não co
 
 Dados de identificação fornecidos:
 - Nome informado: Pizzaria Americana.
-- Endereço parcial: Avenida dos Juritis, 146.
+- Endereço informado: Avenida dos Juritis, 146; município **Cajamar/SP** confirmado pelo Diretor.
+- Grafia postal: **Avenida das Juritis**, bairro **Paraíso (Polvilho)**, CEP **07793-530**, segundo [Prefeitura de Cajamar](https://cajamar.sp.gov.br/concursos/wp-content/uploads/sites/7/indepac_cajamar-edital-cp-05-2023_28_12_23.pdf).
+- Outra marca, [Pizzaria La Itália](https://play.google.com/store/apps/details?hl=pt&id=com.wabiz.delivery.laitalia), divulga o mesmo número. Exigir confirmação de localização, operação e titularidade da Pizzaria Americana.
 - WhatsApp informado: +55 11 97569-1385.
 - Segundo telefone impresso: +55 11 99849-5454, ainda não confirmado como ativo.
 
-Ainda faltam município, bairro, CEP, titularidade vinculada ao usuário OWNER do tenant real, nome escolhido da atendente, horários semanais, receita/preço válido por tamanho, regra de pizza meio a meio, preços vigentes dos combos, entrega por faixa de CEP, taxas e prazos, meios de pagamento, equipe operacional e decisão do modo. Nenhum CNPJ encontrado em busca aberta pode ser atribuído à pizzaria sem correspondência inequívoca e verificação da proprietária. Não presumir que ela está em Americana/SP ou em Praia Grande/SP pelo nome.
+O município foi confirmado pelo Diretor; bairro postal e CEP pesquisados em fonte oficial. **Ainda faltam comprovação de titularidade da operação no imóvel, vínculo com usuário OWNER do tenant, confirmação proprietária do endereço, nome da atendente, horários, preços por tamanho, regra de pizza meio a meio, combos, taxas de entrega/CEP, pagamentos, equipe operacional e escolha do modo.** Nenhum CNPJ encontrado em busca aberta pode ser atribuído à pizzaria sem correspondência inequívoca e verificação da proprietária. Não presumir que ela está em Americana/SP ou em Praia Grande/SP pelo nome.
 
 ## Engenharia entregue
 
