@@ -130,7 +130,7 @@ describe('T05 — reconstructible commercial finance ledger',()=>{
   });
   expect(snap.source).toBe('CANONICAL_ORDERS_AND_TRANSACTIONAL_PAYMENT_OUTBOX');
  });
- it('uses semi-open business days and does not shift local-midnight revenue into wrong UTC day',()=>{
+ it('uses semi-open business days and does not shift local-midnight revenue into wrong UTC day',async()=>{
   const f=fixture();
   const snap=await f.service.snapshot(ctx(),'main',{period:'day',anchor:'2026-11-21'});
   expect(snap.window.startInclusive).toBe('2026-11-21T03:00:00.000Z');
@@ -153,7 +153,7 @@ describe('T05 — reconstructible commercial finance ledger',()=>{
   expect(sunday.window.startInclusive).toBe('2026-11-15T03:00:00.000Z');
   expect(sunday.window.weekStartsOn).toBe(0);
  });
- it('handles DST 23-hour and 25-hour local business days',()=>{
+ it('handles DST 23-hour and 25-hour local business days',async()=>{
   const spring=resolveWindow({period:'day',anchor:'2026-03-08',timezone:'America/New_York',
    weekStartsOn:1,now:NOW});
   const autumn=resolveWindow({period:'day',anchor:'2026-11-01',timezone:'America/New_York',
@@ -256,7 +256,7 @@ describe('T05 — admin natural language and HTTP isolation',()=>{
   expect(execute).not.toHaveBeenCalled();expect(f.sources.calls).toHaveLength(0);
  });
  it('restricts LLM fallback to allowlisted metric and never transmits financial records',async()=>{
-  const f=fixture(),execute=vi.fn(async(req:{input:{question:string}})=>({
+  const f=fixture(),execute=vi.fn(async(_req:{input:{question:string}})=>({
    ok:true,data:{provider:'stub',model:'intent-only',
     structuredData:{metric:'averageTicket'}},
   }));
