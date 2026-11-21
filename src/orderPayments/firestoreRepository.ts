@@ -32,6 +32,9 @@ function eventOf(payment:OrderPayment,kind:OrderPaymentEventKind):OutboxRecord{
     paymentVersion:payment.version,kind,status:payment.status,
     amountMinor:payment.amountMinor,method:payment.method,provider:payment.provider,
     occurredAt:payment.updatedAt,updatedAt:payment.updatedAt,
+    ...(payment.verificationSource?{verificationSource:payment.verificationSource}:{}),
+    ...(payment.verifiedBy?{verifiedBy:payment.verifiedBy}:{}),
+    ...(payment.receiptRef?{receiptRef:payment.receiptRef}:{}),
     deliveryStatus:'PENDING',attemptCount:0,nextAttemptAt:0,leaseUntil:0,
   };
 }
