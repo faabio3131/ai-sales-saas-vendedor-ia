@@ -47,6 +47,16 @@ export class PagBankPixProvider extends PixOnlyProvider {
   return {provider:this.id,providerPaymentId:id,status:states[status],amountMinor,
    referenceId,pixCode:str(qr.text)||undefined};
  }
+ async preflightPix(input:ProviderPaymentRequest):Promise<void>{
+  if(input.tenantId!==this.tenantId)return fail('PAGBANK_TENANT_MISMATCH');
+  if(!Number.isSafeInteger(input.amountMinor)||input.amountMinor<=0)
+    return fail('PAGBANK_AMOUNT_INVALID');
+  const customer=await this.cfg.resolveCustomer(input.customerId);
+  if(!customer||!customer.name?.trim()||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)||
+    !/^\d{11}$|^\d{14}$/.test(customer.taxId)||!/^\d{2}$/.test(customer.phone.area)||
+    !/^\d{8,9}$/.test(customer.phone.number))
+    return fail('PAGBANK_CUSTOMER_DATA_MISSING');
+ }
  async createPix(input:ProviderPaymentRequest):Promise<ProviderPaymentResult>{
   if(input.tenantId!==this.tenantId)return fail('PAGBANK_TENANT_MISMATCH');
   if(!Number.isSafeInteger(input.amountMinor)||input.amountMinor<=0)return fail('PAGBANK_AMOUNT_INVALID');
