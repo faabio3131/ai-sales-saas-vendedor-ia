@@ -1,4 +1,10 @@
 import { describe,expect,it,vi } from 'vitest';
+import express from 'express';
+import type { AddressInfo } from 'node:net';
+import { once } from 'node:events';
+import { errorHandler } from '../src/api/middleware/errorHandler';
+import { createBusinessRouter } from '../src/business/routes';
+import { purgeExpiredBusinessMemories } from '../scripts/purgeExpiredBusinessMemories';
 import type { BusinessProfileRepository,ScopedMemoryRepository } from '../src/business/contracts';
 import type { BusinessProfileInput,BusinessProfileRevision } from '../src/business/model';
 import type { ScopedCustomerMemory } from '../src/business/memoryModel';
@@ -356,5 +362,67 @@ describe('T02 — Governed, provenanced customer memory',()=>{
     expect(await verifier.verifyExplicitConsent('pizza-a','cust-a',ref)).toBe(true);
     expect(await verifier.verifyExplicitConsent('pizza-b','cust-a',ref)).toBe(false);
     expect(await verifier.verifyCustomerEvidence('pizza-a','cust-b',ref)).toBe(false);
+  });
+});
+
+describe('T02 — HTTP boundary and physical cleanup',()=>{
+  it('runs the versioned profile HTTP endpoints with verified server-side roles',async()=>{
+    const profiles=new ProfilesMemory();
+    const app=express();
+    app.use(express.json());
+    // This test supplies a pre-authenticated TenantContext. The production API
+    // mounts real authentication and tenant-membership middleware first.
+    app.use('/business',(req,_res,next)=>{
+      req.tenantContext=t('pizza-a',req.header('x-test-role')==='VIEWER'?'VIEWER':'OWNER');
+      next();
+    },createBusinessRouter({
+      profiles,memories:new MemoriesMemory(),customers:new CustomerMemory([]),
+      catalog:new CatalogMemory([item('a','pizza-a','Pizza Grande',5900)]),
+      verifier:new VerifiedSources(),
+    }));
+    app.use(errorHandler);
+    const server=app.listen(0,'127.0.0.1');
+    await once(server,'listening');
+    try {
+      const port=(server.address() as AddressInfo).port;
+      const root='http://127.0.0.1:'+port+'/business/units/main';
+      const forbidden=await fetch(root+'/revisions',{
+        method:'POST',headers:{'content-type':'application/json','x-test-role':'VIEWER'},
+        body:JSON.stringify(profileInput()),
+      });
+      expect(forbidden.status).toBe(403);
+      expect((await forbidden.json()).error.code).toBe('BUSINESS_MANAGEMENT_DENIED');
+      const created=await fetch(root+'/revisions',{
+        method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify(profileInput()),
+      });
+      expect(created.status).toBe(201);
+      expect((await created.json()).data.version).toBe(1);
+      const active=await fetch(root+'/active');
+      expect(active.status).toBe(200);
+      expect((await active.json()).data.identity.assistantName).toBe('Atendente Pizzaria');
+      const price=await fetch(root+'/answer',{
+        method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({question:'Quanto custa Pizza Grande?'}),
+      });
+      expect((await price.json()).data).toMatchObject({status:'ANSWERED',source:'CATALOG'});
+      const missing=await fetch(root+'/answer',{
+        method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({question:'Quanto custa Pizza Especial?'}),
+      });
+      expect((await missing.json()).data).toMatchObject({status:'UNKNOWN'});
+    } finally {server.close();await once(server,'close');}
+  });
+  it('deletes expired memory in bounded batches without guessing counts',async()=>{
+    const repository=new MemoriesMemory();
+    const now=NOW;
+    const r:ScopedCustomerMemory={
+      tenantId:'pizza-a',unitId:'main',customerId:'cust-a',version:1,status:'GRANTED',
+      summary:'Old.',interests:[],preferences:[],sourceRefs:[],updatedAt:NOW,
+      expiresAt:'2026-11-20T00:00:00.000Z',updatedBy:'operator',
+    };
+    await repository.save(r,0);
+    expect(await purgeExpiredBusinessMemories(repository,()=>new Date(now),2)).toBe(1);
+    expect(await repository.get('pizza-a','main','cust-a')).toBeNull();
   });
 });
