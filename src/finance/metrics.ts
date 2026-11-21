@@ -1,5 +1,6 @@
 import { ApplicationError } from '../infrastructure/errors';
 import type { Order } from '../orders/model';
+import type { OutboxRecord } from '../orderPayments/model';
 import type { CommercialMetrics,FinanceSnapshot,FinanceSources,FinancialWindow,ProductRank } from './model';
 
 function corrupt(code:string):never{
@@ -34,7 +35,7 @@ export function computeCommercialSnapshot(input:{
  const orders=new Map<string,Order>();
  const paymentToOrder=new Map<string,string>();
  const orderToPayment=new Map<string,string>();
- const versions=new Map<string,Set<number>>();
+ const byPayment=new Map<string,OutboxRecord[]>();
  const createdIds=new Set<string>();
  let verifiedEvents=0;
  for(const order of sources.orders){
@@ -81,12 +82,12 @@ export function computeCommercialSnapshot(input:{
     corrupt('FINANCE_ORDER_MULTIPLE_PAYMENTS');
   paymentToOrder.set(e.paymentId,e.orderId);
   orderToPayment.set(e.orderId,e.paymentId);
-  const list=versions.get(e.paymentId)??new Set<number>();
-  if(list.has(e.paymentVersion))corrupt('FINANCE_PAYMENT_VERSION_DUPLICATE');
-  list.add(e.paymentVersion);versions.set(e.paymentId,list);
+  const list=byPayment.get(e.paymentId)??[];
+  if(list.length&&list[list.length-1].paymentVersion===e.paymentVersion)
+    corrupt('FINANCE_PAYMENT_VERSION_DUPLICATE');
+  list.push(e);byPayment.set(e.paymentId,list);
  }
- for(const paymentId of versions.keys()){
-  const sorted=events.filter(e=>e.paymentId===paymentId);
+ for(const sorted of byPayment.values()){
   if(sorted[0]?.paymentVersion!==1||sorted[0].kind!=='PAYMENT_INTENT_RESERVED'||
     sorted.some((e,i)=>e.paymentVersion!==i+1))
     corrupt('FINANCE_PAYMENT_VERSION_GAP');
@@ -170,6 +171,6 @@ export function computeCommercialSnapshot(input:{
   source:'CANONICAL_ORDERS_AND_TRANSACTIONAL_PAYMENT_OUTBOX',
   coverage:'T03_T04_ORDER_PAYMENTS_ONLY',
   reconciliation:{orders:orders.size,events:events.length,
-    distinctPayments:versions.size,verifiedEvents,errors:0},
+    distinctPayments:byPayment.size,verifiedEvents,errors:0},
  };
 }
