@@ -107,6 +107,13 @@ describe('T06 — integrated PDV/KDS versioned production port',()=>{
     signed:true,payload:await msg('READY','evt_2'),
   });
   expect(ready.state).toBe('READY');
+  // Retry of an old, already-verified provider event must not fail after a
+  // newer status (lastVerifiedExternalEventId) displaced its cached ID.
+  const oldReplay=await e.service.verifyAndApply(e.pdv.id,'pizza-a','main',{
+    signed:true,payload:preparing,
+  });
+  expect(oldReplay.version).toBe(ready.version);
+  expect(e.operations.events.filter(x=>x.name==='ProductionStarted')).toHaveLength(1);
   const dispatched=await e.service.verifyAndApply(e.pdv.id,'pizza-a','main',{
     signed:true,payload:await msg('OUT_FOR_DELIVERY','evt_3'),
   });
