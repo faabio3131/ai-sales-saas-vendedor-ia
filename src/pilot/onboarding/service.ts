@@ -111,6 +111,10 @@ export class PilotRegistrationService{
   if(!record){add('OWNER_DRAFT',false,'Missing real, tenant-scoped onboarding record.');
    return {checks,catalogVersion,profileVersion};}
   const d=record.data,a=d.address,m=d.menu,f=d.fulfillment;
+  // Settings may be staged for any business vertical. T08 *pilot* approval
+  // still applies only to the Food Service Pack; sector packs ship later.
+  add('PILOT_FOOD_SERVICE_VERTICAL',(d.vertical??'FOOD_SERVICE')==='FOOD_SERVICE',
+   'Other sectors may save tenant settings; their production pilot requires a separately certified vertical pack.');
   add('BUSINESS_IDENTITY',d.businessName.length>=3&&a.street.length>=3&&
    a.number.length>=1&&a.district.length>=2&&a.municipality.length>=2&&
    /^[A-Z]{2}$/.test(a.state)&&/^\d{8}$/.test(a.postalCode),
@@ -159,7 +163,7 @@ export class PilotRegistrationService{
    !!effectiveCatalog&&effectiveCatalog.version===catalog.version,
    'A future or expired T03 catalog cannot authorize the current pilot.',true);
   add('PUBLISHED_BUSINESS_PROFILE',!!profile&&
-   profile.capabilityRegistry.vertical==='FOOD_SERVICE'&&
+   profile.capabilityRegistry.vertical===(d.vertical??'FOOD_SERVICE')&&
    profile.identity.assistantName===d.assistantName&&
    profile.capabilityRegistry.capabilities.includes('ORDERING')&&
    profile.capabilityRegistry.capabilities.includes('PRODUCTION')&&
