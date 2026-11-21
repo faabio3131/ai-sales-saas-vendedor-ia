@@ -249,7 +249,8 @@ export class OrderPaymentService {
     const receiptRef=paymentId(input.receiptRef);
     // Require a recognizable POS/cash-register receipt identifier; bare card
     // numbers, CVV and payer input are never valid settlement evidence.
-    if(!/^(?=.*[A-Za-z])[A-Za-z0-9_:-]{8,96}$/.test(receiptRef))
+    if(!/^(?=.*[A-Za-z])[A-Za-z0-9_:-]{8,96}$/.test(receiptRef)||
+      /\d{13,19}/.test(receiptRef))
       denyPayment('ORDER_PAYMENT_RECEIPT_INVALID','VALIDATION');
     let actualTendered:number|undefined;
     if(payment.method==='CASH_ON_DELIVERY'){
