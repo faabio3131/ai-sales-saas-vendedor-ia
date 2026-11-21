@@ -32,7 +32,7 @@ O AtendeVendeIA possui um **núcleo de atendimento universal**, sem regras de pi
 - Proveniência das preferências exige referências a mensagens reais da mesma conversa/cliente/tenant; sem isso, a escrita falha.
 - Retenção em dias vem da versão vigente do perfil; leitura expirada retorna `null`, mesmo antes da limpeza física. O job `purge:business-memory` remove dados expirados por transação, com limites e logs sem PII.
 - Revogação apaga resumo e listas imediatamente e impede leitura do conteúdo. Exclusão definitiva é suportada, com CAS.
-- A saída `CommercialCustomerContextService` adiciona memória ao ContextPack T01 **apenas** quando o cliente consentiu e a retenção está válida.
+- A saída `CommercialCustomerContextService` inclui preferências do cliente no **campo de entrada não confiável** do T01, somente se houver consentimento vigente. Evidências empresariais aprovadas permanecem em `trustedFacts`; nenhuma frase originada do cliente pode ascender a instrução confiável.
 - A coleção legada `customerMemories` do CRM BLK-050 **não é usada como fonte para a cognição T02**. É uma função CRM anterior, sem políticas novas por unidade. Não migrar automaticamente os dados nem presumir consentimento retroativo. A migração/limpeza de históricos anteriores exige autorização e avaliação de retenção.
 
 ## 5. Segurança, identidade e limites de operação
