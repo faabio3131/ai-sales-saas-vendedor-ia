@@ -67,7 +67,9 @@ export class FirestoreOrderFinancialEventConsumer implements FinancialEventConsu
       collectedMinor:event.kind==='PAYMENT_CONFIRMED'?event.amountMinor:0,
       refundedMinor:event.kind==='PAYMENT_REFUNDED'?event.amountMinor:0,
       // An operator-recorded COD receipt is not evidence of bank settlement.
-      settlementEvidenceKind:event.provider==='OFFLINE'?'OPERATOR_ATTESTATION':'PSP_GET',
+      settlementEvidenceKind:event.verificationSource??'NONE',
+      ...(event.verifiedBy?{verifiedBy:event.verifiedBy}:{}),
+      ...(event.receiptRef?{receiptRef:event.receiptRef}:{}),
     };
     try{await ref.create(entry);}
     catch(error){
