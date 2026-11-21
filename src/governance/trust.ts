@@ -21,6 +21,32 @@ export interface TrustedInboundRepository {
  get(t:string,u:string,conversationId:string,messageId:string):Promise<TrustedInboundReceipt|null>;
 }
 export class FirestoreTrustedInboundRepository implements TrustedInboundRepository {
+ async recordVerified(event:TrustedInboundReceipt,orderId?:string,signals:string[]=[]):Promise<void>{
+  if(event.provenance!=='SIGNED_PROVIDER_WEBHOOK'||!event.proofRef||
+    !event.externalMessageId||!event.recipient||!event.customerId||
+    !Number.isFinite(Date.parse(event.verifiedAt)))
+   throw new Error('AUTONOMY_TRUST_RECEIPT_INVALID');
+  const db=getFirestore(ensureFirebaseAdminApp());
+  const ref=db.collection('governanceTrustedInboundMessages')
+   .doc(key(event.tenantId,event.unitId,event.conversationId,event.messageId));
+  const riskRef=orderId?db.collection('governanceOrderRiskAssessments')
+   .doc(key(event.tenantId,event.unitId,orderId)):null;
+  await db.runTransaction(async tx=>{
+   const old=(await tx.get(ref)).data() as TrustedInboundReceipt|undefined;
+   if(old&&JSON.stringify(old)!==JSON.stringify(event))
+    throw new Error('AUTONOMY_TRUST_RECEIPT_CONFLICT');
+   let prior:{signals?:string[];status?:string}|undefined;
+   if(riskRef)prior=(await tx.get(riskRef)).data() as typeof prior;
+   if(!old)tx.create(ref,event);
+   if(riskRef){
+    const list=[...new Set([...(prior?.signals??[]),...signals])].sort();
+    tx.set(riskRef,{tenantId:event.tenantId,unitId:event.unitId,
+     orderId,status:list.length?'REVIEW_REQUIRED':'CLEARED',
+     source:'VERIFIED_CUSTOMER_MESSAGE',signals:list,
+     lastVerifiedAt:event.verifiedAt,lastProviderEventId:event.externalMessageId});
+   }
+  });
+ }
  async get(t:string,u:string,c:string,m:string){
   const d=await getFirestore(ensureFirebaseAdminApp()).collection('governanceTrustedInboundMessages')
    .doc(key(t,u,c,m)).get();const r=d.data() as TrustedInboundReceipt|undefined;
