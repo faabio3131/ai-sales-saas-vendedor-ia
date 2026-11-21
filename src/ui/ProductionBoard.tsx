@@ -1,4 +1,4 @@
-import {useEffect,useState,type FormEvent} from 'react';
+import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {ChefHat,Truck,ShieldCheck,RefreshCw,AlertTriangle,PackageCheck} from 'lucide-react';
 
 type Mode='NATIVE_OPERATIONS'|'INTEGRATED_OPERATIONS';
@@ -55,6 +55,9 @@ export function ProductionBoard({tenantId,role}:{tenantId:string;role:string}){
  const [pickup,setPickup]=useState(10);
  const [connectorId,setConnectorId]=useState('');
  const [manualReason,setManualReason]=useState('Verificar recebimento externo antes de qualquer liberação manual');
+ // The queue polls every 15 seconds; a refresh must not erase edits being
+ // made to the versioned configuration form in another tab or slow connection.
+ const loadedSettingsKey=useRef('');
  useEffect(()=>{
    if(!authorized||!VALID_UNIT.test(unitId))return;
    const controller=new AbortController();
@@ -82,10 +85,14 @@ export function ProductionBoard({tenantId,role}:{tenantId:string;role:string}){
        const mode=b.data?.capabilityRegistry?.operationMode??'NATIVE_OPERATIONS';
        setProfileMode(mode);
        if(p.data){
-         setPrep(p.data.prepMinutes);setDelivery(p.data.deliveryMinutes);
-         setPickup(p.data.pickupMinutes);
-         setConnectorId(p.data.connectorId??'');
-         setPostalRanges(p.data.postalRanges);
+         const key=tenantId+':'+unitId+':'+p.data.version;
+         if(loadedSettingsKey.current!==key){
+           loadedSettingsKey.current=key;
+           setPrep(p.data.prepMinutes);setDelivery(p.data.deliveryMinutes);
+           setPickup(p.data.pickupMinutes);
+           setConnectorId(p.data.connectorId??'');
+           setPostalRanges(p.data.postalRanges);
+         }
        }
      }catch{
        if(!controller.signal.aborted)setError('Fila indisponível ou acesso não autorizado. Confira a unidade.');
