@@ -9,7 +9,7 @@ import type {
 
 const ID=/^[a-zA-Z0-9_-]{1,80}$/;
 const MAX_MINOR=100_000_000;
-export function catalogError(code:string,category:'VALIDATION'|'CONFLICT'|'NOT_FOUND'='VALIDATION'):never{
+export function catalogError(code:string,category:'VALIDATION'|'CONFLICT'|'NOT_FOUND'|'FORBIDDEN'='VALIDATION'):never{
   throw new ApplicationError({category,code,message:'Catalog request cannot be completed.'});
 }
 export function catalogId(value:unknown):string{
