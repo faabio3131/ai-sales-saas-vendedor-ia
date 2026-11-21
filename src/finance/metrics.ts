@@ -81,6 +81,8 @@ export function computeCommercialSnapshot(input:{
   if(sorted[0]?.paymentVersion!==1||sorted[0].kind!=='PAYMENT_INTENT_RESERVED'||
     sorted.some((e,i)=>e.paymentVersion!==i+1))
     corrupt('FINANCE_PAYMENT_VERSION_GAP');
+  if(sorted.some((e,i)=>i>0&&e.occurredAt<sorted[i-1].occurredAt))
+    corrupt('FINANCE_EVENT_TIME_REGRESSION');
  }
  const cutoff=window.endExclusive<window.asOf?window.endExclusive:window.asOf;
  const counts=new Map<string,{confirmed:boolean;refunded:boolean;lastKind?:string}>();
@@ -96,8 +98,11 @@ export function computeCommercialSnapshot(input:{
   a.occurredAt.localeCompare(b.occurredAt)||a.paymentVersion-b.paymentVersion)){
   const state=counts.get(e.orderId)??{confirmed:false,refunded:false};
   if(e.kind===receipt){
-    if(state.confirmed||e.verificationSource!=='PSP_GET'&&
-      e.verificationSource!=='OPERATOR_COD')
+    const offline=e.provider==='OFFLINE'&&
+      ['CASH_ON_DELIVERY','CARD_ON_DELIVERY'].includes(e.method);
+    const evidenceOK=offline?e.verificationSource==='OPERATOR_COD':
+      e.provider!=='OFFLINE'&&e.verificationSource==='PSP_GET';
+    if(state.confirmed||!evidenceOK)
       corrupt('FINANCE_UNVERIFIED_OR_DUPLICATE_RECEIPT');
     state.confirmed=true;verifiedEvents++;
     if(within(e.occurredAt,window.startInclusive,window.endExclusive))
@@ -122,6 +127,8 @@ export function computeCommercialSnapshot(input:{
   metrics.netSalesMinor=sum(metrics.netSalesMinor,order.totalMinor);
   metrics.orderCount++;
   const state=counts.get(order.id);
+  if(order.paymentState!=='NOT_REQUESTED'&&!orderToPayment.has(order.id))
+    corrupt('FINANCE_PAYMENT_OUTBOX_MISSING');
   if(!state?.confirmed)
     metrics.pendingReceivablesMinor=sum(metrics.pendingReceivablesMinor,order.totalMinor);
   for(const item of order.lines){
