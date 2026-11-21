@@ -36,7 +36,7 @@ export interface CreateOrderPaymentInput {
   providerId?:string;payerEmail?:string;cashTenderedMinor?:number;
 }
 export interface ConfirmOfflineCollectionInput {
-  expectedVersion:number;amountMinor:number;receiptRef:string;
+  expectedVersion:number;amountMinor:number;receiptRef:string;receivedMinor?:number;
 }
 export interface RefundOrderPaymentInput {expectedVersion:number;reason:string;}
 export interface OrderPaymentRepository {
