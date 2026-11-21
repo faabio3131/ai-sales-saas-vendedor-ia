@@ -47,10 +47,17 @@ export function computeCommercialSnapshot(input:{
     !Number.isSafeInteger(order.discountMinor)||order.discountMinor<0||
     order.subtotalMinor+order.deliveryFeeMinor-order.discountMinor!==order.totalMinor)
     corrupt('FINANCE_ORDER_TOTAL_MISMATCH');
+  if(order.status==='CONFIRMED'&&!order.customerConfirmation)
+    corrupt('FINANCE_ORDER_CONFIRMATION_MISSING');
   if(order.customerConfirmation&&(
     !validInstant(order.customerConfirmation.at)||
-    order.customerConfirmation.totalMinor!==order.totalMinor))
+    order.customerConfirmation.totalMinor!==order.totalMinor||
+    order.customerConfirmation.at<order.createdAt))
     corrupt('FINANCE_CONFIRMATION_MISMATCH');
+  if(order.status==='CONFIRMED'){
+    const lineSum=order.lines.reduce((total,line)=>sum(total,line.totalMinor),0);
+    if(lineSum!==order.subtotalMinor)corrupt('FINANCE_SNAPSHOT_LINE_TOTAL_MISMATCH');
+  }
   orders.set(order.id,order);
  }
  const events=[...sources.events].sort((a,b)=>
