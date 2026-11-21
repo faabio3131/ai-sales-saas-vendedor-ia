@@ -29,7 +29,7 @@ A leitura requer BusinessProfile T02 efetivo com timezone válido. Unidade padr�
 - Confirmar que o T04 registra outbox atomically com mudanças financeiras, que a unidade e tenant são consistentes e que não existem lacunas de versão.
 - A agregação verifica exatamente as evidências de PSP_GET vs OPERATOR_COD, o valor total do pedido, a unicidade payment/order e timestamps ordenados.
 - Os números do painel **não** dependem do worker de entrega do outbox estar em dia, mas o monitoramento da DLQ continua obrigatório.
-- Limite atual da consulta direta: 5.000 pedidos e 5.000 eventos por unidade. Acima disso a API retorna erro de integridade; executar um projeto de agregação/materialização escalável antes de atender unidades maiores. Não retornar valores truncados.
+- Limite atual da consulta direta: **100.000 pedidos e 100.000 eventos por unidade**, usando paginação Firestore de 500 documentos. Acima disso a API retorna erro de integridade; executar um projeto de agregação/materialização escalável antes de atender unidades maiores. Não retornar valores truncados.
 - Se taxas de gateway não estão comprovadas, marcar feeCoverage NOT_REPORTED_BY_VERIFIED_PSP_FEED, não apresentar margem, lucro ou receita líquida fiscal.
 - Pagar.me/Inter/BB/PagBank e outros providers continuam sujeitos à homologação da T04/T08; a T05 não habilita cobranças.
 
