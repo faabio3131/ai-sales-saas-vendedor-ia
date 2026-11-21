@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {getFirestore} from 'firebase-admin/firestore';
+import {getFirestore,FieldPath,type QueryDocumentSnapshot} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {ApplicationError} from '../infrastructure/errors';
 import type {Order} from '../orders/model';
@@ -13,24 +13,39 @@ function failed(code:string):never{
  throw new ApplicationError({category:'CONFLICT',code,
    message:'Financial data integrity cannot be established.'});
 }
-const MAX_SOURCES=5000;
+// A bounded, paginated scan prevents the original 5,000-document truncation
+// from silently breaking a busy restaurant after a few weeks. At 100k the
+// service fails closed and requires a materialized projection, not fake totals.
+const MAX_SOURCES=100_000;
+const PAGE_SIZE=500;
+async function collect<T extends {tenantId:string;unitId:string}>(
+ collection:string,tenantId:string,unitId:string):Promise<T[]>{
+ const records:T[]=[];
+ const base=db().collection(collection).where('tenantId','==',tenantId)
+   .where('unitId','==',unitId).orderBy(FieldPath.documentId());
+ let cursor:QueryDocumentSnapshot|undefined;
+ do{
+  const page=await (cursor?base.startAfter(cursor):base).limit(PAGE_SIZE).get();
+  if(page.empty)break;
+  if(records.length+page.size>MAX_SOURCES)failed('FINANCE_SOURCE_LIMIT_EXCEEDED');
+  for(const d of page.docs){
+   const record=d.data() as T;
+   if(record.tenantId!==tenantId||record.unitId!==unitId)
+     failed('FINANCE_SCOPE_VIOLATION');
+   records.push(record);
+  }
+  cursor=page.docs.at(-1);
+  if(page.size<PAGE_SIZE)break;
+ }while(cursor);
+ return records;
+}
 export class FirestoreFinanceSourceRepository implements FinanceSourceRepository{
  async read(tenantId:string,unitId:string):Promise<FinanceSources>{
   const [orders,events]=await Promise.all([
-   db().collection('orders').where('tenantId','==',tenantId)
-     .where('unitId','==',unitId).limit(MAX_SOURCES+1).get(),
-   db().collection('orderPaymentOutbox').where('tenantId','==',tenantId)
-     .where('unitId','==',unitId).limit(MAX_SOURCES+1).get(),
+   collect<Order>('orders',tenantId,unitId),
+   collect<OutboxRecord>('orderPaymentOutbox',tenantId,unitId),
   ]);
-  // Never serve partial totals. Sharding/aggregation becomes mandatory at
-  // scale rather than returning plausible but incorrect financial reports.
-  if(orders.size>MAX_SOURCES||events.size>MAX_SOURCES)failed('FINANCE_SOURCE_LIMIT_EXCEEDED');
-  const os=orders.docs.map(d=>d.data() as Order);
-  const ev=events.docs.map(d=>d.data() as OutboxRecord);
-  if(os.some(o=>o.tenantId!==tenantId||o.unitId!==unitId)||
-    ev.some(e=>e.tenantId!==tenantId||e.unitId!==unitId))
-    failed('FINANCE_SCOPE_VIOLATION');
-  return {orders:os,events:ev};
+  return {orders,events};
  }
 }
 export class FirestoreFinanceSettingsRepository implements FinanceSettingsRepository {
