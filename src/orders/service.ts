@@ -14,7 +14,7 @@ import type {
 const ALLOWED_ROLES=['OWNER','ADMIN','MANAGER','ATTENDANT','OPERATOR','STAFF'];
 function authorize(ctx:TenantContext):void{
   if(!ctx.userId?.trim()||!ALLOWED_ROLES.includes(ctx.role??''))
-    catalogError('ORDER_OPERATOR_UNAUTHORIZED','CONFLICT');
+    catalogError('ORDER_OPERATOR_UNAUTHORIZED','FORBIDDEN');
 }
 function allowedKeys(value:object,keys:string[]):void{
   if(Object.keys(value).some(k=>!keys.includes(k)))catalogError('ORDER_FIELDS_INVALID');
