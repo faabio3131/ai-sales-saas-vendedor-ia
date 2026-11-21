@@ -145,7 +145,7 @@ export function FinancialPanel({tenantId,role}:{tenantId:string;role:string}){
    </p>}
    {snapshot&&<>
     <p className="mt-4 text-xs text-slate-500">
-     {snapshot.window.timezone} · {snapshot.window.startInclusive.slice(0,10)} a {snapshot.window.endExclusive.slice(0,10)} (fim exclusivo).
+     {snapshot.window.timezone} · {snapshot.window.startLocalDate} a {snapshot.window.endLocalDate} (fim exclusivo).
     </p>
     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
      {[
