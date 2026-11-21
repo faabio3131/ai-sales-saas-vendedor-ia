@@ -6,6 +6,7 @@ import { TenantContext } from '../types/contracts';
 import { PaymentProviderInterface, PaymentRepository, PaymentWebhookEventRepository } from './contracts';
 import { CreatePaymentInput, Payment, PaymentStatus } from './model';
 import { PaymentMethodsService } from './methods';
+import type {PaymentProviderResolver} from './resolver';
 
 export class PaymentService {
   constructor(
@@ -15,6 +16,7 @@ export class PaymentService {
     private readonly provider: PaymentProviderInterface,
     private readonly confirmationObserver?: PaymentConfirmationObserver,
     private readonly methodSettings?: PaymentMethodsService,
+    private readonly providerResolver?: PaymentProviderResolver,
   ) {}
 
   private tenant(context: TenantContext): string {
@@ -82,9 +84,10 @@ export class PaymentService {
 
     let providerResult;
     try {
+      const provider=this.providerResolver ? await this.providerResolver.forNewPayment(tenantId,input.providerId) : this.provider;
       providerResult = input.method === 'PIX'
-        ? await this.provider.createPix(request)
-        : await this.provider.createPaymentLink(request);
+        ? await provider.createPix(request)
+        : await provider.createPaymentLink(request);
     } catch (error) {
       if (error instanceof ApplicationError) throw error;
       throw new ApplicationError({ category:'PROVIDER', code:'PAYMENT_PROVIDER_ERROR', message:'Payment provider failed.', retryable:true });
@@ -119,7 +122,8 @@ export class PaymentService {
     const payment = await this.get(context, id);
     if (!payment.providerPaymentId) return payment;
     let result;
-    try { result = await this.provider.getPaymentStatus(payment.providerPaymentId); }
+    try { const provider=this.providerResolver ? await this.providerResolver.forRecordedPayment(payment) : this.provider;
+      result = await provider.getPaymentStatus(payment.providerPaymentId); }
     catch (error) {
       if (error instanceof ApplicationError) throw error;
       throw new ApplicationError({ category:'PROVIDER', code:'PAYMENT_PROVIDER_ERROR', message:'Payment provider failed.', retryable:true });

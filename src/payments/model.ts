@@ -28,6 +28,7 @@ export interface CreatePaymentInput {
   method: 'PIX' | 'PAYMENT_LINK' | 'PIX_MANUAL' | 'CARD_ON_DELIVERY' | 'CASH_ON_DELIVERY';
   idempotencyKey: string;
   payerEmail?: string;
+  providerId?: string;
 }
 
 export interface ProviderPaymentRequest {

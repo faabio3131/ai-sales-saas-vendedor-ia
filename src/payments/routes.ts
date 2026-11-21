@@ -8,6 +8,9 @@ import { StructuralPaymentProvider } from './provider';
 import { PaymentService } from './service';
 import { MercadoPagoPixProvider, mercadoPagoSettingsFromEnv } from './mercadoPago';
 import { FirestorePaymentMethodsRepository, PaymentMethodsService } from './methods';
+import { FirestoreMerchantProviderConnectionRepository, MerchantPaymentConnectionsService } from './connections';
+import { TenantPaymentProviderResolver } from './resolver';
+import { PAYMENT_PROVIDER_CATALOG } from './providerCatalog';
 
 function requireContext(req: Request) {
   if (!req.tenantContext) throw new ApplicationError({ category:'FORBIDDEN', code:'TENANT_CONTEXT_REQUIRED', message:'Tenant context is required.' });
@@ -25,6 +28,11 @@ export function createPaymentsRouter(): Router {
   const methodSettings = new PaymentMethodsService(new FirestorePaymentMethodsRepository());
   const mpConfig=mercadoPagoSettingsFromEnv();
   const provider=mpConfig?new MercadoPagoPixProvider(mpConfig):new StructuralPaymentProvider();
+  const connectionRepo=new FirestoreMerchantProviderConnectionRepository();
+  const connectionService=new MerchantPaymentConnectionsService(connectionRepo);
+  const adapterMap=new Map<string,import('./contracts').PaymentProviderInterface>();
+  if(mpConfig) adapterMap.set('MERCADOPAGO',provider);
+  const resolver=new TenantPaymentProviderResolver(connectionRepo,adapterMap);
   const service = new PaymentService(
     new FirestorePaymentRepository(),
     new FirestorePaymentWebhookEventRepository(),
@@ -32,11 +40,22 @@ export function createPaymentsRouter(): Router {
     provider,
     fiscalObserver,
     methodSettings,
+    resolver,
   );
 
   router.post('/webhook/mercadopago', async (_req, _res, next) => {
     next(new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_WEBHOOK_DEDICATED_ROUTE',message:'Use dedicated payment webhook endpoint.'}));
   });
+  router.get('/providers', (_req,res) => res.status(200).json({ok:true,data:PAYMENT_PROVIDER_CATALOG}));
+  router.get('/connections', async (req,res,next) => {
+    try {res.status(200).json({ok:true,data:await connectionService.overview(requireContext(req))});}
+    catch(error){next(error);}
+  });
+  router.put('/connections/preference', async (req,res,next) => {
+    try {res.status(200).json({ok:true,data:await connectionService.setPreference(requireContext(req),req.body)});}
+    catch(error){next(error);}
+  });
+
   router.get('/methods', async (req, res, next) => {
     try { res.status(200).json({ ok:true, data:await methodSettings.get(requireContext(req)) }); } catch (error) { next(error); }
   });
