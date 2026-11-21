@@ -352,6 +352,9 @@ describe('T04 — Confirmed order to bank payment, separate state machines',()=>
   await expect(e.service.collect(tenant(),'main',p.orderId,{
    expectedVersion:2,amountMinor:1,receiptRef:'cash-receipt-001',
   })).rejects.toMatchObject({code:'ORDER_PAYMENT_COLLECTION_AMOUNT_MISMATCH'});
+  await expect(e.service.collect(tenant(),'main',p.orderId,{
+   expectedVersion:2,amountMinor:5500,receiptRef:'POS-4111111111111111',receivedMinor:10000,
+  })).rejects.toMatchObject({code:'ORDER_PAYMENT_RECEIPT_INVALID'});
   await expect(e.service.collect(tenant('pizza-a','CASHIER'),'main',p.orderId,{
    expectedVersion:2,amountMinor:5500,receiptRef:'cash-receipt-001',
   })).rejects.toMatchObject({code:'ORDER_PAYMENT_CASH_RECEIVED_REQUIRED'});
@@ -444,6 +447,28 @@ describe('T04 — Outbox, reconciliation and authenticated webhook',()=>{
   expect(result).toMatchObject({scanned:1,manualReview:1,refreshed:0});
   expect(repo.investigation).toHaveBeenCalledWith(candidate,'PROVIDER_PAYMENT_REFERENCE_UNKNOWN');
   expect(e.psp.calls.pix).toBe(1);
+ });
+ it('escalates a refund stuck for more than 24 hours without sending another refund',async()=>{
+  const e=await fixture();
+  const p=await e.service.create(tenant(),'main','order_confirmed001',online());
+  e.psp.statuses.set('pay_123','CONFIRMED');
+  const paid=await e.service.refresh(tenant(),'main',p.id);
+  e.psp.allowRefund=false;
+  const pending=await e.service.refund(tenant(),'main',p.orderId,{
+   expectedVersion:paid.version,reason:'Cancelamento aprovado',
+  });
+  const repo:OrderPaymentReconciliationRepository={
+   candidates:vi.fn(async()=>[pending]),
+   claim:vi.fn(async()=>true),
+   finish:vi.fn(async()=>{}),
+   investigation:vi.fn(async()=>{}),
+  };
+  const worker=new OrderPaymentReconciliationWorker(repo,e.service,
+   ()=>Date.parse(NOW)+25*60*60*1000);
+  const result=await worker.runOnce();
+  expect(result).toMatchObject({scanned:1,manualReview:1,refreshed:0});
+  expect(repo.investigation).toHaveBeenCalledWith(pending,'REFUND_REQUIRES_MANUAL_REVIEW');
+  expect(e.psp.calls.refund).toBe(1);
  });
  it('validates signed Asaas callback and then re-fetches PSP status for new order payment',async()=>{
   const e=await fixture();
