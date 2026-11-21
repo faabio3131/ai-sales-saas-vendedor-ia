@@ -13,6 +13,7 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
   constructor(
     private readonly connections:MerchantProviderConnectionRepository,
     private readonly adapters:ReadonlyMap<string,PaymentProviderInterface>,
+    private readonly createAdapter?:(connection:import('./connections').MerchantProviderConnection)=>Promise<PaymentProviderInterface>,
   ){}
   async forNewPayment(tenantId:string,providerId?:string):Promise<PaymentProviderInterface> {
     if(!tenantId.trim()) throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_TENANT_REQUIRED',message:'Tenant required.'});
@@ -24,14 +25,12 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
     if(connection?.status!=='ACTIVE'||!connection.recipientId||!connection.credentialRef) {
       throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_CONNECTION_NOT_ACTIVE',message:'Payment connection is not active.'});
     }
-    const adapter=this.adapters.get(id);
+    const adapter=this.adapters.get(id)??(this.createAdapter?await this.createAdapter(connection):undefined);
     if(!adapter||adapter.id!==id) throw new ApplicationError({category:'PROVIDER',code:'PAYMENT_PROVIDER_NOT_CONFIGURED',message:'Provider credentials are not available.'});
-    // The current Mercado Pago adapter enforces the exact merchant tenant and recipient.
-    if(id==='MERCADOPAGO') {
-      const mp=adapter as MercadoPagoPixProvider;
-      if(mp.tenantId!==tenantId||mp.recipientId!==connection.recipientId) {
-        throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_RECIPIENT_MISMATCH',message:'Merchant identity is not verified.'});
-      }
+    // Each merchant adapter must prove the tenant and recipient match the trusted binding.
+    const bound=adapter as MercadoPagoPixProvider;
+    if(bound.tenantId!==tenantId||bound.recipientId!==connection.recipientId) {
+      throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_RECIPIENT_MISMATCH',message:'Merchant identity is not verified.'});
     }
     return adapter;
   }

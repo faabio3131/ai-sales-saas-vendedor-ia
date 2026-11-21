@@ -7,6 +7,8 @@ import { PaymentProviderInterface, PaymentRepository, PaymentWebhookEventReposit
 import { CreatePaymentInput, Payment, PaymentStatus } from './model';
 import { PaymentMethodsService } from './methods';
 import type {PaymentProviderResolver} from './resolver';
+import type {PaymentCreationIntentRepository} from './creationIntent';
+import {pagarmeOrderReference} from './pagarme';
 
 export class PaymentService {
   constructor(
@@ -17,6 +19,7 @@ export class PaymentService {
     private readonly confirmationObserver?: PaymentConfirmationObserver,
     private readonly methodSettings?: PaymentMethodsService,
     private readonly providerResolver?: PaymentProviderResolver,
+    private readonly creationIntents?:PaymentCreationIntentRepository,
   ) {}
 
   private tenant(context: TenantContext): string {
@@ -85,6 +88,11 @@ export class PaymentService {
     let providerResult;
     try {
       const provider=this.providerResolver ? await this.providerResolver.forNewPayment(tenantId,input.providerId) : this.provider;
+      // Claim before non-atomic external I/O: unknown outcomes must be reconciled, not retried blindly.
+      if(this.creationIntents)await this.creationIntents.reserve({
+        tenantId,paymentId,quoteId:quote.id,method:input.method,providerId:provider.id,
+        createdAt:new Date().toISOString(),
+      });
       providerResult = input.method === 'PIX'
         ? await provider.createPix(request)
         : await provider.createPaymentLink(request);
@@ -134,9 +142,11 @@ export class PaymentService {
 
   private assertVerified(payment:Payment, result: import('./model').ProviderPaymentResult):void {
     if(result.provider!==payment.provider || result.providerPaymentId!==payment.providerPaymentId ||
-      (payment.provider==='MERCADOPAGO' &&
+      (['MERCADOPAGO','EFI','ASAAS','BANCO_INTER','BANCO_DO_BRASIL','PAGARME'].includes(payment.provider) &&
         (result.amountMinor!==payment.amountMinor ||
-         result.referenceId!==payment.tenantId+':'+payment.quoteId))) {
+         result.referenceId!==(payment.provider==='PAGARME'
+           ? pagarmeOrderReference(payment.tenantId,payment.quoteId)
+           : payment.tenantId+':'+payment.quoteId)))) {
       throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_PROVIDER_RECONCILIATION_FAILED',message:'Payment verification failed.'});
     }
   }
