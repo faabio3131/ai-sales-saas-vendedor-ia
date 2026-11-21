@@ -3,6 +3,7 @@ import { Activity, Bot, Boxes, LockKeyhole, MessageCircle, RefreshCw, Target, Us
 import { resolveWorkspaceMemberships, WorkspaceMembership } from './workspaceAccess';
 import { FinancialPanel } from './FinancialPanel';
 import { ProductionBoard } from './ProductionBoard';
+import { PilotOnboardingPanel } from './PilotOnboardingPanel';
 
 interface AttentionItem {
   kind: string;
@@ -217,6 +218,9 @@ export function ProductWorkspaceView() {
       </section>
       {(selectedMembership.role === 'OWNER' || selectedMembership.role === 'ADMIN') && (
         <FinancialPanel key={tenantId} tenantId={tenantId} role={selectedMembership.role} />
+      )}
+      {selectedMembership.role === 'OWNER' && (
+        <PilotOnboardingPanel key={'onboarding-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
       )}
       <ProductionBoard key={'production-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
         </>
