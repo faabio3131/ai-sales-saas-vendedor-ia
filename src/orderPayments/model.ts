@@ -43,7 +43,7 @@ export interface OrderPaymentRepository {
   byOrder(tenantId:string,unitId:string,orderId:string):Promise<OrderPayment|null>;
   byIdempotency(tenantId:string,unitId:string,key:string):Promise<OrderPayment|null>;
   byProvider(tenantId:string,provider:string,providerPaymentId:string):Promise<OrderPayment|null>;
-  reserve(payment:OrderPayment):Promise<OrderPayment>;
+  reserve(payment:OrderPayment):Promise<{payment:OrderPayment;created:boolean}>;
   transition(next:OrderPayment,expectedVersion:number,event:OrderPaymentEventKind):Promise<OrderPayment>;
 }
 export interface OutboxRepository {
