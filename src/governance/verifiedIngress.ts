@@ -31,7 +31,7 @@ export class VerifiedCommercialChannelIngress {
   const receipts:TrustedInboundReceipt[]=[];
   for(const event of verified.data){
    if(event.tenantId!==tenantId||event.channel!=='WHATSAPP'||event.type!=='TEXT'||
-     !event.externalMessageId||!event.text||!event.sender||
+     !event.externalMessageId||!event.externalConversationId||!event.text||!event.sender||
      !Number.isFinite(Date.parse(event.occurredAt)))
     deny('AUTONOMY_WEBHOOK_MESSAGE_INVALID');
    const conversation=await this.conversations.findByExternalConversationId(
