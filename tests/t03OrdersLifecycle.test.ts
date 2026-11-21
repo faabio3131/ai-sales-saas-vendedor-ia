@@ -4,15 +4,14 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import type { CustomerRepository } from '../src/customers/contracts';
 import type { Customer } from '../src/customers/model';
-import type { Order,OrderRepository,OrderConfirmationEvidence } from '../src/orders/model';
-import type { TenantContext } from '../src/types/contracts';
+import type { Order,OrderRepository,OrderConfirmationEvidence,CreateOrderInput } from '../src/orders/model';
 import type { ConversationRepository,MessageRepository } from '../src/conversations/contracts';
 import type { Conversation,Message } from '../src/conversations/model';
 import { OrderService } from '../src/orders/service';
 import { createOrdersRouter } from '../src/orders/routes';
 import { ConversationOrderConfirmationVerifier } from '../src/orders/confirmationVerifier';
 import { errorHandler } from '../src/api/middleware/errorHandler';
-import { catalogInput,catalogFixture,ctx,NOW,profiles,InMemoryCatalog } from './helpers/t03Fixtures';
+import { catalogInput,catalogFixture,ctx,NOW,profiles } from './helpers/t03Fixtures';
 
 class MemoryOrderRepository implements OrderRepository {
   readonly orders=new Map<string,Order>();
@@ -81,13 +80,13 @@ class MemoryCustomers {
   ];
   async findById(t:string,id:string){return this.customers.find(c=>c.tenantId===t&&c.id===id)??null;}
 }
-function basicDraft(overrides:Record<string,unknown>={}){
+function basicDraft(overrides:Record<string,unknown>={}):CreateOrderInput{
   return {
     customerId:'cust-a',idempotencyKey:'order_request_001',expectedCatalogVersion:1,
     lines:[{catalogItemId:'pizza',quantity:1,sizeId:'g',flavorIds:['marg','calab'],
       borderId:'cat',addonIds:['bacon']}],
     fulfillment:{kind:'PICKUP'},...overrides,
-  };
+  } as CreateOrderInput;
 }
 async function fixture(unitId='main',tenantId='pizza-a'){
   const cat=await catalogFixture(unitId,tenantId);
