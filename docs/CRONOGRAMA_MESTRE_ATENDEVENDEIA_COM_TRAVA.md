@@ -64,7 +64,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 ### 1.2 Desacoplamento de Dependências Externas
 - **Trilha 1 (`T01` a `T07` — Construção Interna 100%):** Zero bloqueio por órgão externo, credencial real de PSP, conta WhatsApp ou cadastro da Pizzaria Americana. Validação feita por contratos oficiais, adapters sandbox/mock determinístico, testes de isolamento e smoke runtime.
-- **Trilha 2 (`T08.1` a `T08.5` — Piloto Pizzaria Americana & Go-Live):** Permanece **`🔒 BLOQUEADA`** até a certificação integral da **`T07`**. Apenas levantamento preliminar de dados da loja, sem ativação, pode ocorrer em paralelo.
+- **Trilha 2 (`T08.1` a `T08.5` — Piloto Pizzaria Americana & Go-Live):** T07 certificada e T08.1 autorizada em 21/11/2026. O cadastro técnico/fluxo de aceite está implementado, porém **o gate T08.1 continua `NO_GO` até o aceite autenticado da proprietária sobre dados e modo reais**. T08.2–T08.5 seguem bloqueadas; sem habilitar conta, banco, canal ou produção.
 - **Trilha 3 (`T09` a `T12` — Expansão multissetorial):** Permanece **`🔒 BLOQUEADA`** até certificação da **`T08.5`** e autorização expressa; não pode atrasar ou contaminar o piloto alimentar.
 
 ### 1.3 Regras de emissão, qualidade e congelamento
@@ -96,7 +96,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 | ID | Gate / Trava | Etapa do Piloto e Certificação Externa | Prazo Est. | Status | Data Entrega | Evidência (Runbook / Logs / Aprovação) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T08.1** | `🔒 Aprovação humana de avanço pós-T07 + validação proprietária real` | Cadastro real da pizzaria, validação e escolha de modo operacional | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Validação Proprietária ___` |
+| **T08.1** | `✅ Autorizada em 21/11/2026 após T07` | Cadastro real da pizzaria, validação e escolha de modo operacional | 3d | `[ ] ENGENHARIA INTERNA PRONTA; ACEITE REAL PROPRIETÁRIA PENDENTE` | `21/11/2026 (código)` | `docs/T08_1_ENGINEERING_CERTIFICATION.md / owner approval ainda NO_GO` |
 | **T08.2** | `🔒 Finalize T08.1` | Credenciais Externas Isoladas (Conta PSP Pix + WhatsApp Oficial) | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Cofre / Teste Pix Real ___` |
 | **T08.3** | `🔒 Finalize T08.2` | Deploy Contabo, Feature Flag do Piloto, Backup e Rollback | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Healthcheck / Rollback ___` |
 | **T08.4** | `🔒 Finalize T08.3` | Certificação E2E das 10 jornadas + modo escolhido e testes dos 2 contratos | 4d | `[ ] BLOQUEADO` | `__/__/____` | `Relatório 10/10 Jornadas ___` |
@@ -178,8 +178,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Testes adversariais proíbem a IA de modificar `OPERATION_MODE`, habilitar integração externa inexistente, fabricar estado, conceder permissões, acessar finanças administrativas ou realizar estorno sem RBAC.
 - **Evidência de fechamento:** `docs/T07_CLOSURE_CERTIFICATION.md`; commit funcional `588d6ce4491cb14ea4380b8edeedb276dc364c1e`, CI https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44957683634.
 
-### T08 — Piloto Pizzaria Americana (`🔒 Travado em T07`)
-- **T08.1:** Cadastro real validado pela proprietária (nome da atendente, cardápio, regra meio a meio, horários, taxas, perfis) e **escolha explícita do modo** `NATIVE_OPERATIONS` ou `INTEGRATED_OPERATIONS`, com registro da decisão por tenant/unidade. A coleta preliminar nesta semana não destrava este gate.
+### T08 — Piloto Pizzaria Americana (`🔒 T08.1 em validação proprietária; T08.2–T08.5 bloqueadas`)
+- **T08.1:** Engenharia do cadastro concluída sob `src/pilot/onboarding`, com painel proprietário, CAS/versionamento, auditoria, comparação com T02/T03, 58 receitas + 5 combos preliminares preservados, seleção explícita de modo e aceite autenticado. **A validação proprietária REAL (nome da atendente, município/CEP, preços das pizzas/combos, regra meio a meio, horários, taxas, perfis, tenant/unidade e modo escolhido) não foi realizada; nenhum desses dados pode ser inferido de imagens ou fontes públicas. Até o aceite real, `NO_GO` e T08.2 travada.** Ver `docs/T08_1_OWNER_VALIDATION_RUNBOOK.md`.
 - **T08.2:** Configuração de conta habilitada no PSP Pix no cofre isolado + canal WhatsApp autorizado e webhook HTTPS.
 - **T08.3:** Inspecionar a topologia real antes do deploy: há registro anterior de backend no Google Cloud Run e worker preparado para Contabo; escolher/preservar o destino efetivo mediante aprovação sem migração presumida. Deploy isolado, feature flag do piloto, versão certificada de API/worker, vault compatível, backup testado e rollback.
 - **T08.4:** Certificação evidenciada das **10 Jornadas Obrigatórias de Aceite** (Atendimento, Pedido, Entrega, Pix, Produção, Notificação, Financeiro, Exceções, Isolamento e Resiliência) no **modo escolhido**. Verificação documental dos testes de contrato de ambos os modos. Se o modo for integrado, exigir homologação real do PDV/KDS escolhido antes do aceite; caso nativo, não inventar integração externa.
