@@ -160,6 +160,10 @@ describe('T05 — reconstructible commercial finance ledger',()=>{
    weekStartsOn:1,now:NOW});
   expect(Date.parse(spring.endExclusive)-Date.parse(spring.startInclusive)).toBe(23*3600_000);
   expect(Date.parse(autumn.endExclusive)-Date.parse(autumn.startInclusive)).toBe(25*3600_000);
+  const tokyo=resolveWindow({period:'day',anchor:'2026-11-21',timezone:'Asia/Tokyo',
+    weekStartsOn:1,now:NOW});
+  expect(tokyo.startLocalDate).toBe('2026-11-21');
+  expect(tokyo.startInclusive).toBe('2026-11-20T15:00:00.000Z');
  });
  it('rejects invalid dates, timezones, and tampered settings payload',async()=>{
   const f=fixture();
