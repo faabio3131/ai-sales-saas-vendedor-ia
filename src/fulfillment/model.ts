@@ -90,6 +90,8 @@ export interface ProductionAdapterRegistry {
 }
 export interface OperationRepository {
   get(tenantId:string,unitId:string,orderId:string):Promise<OperationRecord|null>;
+  /** Persistent inbox lookup also deduplicates old events after newer status changes. */
+  hasInbox(tenantId:string,unitId:string,orderId:string,inboxKey:string):Promise<boolean>;
   list(tenantId:string,unitId:string):Promise<OperationRecord[]>;
   start(operation:OperationRecord,event:OperationEvent,work:'DISPATCH'|'CUSTOMER_NOTICE'):Promise<OperationRecord>;
   advance(next:OperationRecord,expectedVersion:number,event:OperationEvent,
