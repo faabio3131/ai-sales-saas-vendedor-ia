@@ -8,6 +8,7 @@ import { CreatePaymentInput, Payment, PaymentStatus } from './model';
 import { PaymentMethodsService } from './methods';
 import type {PaymentProviderResolver} from './resolver';
 import type {PaymentCreationIntentRepository} from './creationIntent';
+import {pagarmeOrderReference} from './pagarme';
 
 export class PaymentService {
   constructor(
@@ -143,7 +144,9 @@ export class PaymentService {
     if(result.provider!==payment.provider || result.providerPaymentId!==payment.providerPaymentId ||
       (['MERCADOPAGO','EFI','ASAAS','BANCO_INTER','BANCO_DO_BRASIL','PAGARME'].includes(payment.provider) &&
         (result.amountMinor!==payment.amountMinor ||
-         result.referenceId!==payment.tenantId+':'+payment.quoteId))) {
+         result.referenceId!==(payment.provider==='PAGARME'
+           ? pagarmeOrderReference(payment.tenantId,payment.quoteId)
+           : payment.tenantId+':'+payment.quoteId)))) {
       throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_PROVIDER_RECONCILIATION_FAILED',message:'Payment verification failed.'});
     }
   }

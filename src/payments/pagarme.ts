@@ -1,6 +1,10 @@
 import type {ProviderPaymentRequest,ProviderPaymentResult} from './model';
 import {createHash} from 'node:crypto';
-import {PixOnlyProvider,ProviderTransport,fail,obj,str,minor,reference} from './bankCommon';
+import {PixOnlyProvider,ProviderTransport,fail,obj,str,minor} from './bankCommon';
+/** Pagar.me order code is limited to 52 chars; use a stable collision-resistant tenant-scoped ID. */
+export function pagarmeOrderReference(tenantId:string,quoteId:string):string {
+ return 'av-'+createHash('sha256').update(tenantId+'\x00'+quoteId).digest('hex').slice(0,40);
+}
 export interface PagarmeSettings {
  tenantId:string;recipientId:string;request:ProviderTransport;
  resolveCustomer:(customerId:string)=>Promise<string|null>;
@@ -31,14 +35,14 @@ export class PagarmePixProvider extends PixOnlyProvider {
   const customer=await this.cfg.resolveCustomer(input.customerId);
   if(!customer||!/^cus_[A-Za-z0-9]+$/.test(customer))return fail('PAGARME_CUSTOMER_NOT_MAPPED');
   const payload={
-   code:reference(input),customer_id:customer,
+   code:pagarmeOrderReference(input.tenantId,input.referenceId),customer_id:customer,
    items:[{amount:input.amountMinor,description:'Pedido '+input.referenceId,quantity:1,code:input.referenceId}],
    payments:[{payment_method:'pix',pix:{expires_in:3600}}],
    closed:true,
   };
   const idempotency=createHash('sha256').update(input.tenantId+'\x00'+input.idempotencyKey).digest('hex');
   const result=this.normalize(await this.cfg.request('/core/v5/orders','POST',payload,{'Idempotency-Key':idempotency}));
-  if(result.amountMinor!==input.amountMinor||result.referenceId!==reference(input))return fail('PAGARME_CHARGE_MISMATCH');
+  if(result.amountMinor!==input.amountMinor||result.referenceId!==pagarmeOrderReference(input.tenantId,input.referenceId))return fail('PAGARME_CHARGE_MISMATCH');
   if(!result.pixCode)return fail('PAGARME_QR_UNAVAILABLE');
   return result;
  }

@@ -1,7 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import {PixCobBankProvider} from '../src/payments/pixCobBanks';
 import {AsaasPixProvider} from '../src/payments/asaas';
-import {PagarmePixProvider} from '../src/payments/pagarme';
+import {PagarmePixProvider,pagarmeOrderReference} from '../src/payments/pagarme';
 import {PAYMENT_PROVIDER_CATALOG} from '../src/payments/providerCatalog';
 import {providerTransport,bankEndpoints} from '../src/payments/bankTransport';
 import type {ProviderTransport} from '../src/payments/bankCommon';
@@ -48,10 +48,10 @@ describe('Five Pix provider adapters',()=>{
    resolveCustomer:async()=>null}).createPix(request)).rejects.toMatchObject({code:'ASAAS_CUSTOMER_NOT_MAPPED'});
  });
  it('Pagar.me builds a Pix order and verifies its charge',async()=>{
-  const raw={id:'or_123',code:'pizza:quote-7',status:'pending',
+  const raw={id:'or_123',code:pagarmeOrderReference('pizza','quote-7'),status:'pending',
    charges:[{amount:4590,status:'pending',last_transaction:{qr_code:'000201010212'}}]};
   const api:ProviderTransport=async(path,_method,body)=>{
-   if(path==='/core/v5/orders'){expect(body?.customer_id).toBe('cus_123');}
+   if(path==='/core/v5/orders'){expect(body?.customer_id).toBe('cus_123');expect(String(body?.code).length).toBeLessThanOrEqual(52);}
    return raw;
   };
   const p=new PagarmePixProvider({tenantId:'pizza',recipientId:'receiver',request:api,
