@@ -1,7 +1,10 @@
 import { AICapability, AIProviderInterface, AIRouterInterface } from './contracts';
 import { GeminiAdapter } from './geminiAdapter';
 import { createGeminiHttpTransportFromEnv } from './geminiHttpTransport';
-import { AIRouter } from './router';
+import { CognitiveServiceAdapter, cognitiveSettingsFromEnv } from './cognitiveServiceAdapter';
+import { FirestoreCognitiveMeteringSink } from './cognitiveFinops';
+import type { CognitiveMeteringSink } from './cognitiveFinops';
+import { ResilientAIRouter } from './resilientRouter';
 
 export const GEMINI_RUNTIME_CAPABILITIES: readonly AICapability[] = [
   'FAST_CHAT',
@@ -10,13 +13,17 @@ export const GEMINI_RUNTIME_CAPABILITIES: readonly AICapability[] = [
   'GENERAL_REASONING',
 ];
 
-export function createRuntimeAIRouter(env: NodeJS.ProcessEnv = process.env): AIRouterInterface {
-  const providers: AIProviderInterface[] = [];
-  const geminiTransport = createGeminiHttpTransportFromEnv(env);
-
-  if (geminiTransport) {
-    providers.push(new GeminiAdapter(geminiTransport, GEMINI_RUNTIME_CAPABILITIES));
-  }
-
-  return new AIRouter(providers);
+/** Python S2S route first when configured, Gemini second, safe deterministic SalesEngine last. */
+export function createRuntimeAIRouter(
+  env:NodeJS.ProcessEnv=process.env,
+  meter?:CognitiveMeteringSink,
+):AIRouterInterface {
+  const providers:AIProviderInterface[]=[];
+  const cognitive=cognitiveSettingsFromEnv(env);
+  if(cognitive)providers.push(new CognitiveServiceAdapter(cognitive));
+  const geminiTransport=createGeminiHttpTransportFromEnv(env);
+  if(geminiTransport)providers.push(new GeminiAdapter(geminiTransport,GEMINI_RUNTIME_CAPABILITIES));
+  return new ResilientAIRouter(providers,{
+    meter:meter??(env.COGNITIVE_METERING_ENABLED==='true'?new FirestoreCognitiveMeteringSink():undefined),
+  });
 }
