@@ -89,8 +89,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | **T03** | `✅ ENTREGUE` | Catálogo e Order Engine universais + Food Pack (cardápio e regras alimentares) | 7d | `[x] ENTREGUE` | `21/11/2026` | `PR #13 / SHA 47bc7e8cd6ec28a9cef8536b0395ca3b430096b5 / CI #44922979257 SUCCESS` |
 | **T04** | `✅ ENTREGUE` | Payment Engine (Pix Dinâmico, Checkout Governado, Webhooks e Reconciliação) | 8d | `[x] ENTREGUE` | `21/11/2026` | `PR #14 / SHA 704304eb98635479f168f2a932517772b9ba8db3 / CI #44935718242 SUCCESS` |
 | **T05** | `✅ ENTREGUE` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[x] ENTREGUE` | `21/11/2026` | `PR #15 / SHA 49dcae65424c2f579cc650803e6b88aff1c34f9b / CI #44940142925 SUCCESS` |
-| **T06** | `🔒 Aprovação humana pós-T05` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
-| **T07** | `🔒 Finalize T06` | Autonomia Operacional Governada e Resolução de Exceções | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T06** | `✅ T05 autorizado` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[x] ENTREGUE INTERNAMENTE` | `21/11/2026` | `PR #16 / SHA 3058161dd0a08486f3ca80d2e135d01c8d5e194a / CI #44954585318 SUCCESS` |
+| **T07** | `🔒 Aprovação humana pós-T06` | Autonomia Operacional Governada e Resolução de Exceções | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 
 ### Trilha 2 — T08: Piloto Pizzaria Americana & Habilitação Externa (Pós-T07)
 
@@ -158,17 +158,17 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Bloqueio estrito de consultas administrativas em conversa pública ou sem RBAC válido.
   - [x] Separação clara entre receita do estabelecimento e métricas/custos de IA da FM.
 
-### T06 — Delivery, Produção e Acompanhamento (`🔒 Travado em T05`)
+### T06 — Delivery, Produção e Acompanhamento (`✅ ENTREGUE INTERNAMENTE — 21/11/2026`)
 - **Escopo:** Implementar e certificar o **Food Service Pack com dois modos mutuamente exclusivos por estabelecimento/unidade**: `NATIVE_OPERATIONS` usa painel próprio de produção/fila/retirada/entrega; `INTEGRATED_OPERATIONS` usa adapter homologável de PDV/KDS/delivery existente, sem duplicar as operações. Construir contrato `ProductionDispatchPort` com ACK real, correlação, idempotência, outbox/inbox, retries/backoff/DLQ e fonte de verdade explícita dos estados. Proibir mudança silenciosa de modo durante pedido ativo. Completar `Delivery Engine` (validação de endereço/CEP, área atendida, regras de taxa, retirada, janela estimada fundamentada); painel/adapter operacional de produção, fila de despacho e eventos duráveis (`OrderReleasedToProduction`, `OrderReady`, `DeliveryDispatched`, `DeliveryCompleted`); notificações reais ao cliente baseadas no estado persistido.
 - **Critério de Aceite (DoD):**
-  - [ ] Entrega normal, retirada e endereço fora da área testados.
-  - [ ] Liberação única à produção condicionada a pagamento confirmado ou modalidade autorizada.
-  - [ ] Reprocessamento e falhas não duplicam pedido na cozinha; zero promessa de GPS sem fonte real.
-  - [ ] Modo nativo: painel autoriza papéis operacionais, acompanha estados reais e informa o cliente somente após persistência.
-  - [ ] Modo integrado: contrato testado para ACK, idempotência, payloads, versionamento, deduplicação e estados externos; indisponível sem conector homologado, com fallback humano explicitamente governado.
-  - [ ] Ambos os modos possuem suíte interna de contrato/E2E; somente um destino de produção ativo por pedido e nenhum cross-tenant/unidade; integração externa real pertence ao T08 quando adotada pela pizzaria.
+  - [x] Entrega normal, retirada e endereço fora da área testados.
+  - [x] Liberação única à produção condicionada a pagamento confirmado ou modalidade autorizada.
+  - [x] Reprocessamento e falhas não duplicam pedido na cozinha; zero promessa de GPS sem fonte real.
+  - [x] Modo nativo: painel autoriza papéis operacionais, acompanha estados reais e informa o cliente somente após persistência.
+  - [x] Modo integrado: contrato testado para ACK, idempotência, payloads, versionamento, deduplicação e estados externos; indisponível sem conector homologado, com fallback humano explicitamente governado.
+  - [x] Ambos os modos possuem suíte interna de contrato/E2E; somente um destino de produção ativo por pedido e nenhum cross-tenant/unidade; integração externa real pertence ao T08 quando adotada pela pizzaria.
 
-### T07 — Autonomia Operacional Governada e Exceções (`🔒 Travado em T06`)
+### T07 — Autonomia Operacional Governada e Exceções (`🔒 Aprovação humana pendente após T06`)
 - **Escopo:** Formalizar modos `ASSIST`, `COPILOT` e `AUTONOMOUS_GOVERNED`; Tool Gateway com allowlist estrita e recibos auditáveis; workflow formal de aprovação humana vinculada a escopo/valor/validade; integração com recuperação de vendas (respeitando consentimento/opt-out); bateria adversarial e de permissões.
 - **Critério de Aceite (DoD):**
   - [ ] Pedidos rotineiros completam o fluxo sem intervenção humana respeitando confirmação e evidências.
