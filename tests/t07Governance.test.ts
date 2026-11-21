@@ -222,6 +222,15 @@ describe('T07 — transações governadas, aprovação e fluxo completo',()=>{
   await expect(f.service.execute(actor(),'main',{...draft(),approvalId:b.id}))
    .rejects.toMatchObject({code:'AUTONOMY_APPROVAL_SCOPE_DENIED'});
  });
+ it('restricts customer recovery to commercial staff roles even with opt-in',async()=>{
+  const f=await setup();
+  const req=request('RECOVERY_PREPARE',{candidateId:'candidate_111'},'recover_staff');
+  await expect(f.service.execute(actor('STAFF'),'main',req))
+   .rejects.toMatchObject({code:'AUTONOMY_RECOVERY_ROLE_DENIED'});
+  await expect(f.service.execute(actor('CASHIER'),'main',req))
+   .rejects.toMatchObject({code:'AUTONOMY_RECOVERY_ROLE_DENIED'});
+  expect(f.events).toHaveLength(0);
+ });
  it('prepares recovery only with signed opt-in; opt-out never sends anything',async()=>{
   const f=await setup();
   const c=request('RECOVERY_PREPARE',{candidateId:'candidate_111'},'recover_111');

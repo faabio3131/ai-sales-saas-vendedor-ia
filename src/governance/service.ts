@@ -65,6 +65,9 @@ export class GovernedAutonomyService{
  async execute(ctx:TenantContext,unitId:string,raw:unknown):Promise<ToolReceipt>{
   const s=this.scope(ctx,unitId);
   const command=validateToolRequest(raw);
+  if(command.tool==='RECOVERY_PREPARE'&&
+     !['OWNER','ADMIN','MANAGER','ATTENDANT'].includes(ctx.role??''))
+   deny('AUTONOMY_RECOVERY_ROLE_DENIED');
   // A committed receipt wins over any later state/policy changes: retrying a
   // confirmed order or payment never creates a second operation.
   const previous=await this.store.getReceipt(s.tenantId,s.unitId,command.idempotencyKey);
