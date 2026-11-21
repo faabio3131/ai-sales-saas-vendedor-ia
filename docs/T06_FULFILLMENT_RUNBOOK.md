@@ -33,7 +33,7 @@ Release grava AWAITING_ACK e evento/outbox. Worker despacha ao adapter com idemp
 
 ## Notificações
 
-Somente eventos persistidos produzem outbox de notificação. Destinatário deve possuir identidade externa WHATSAPP_VERIFIED associada ao mesmo customer e telefone. Canal real não está instalado como padrão. Falha gera retry e DLQ; não marcar como mensagem entregue.
+Somente eventos persistidos produzem outbox de notificação. Destinatário deve possuir identidade autenticada em trustedCustomerChannelIdentities, com SIGNED_PROVIDER_WEBHOOK, proofRef e telefone igual ao customer. A lista externalIdentities no cadastro comum é editável e não constitui prova de identidade. Somente um fluxo de verificação de provedor autenticado na implantação T08 pode gerar o registro confiável; a T06 não expõe rota pública para criá-lo. Canal real não está instalado como padrão. Falha gera retry e DLQ; não marcar como mensagem entregue.
 
 ## Worker e implantação
 
