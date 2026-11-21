@@ -190,4 +190,12 @@ live('T01 real Python HTTP S2S smoke with tenant and structured response',async(
   expect(response).toMatchObject({ok:true,data:{provider:'fm-cognitive',structuredData:{action:'CREATE_QUOTE'}}});
   const other=await service.generate(req({tenantId:'tenant-b',input:{stage:'NOVO'}}));
   expect(other).toMatchObject({ok:true,data:{structuredData:{action:'QUALIFY'}}});
+  // Real HTTP across SalesEngine -> resilient router -> Node S2S -> Python -> OutputGuard -> PolicyEngine.
+  const realEngine=new SalesEngine(new PolicyEngine(),new ResilientAIRouter([service]));
+  const decision=await realEngine.decide({
+    tenantId:'tenant-a',customerId:'cust-a',leadId:'lead-a',stage:'QUALIFICADO',autonomyMode:'ASSIST',
+  });
+  expect(decision).toMatchObject({ok:true,data:{
+    action:'CREATE_QUOTE',source:'DETERMINISTIC',requiresHumanApproval:true,
+  }});
 });
