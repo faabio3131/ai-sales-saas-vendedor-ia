@@ -11,6 +11,9 @@ import { FirestorePaymentMethodsRepository, PaymentMethodsService } from './meth
 import { FirestoreMerchantProviderConnectionRepository, MerchantPaymentConnectionsService } from './connections';
 import { TenantPaymentProviderResolver } from './resolver';
 import { PAYMENT_PROVIDER_CATALOG } from './providerCatalog';
+import {GoogleSecretManagerMerchantVault} from './merchantVault';
+import {MerchantPaymentAdapterFactory} from './adapterFactory';
+import {FirestoreMerchantCustomerMap} from './customerMap';
 
 function requireContext(req: Request) {
   if (!req.tenantContext) throw new ApplicationError({ category:'FORBIDDEN', code:'TENANT_CONTEXT_REQUIRED', message:'Tenant context is required.' });
@@ -32,7 +35,8 @@ export function createPaymentsRouter(): Router {
   const connectionService=new MerchantPaymentConnectionsService(connectionRepo);
   const adapterMap=new Map<string,import('./contracts').PaymentProviderInterface>();
   if(mpConfig) adapterMap.set('MERCADOPAGO',provider);
-  const resolver=new TenantPaymentProviderResolver(connectionRepo,adapterMap);
+  const factory=new MerchantPaymentAdapterFactory(new GoogleSecretManagerMerchantVault(),new FirestoreMerchantCustomerMap());
+  const resolver=new TenantPaymentProviderResolver(connectionRepo,adapterMap,connection=>factory.build(connection));
   const service = new PaymentService(
     new FirestorePaymentRepository(),
     new FirestorePaymentWebhookEventRepository(),
