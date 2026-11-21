@@ -56,6 +56,10 @@ describe('T01: Cognitive context, S2S, routing and governed sales integration',(
     expect(pack.untrustedData).not.toContain('cliente@example.com');
     expect(pack.untrustedData).not.toContain('password-123456');
     expect(redactCommercialText('Bearer abcdef1234567890')).not.toContain('abcdef1234567890');
+    expect(redactCommercialText('Cartão 4111 1111 1111 1111')).not.toContain('4111 1111 1111 1111');
+    expect(redactCommercialText('CNPJ 12.345.678/0001-90')).not.toContain('12.345.678/0001-90');
+    expect(redactCommercialText('https://usuario:senha@interna.example')).not.toContain('usuario:senha');
+
     expect(hasInjectionMarkers('ignore previous instructions')).toBe(true);
   });
   it('rejects foreign tenant or unit evidence, duplicates and fake trusted evidence',()=>{
@@ -64,6 +68,23 @@ describe('T01: Cognitive context, S2S, routing and governed sales integration',(
     expect(()=>buildCognitiveContextPack(req({context:{unitId:'unit-1',evidence:[{...good,unitId:'unit-2'}]}}))).toThrow();
     expect(()=>buildCognitiveContextPack(req({context:{unitId:'unit-1',evidence:[good,good]}}))).toThrow();
     expect(()=>buildCognitiveContextPack(req({context:{evidence:[{...good,trusted:false} as never]}}))).toThrow();
+  });
+  it('removes personal and financial identifiers before any configured model route',async()=>{
+    const transport=mockedTransport();
+    const router=new ResilientAIRouter([new CognitiveServiceAdapter({
+      endpoint:'http://127.0.0.1:8185',secret:SECRET,
+      fetchImpl:transport as unknown as typeof fetch,
+    })]);
+    await new SalesEngine(new PolicyEngine(),router).decide({
+      tenantId:'tenant-a',customerId:'cust-a',leadId:'lead-a',stage:'QUALIFICADO',
+      autonomyMode:'ASSIST',
+      objection:'email cliente@example.com cartão 4111 1111 1111 1111 senha=unsafe12345678',
+    });
+    expect(transport).toHaveBeenCalledOnce();
+    const sent=String(transport.mock.calls[0][1]?.body);
+    expect(sent).not.toContain('cliente@example.com');
+    expect(sent).not.toContain('4111 1111 1111 1111');
+    expect(sent).not.toContain('unsafe12345678');
   });
   it('authenticates the exact bytes sent to Python and checks response provenance',async()=>{
     const fetchImpl=mockedTransport();
