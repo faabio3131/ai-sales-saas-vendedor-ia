@@ -70,13 +70,14 @@ export class FirestoreScopedMemoryRepository implements ScopedMemoryRepository {
       tx.set(ref,next);
     });
   }
-  async delete(tenantId:string,unitId:string,customerId:string):Promise<void>{
+  async delete(tenantId:string,unitId:string,customerId:string,expectedVersion:number):Promise<void>{
     const ref=memoryDoc(tenantId,unitId,customerId);
     await db().runTransaction(async tx=>{
       const snap=await tx.get(ref);
       const record=snap.data() as ScopedCustomerMemory|undefined;
       if(record&&(record.tenantId!==tenantId||record.unitId!==unitId||record.customerId!==customerId))
         conflict('MEMORY_SCOPE_CONFLICT');
+      if((record?.version??0)!==expectedVersion)conflict('MEMORY_VERSION_CONFLICT');
       if(snap.exists)tx.delete(ref);
     });
   }
@@ -84,9 +85,16 @@ export class FirestoreScopedMemoryRepository implements ScopedMemoryRepository {
     const batch=await db().collection('scopedCustomerMemories')
       .where('expiresAt','<=',asOf).limit(Math.max(1,Math.min(200,limit))).get();
     if(batch.empty)return 0;
-    const write=db().batch();
-    batch.docs.forEach(d=>write.delete(d.ref));
-    await write.commit();
-    return batch.size;
+    let deleted=0;
+    for(const found of batch.docs){
+      const removed=await db().runTransaction(async tx=>{
+        const current=await tx.get(found.ref);
+        if(!current.exists||typeof current.get('expiresAt')!=='string'||current.get('expiresAt')>asOf)return false;
+        tx.delete(found.ref);
+        return true;
+      });
+      if(removed)deleted++;
+    }
+    return deleted;
   }
 }
