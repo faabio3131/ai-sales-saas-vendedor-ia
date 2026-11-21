@@ -34,7 +34,7 @@ function validateAiSuggestion(value: unknown): { action: SalesAction; reason: st
   const raw = value as Record<string, unknown>;
   if (!isSalesAction(raw.action) || typeof raw.reason !== 'string' || !raw.reason.trim() || raw.reason.length > 500) return null;
   // A model proposal may not claim execution or assert fabricated prices or payments.
-  if (/(?:R\\$\\s*[\\d.,]+|\\b\\d+(?:[,.]\\d+)?\\s*%|\\b(?:cobrei|paguei|estornei|confirmei o pagamento|enviei o pedido)\\b)/i.test(raw.reason)) return null;
+  if (/(?:R\$\s*[\d.,]+|\b\d+(?:[,.]\d+)?\s*%|\b(?:cobrei|paguei|estornei|confirmei o pagamento|enviei o pedido)\b)/i.test(raw.reason)) return null;
   const confidence = raw.confidence === undefined ? undefined : Number(raw.confidence);
   if (confidence !== undefined && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)) return null;
   return { action: raw.action, reason: raw.reason.trim(), confidence };
