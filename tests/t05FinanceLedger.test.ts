@@ -211,6 +211,17 @@ describe('T05 — reconstructible commercial finance ledger',()=>{
    window:resolveWindow({period:'day',anchor:'2026-11-21',timezone:'America/Sao_Paulo',
     weekStartsOn:1,now:NOW}),sources:{orders:[A],events:copied}})).toThrow();
  });
+ it('never serves partial sales when a confirmed order lacks approval or item reconciliation',async()=>{
+  const noApproval={...A,customerConfirmation:undefined};
+  const f=fixture({orders:[noApproval],events:[]});
+  await expect(f.service.snapshot(ctx(),'main',{}))
+   .rejects.toMatchObject({code:'FINANCE_ORDER_CONFIRMATION_MISSING'});
+  const changedSubtotal={...A,
+   lines:[{...A.lines[0],totalMinor:11000}]};
+  const g=fixture({orders:[changedSubtotal],events:[]});
+  await expect(g.service.snapshot(ctx(),'main',{}))
+   .rejects.toMatchObject({code:'FINANCE_SNAPSHOT_LINE_TOTAL_MISMATCH'});
+ });
  it('keeps the collection/refund metrics independent from current mutable payment states',async()=>{
   const records=[{...A,paymentState:'REFUNDED' as const},B,C];
   const f=fixture({orders:records,events:[...eventsA,...eventsC]});
