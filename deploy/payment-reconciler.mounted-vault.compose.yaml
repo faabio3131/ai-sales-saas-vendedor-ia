@@ -1,0 +1,11 @@
+# Use only when the API ALSO resolves merchant connections using mounted:<hash>.
+# Usage: docker compose -f deploy/payment-reconciler.compose.yaml
+#                    -f deploy/payment-reconciler.mounted-vault.compose.yaml up -d
+# The host directory must contain mode-0600, root-controlled per-merchant JSON files.
+services:
+  payment-reconciler:
+    environment:
+      PAYMENT_VAULT_BACKEND: MOUNTED
+      PAYMENT_SECRET_MOUNT_DIR: /run/secrets/atendevende-payments
+    volumes:
+      - "${PAYMENT_BANK_SECRET_DIR:?Mount the merchant secret directory}:/run/secrets/atendevende-payments:ro"

@@ -1,4 +1,6 @@
-# Deploy explicitly with: docker compose -f deploy/payment-reconciler.compose.yaml up -d
+# Default: Google Secret Manager, compatible with Cloud Run payment connection references.
+# For mounted per-tenant files, add deploy/payment-reconciler.mounted-vault.compose.yaml.
+# Deploy only after matching the API's vault backend, tenant, recipient and Firestore.
 # Requires the SAME tested application image deployed as the API and operator-owned secrets.
 services:
   payment-reconciler:
@@ -7,7 +9,13 @@ services:
     init: true
     network_mode: bridge
     healthcheck:
-      disable: true
+      test:
+        - CMD-SHELL
+        - 'test -s /tmp/payment-reconciler.last-success && last=$(cat /tmp/payment-reconciler.last-success) && now=$(date +%s) && test "$((now - last))" -ge 0 && test "$((now - last))" -le 1200'
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -17,14 +25,17 @@ services:
       NODE_ENV: production
       FIREBASE_PROJECT_ID: "${FIREBASE_PROJECT_ID:?Set the Firebase project ID}"
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase/service-account.json
-      PAYMENT_VAULT_BACKEND: MOUNTED
-      PAYMENT_SECRET_MOUNT_DIR: /run/secrets/atendevende-payments
+      PAYMENT_VAULT_BACKEND: GOOGLE_SECRET_MANAGER
     volumes:
       - "${PAYMENT_FIREBASE_CREDENTIAL_FILE:?Mount the service account credential file}:/run/secrets/firebase/service-account.json:ro"
-      - "${PAYMENT_BANK_SECRET_DIR:?Mount the merchant secret directory}:/run/secrets/atendevende-payments:ro"
     entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      while true; do
-        node dist/payment-reconciler.cjs || true
-        sleep 300
-      done
+    command:
+      - |
+        while true; do
+          if node dist/payment-reconciler.cjs; then
+            date +%s > /tmp/payment-reconciler.last-success
+          else
+            echo 'payment_reconciliation_cycle_failed' >&2
+          fi
+          sleep 300
+        done
