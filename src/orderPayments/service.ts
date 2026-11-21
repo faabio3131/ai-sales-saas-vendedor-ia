@@ -1,6 +1,7 @@
 import { createHash,randomUUID } from 'node:crypto';
 import type { TenantContext } from '../types/contracts';
 import type { OrderRepository } from '../orders/model';
+import { requireBusinessScope } from '../business/service';
 import type { ProviderPaymentResult } from '../payments/model';
 import type { PaymentMethodsService } from '../payments/methods';
 import { pagarmeOrderReference } from '../payments/pagarme';
@@ -62,8 +63,7 @@ export class OrderPaymentService {
   ){}
   private authorize(ctx:TenantContext,unitId:string):{tenantId:string;unitId:string}{
     this.policy.operator(ctx);
-    paymentId(unitId);
-    return {tenantId:ctx.tenantId,unitId};
+    return requireBusinessScope(ctx,unitId);
   }
   async get(ctx:TenantContext,unitId:string,orderId:string):Promise<OrderPayment|null>{
     const s=this.authorize(ctx,unitId);
