@@ -28,7 +28,7 @@ export interface OrderPaymentEvent {
 export interface OutboxRecord extends OrderPaymentEvent {
   deliveryStatus:'PENDING'|'PROCESSING'|'DELIVERED'|'DLQ';
   attemptCount:number;nextAttemptAt:number;leaseUntil:number;
-  updatedAt:string;lastErrorCode?:string;
+  updatedAt:string;lastErrorCode?:string;claimToken?:string;
 }
 export interface CreateOrderPaymentInput {
   idempotencyKey:string;method:OrderPaymentMethod;
@@ -48,8 +48,8 @@ export interface OrderPaymentRepository {
 }
 export interface OutboxRepository {
   claim(now:number,limit:number):Promise<OutboxRecord[]>;
-  delivered(id:string,now:number):Promise<void>;
-  retry(id:string,now:number,errorCode:string,maxAttempts:number):Promise<void>;
+  delivered(id:string,claimToken:string,now:number):Promise<void>;
+  retry(id:string,claimToken:string,now:number,errorCode:string,maxAttempts:number):Promise<void>;
 }
 export interface FinancialEventConsumer {publish(event:OutboxRecord):Promise<void>;}
 /** Service uses existing merchant PSP adapters and tenant-bound vault. */
