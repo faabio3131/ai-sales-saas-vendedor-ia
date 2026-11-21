@@ -243,7 +243,7 @@ export async function fixture(opts:{
     deliveryFeeMinor:0,totalMinor:6600,
     customerConfirmation:{kind:'CUSTOMER_MESSAGE',evidenceRef:'conv:123',totalMinor:6600,
       at:NOW,verifiedBy:'operator'}}:{}),
-  ...(!opts.paid?{paymentState:'PENDING' as const}:{}),
+  ...(opts.paid===false?{paymentState:'PENDING' as const}:{}),
  });
  const payment=samplePayment(order,
    opts.paid===false?{status:'PENDING',method:opts.cod?'CASH_ON_DELIVERY':'PIX_MANUAL',
