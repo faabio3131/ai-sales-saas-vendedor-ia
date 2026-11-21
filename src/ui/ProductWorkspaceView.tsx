@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, Bot, Boxes, LockKeyhole, MessageCircle, RefreshCw, Target, Users } from 'lucide-react';
 import { resolveWorkspaceMemberships, WorkspaceMembership } from './workspaceAccess';
 import { FinancialPanel } from './FinancialPanel';
+import { ProductionBoard } from './ProductionBoard';
 
 interface AttentionItem {
   kind: string;
@@ -217,6 +218,7 @@ export function ProductWorkspaceView() {
       {(selectedMembership.role === 'OWNER' || selectedMembership.role === 'ADMIN') && (
         <FinancialPanel key={tenantId} tenantId={tenantId} role={selectedMembership.role} />
       )}
+      <ProductionBoard key={'production-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
         </>
       )}
     </div>
