@@ -13,7 +13,7 @@ export function catalogError(code:string,category:'VALIDATION'|'CONFLICT'|'NOT_F
   throw new ApplicationError({category,code,message:'Catalog request cannot be completed.'});
 }
 export function catalogId(value:unknown):string{
-  if(typeof value!=='string'||!ID.test(value))catalogError('COMMERCE_ID_INVALID');
+  if(typeof value!=='string'||!ID.test(value)||['__proto__','constructor','prototype'].includes(value))catalogError('COMMERCE_ID_INVALID');
   return value as string;
 }
 export function catalogText(value:unknown,max=160):string{
