@@ -129,6 +129,17 @@ export class FirestoreOrderPaymentRepository implements OrderPaymentRepository {
         denyPayment('ORDER_PAYMENT_TRANSITION_INVALID');
       if(previous.providerPaymentId&&previous.providerPaymentId!==next.providerPaymentId)
         denyPayment('ORDER_PAYMENT_PROVIDER_REFERENCE_IMMUTABLE');
+      // A charge identifier cannot be attached to two orders of one merchant.
+      // This unique index is written in the SAME transaction as payment state.
+      let providerIndex:ReturnType<ReturnType<typeof db>['collection']> | undefined;
+      if(next.providerPaymentId&&!previous.providerPaymentId){
+        const index=db().collection('orderPaymentProviderIds')
+          .doc(hash(next.tenantId,next.provider,next.providerPaymentId));
+        const existingIndex=await tx.get(index);
+        if(existingIndex.exists&&existingIndex.get('paymentId')!==next.id)
+          denyPayment('ORDER_PAYMENT_PROVIDER_ID_ALREADY_BOUND');
+        if(!existingIndex.exists)providerIndex=index;
+      }
       if(next.status==='CONFIRMED'&&
         (next.verificationSource!=='PSP_GET'&&next.verificationSource!=='OPERATOR_COD'))
         denyPayment('ORDER_PAYMENT_EVIDENCE_REQUIRED');
@@ -136,6 +147,10 @@ export class FirestoreOrderPaymentRepository implements OrderPaymentRepository {
         denyPayment('ORDER_PAYMENT_REFUND_EVIDENCE_REQUIRED');
       if(next.status==='CONFIRMED'&&order.status==='CANCELLED')
         denyPayment('ORDER_PAYMENT_CANCELLED_ORDER','CONFLICT');
+      if(providerIndex)tx.create(providerIndex,{
+        tenantId:next.tenantId,provider:next.provider,
+        providerPaymentId:next.providerPaymentId,paymentId:next.id,
+      });
       tx.set(p,next);
       tx.update(o,{paymentState:projection(next.status),version:order.version+1,
         updatedAt:next.updatedAt});
