@@ -4,7 +4,7 @@ import type { OutboxRecord } from '../orderPayments/model';
 export type FinancePeriod = 'day'|'week'|'month';
 export type FinanceMetric =
   'grossSales'|'netSales'|'confirmedReceipts'|'netReceipts'|'refunds'|
-  'discounts'|'pendingReceivables'|'averageTicket'|'orderCount'|'topProducts';
+  'discounts'|'pendingReceivables'|'averageTicket'|'orderCount'|'topProducts'|'processingFees';
 
 export interface FinanceUnitSettings {
   tenantId:string;unitId:string;version:number;weekStartsOn:number;updatedAt:string;updatedBy:string;
