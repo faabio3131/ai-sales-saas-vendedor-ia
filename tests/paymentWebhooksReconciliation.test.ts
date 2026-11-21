@@ -65,7 +65,7 @@ describe('Provider-specific payment webhook authentication',()=>{
  it('requires signed mTLS relay envelope and rejects timestamp replay or tenant spoofing',()=>{
   const body=Buffer.from(JSON.stringify({pix:[{txid:'a'.repeat(32)}]}));
   const timestamp=String(Math.floor(Date.now()/1000));
-  const message=Buffer.concat([Buffer.from('EFI\\n'+tenant+'\\n'+timestamp+'\\n'),body]);
+  const message=Buffer.concat([Buffer.from('EFI\n'+tenant+'\n'+timestamp+'\n'),body]);
   const sig=createHmac('sha256',secret).update(message).digest('hex');
   const h={'x-av-relay-timestamp':timestamp,'x-av-relay-signature':sig};
   expect(authorizePaymentWebhook({provider:'EFI',tenantId:tenant,headers:h,rawBody:body,secret})).toBe(true);
