@@ -1,0 +1,30 @@
+# Deploy explicitly with: docker compose -f deploy/payment-reconciler.compose.yaml up -d
+# Requires the SAME tested application image deployed as the API and operator-owned secrets.
+services:
+  payment-reconciler:
+    image: "${ATENDEVENDE_IMAGE:?Set the certified application image digest}"
+    restart: unless-stopped
+    init: true
+    network_mode: bridge
+    healthcheck:
+      disable: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    environment:
+      NODE_ENV: production
+      FIREBASE_PROJECT_ID: "${FIREBASE_PROJECT_ID:?Set the Firebase project ID}"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase/service-account.json
+      PAYMENT_VAULT_BACKEND: MOUNTED
+      PAYMENT_SECRET_MOUNT_DIR: /run/secrets/atendevende-payments
+    volumes:
+      - "${PAYMENT_FIREBASE_CREDENTIAL_FILE:?Mount the service account credential file}:/run/secrets/firebase/service-account.json:ro"
+      - "${PAYMENT_BANK_SECRET_DIR:?Mount the merchant secret directory}:/run/secrets/atendevende-payments:ro"
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      while true; do
+        node dist/payment-reconciler.cjs || true
+        sleep 300
+      done
