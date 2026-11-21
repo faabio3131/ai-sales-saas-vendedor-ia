@@ -8,7 +8,7 @@ O painel financeiro pertence ao estabelecimento; custos, receita da plataforma e
 2. outbox transacional de pagamentos T04, persistida atomicamente junto aos estados de pagamento, inclusive eventos ainda não publicados;
 3. perfil efetivo da unidade T02 para timezone IANA e preferências de início da semana.
 
-O feed comercial-financeiro derivado do outbox pode atrasar ou entrar em DLQ. **A consulta não usa eventos entregues como única fonte:** reconstrói com o outbox canônico, valida versões consecutivas, origem das confirmações, valor exato e vínculo com o pedido. Qualquer inconsistência ou falta de histórico provoca falha fechada. Backfill de históricos antigos sem T03/T04 exige migração e reconciliação independente; não são somados sem fonte equivalente.
+O feed comercial-financeiro derivado do outbox pode atrasar ou entrar em DLQ. **A consulta não usa eventos entregues como única fonte:** reconstrói com o outbox canônico, valida versões consecutivas, origem das confirmações, valor exato e vínculo com o pedido. Qualquer inconsistência ou falta de histórico provoca falha fechada. Backfill de históricos antigos sem T03/T04 exige migração e reconciliação independente; não são somados sem fonte equivalente. Os pagamentos legados de cotações não possuem unitId canônico na entidade Payment, logo agregá-los a uma unidade específica seria inventar propriedade contábil. O painel e a resposta administrativa exibem explicitamente a cobertura T03/T04.
 
 ## Definições monetárias oficiais (R$ em centavos, sem floats)
 - **Vendas brutas:** soma de subtotal do pedido mais frete de delivery dos pedidos atualmente confirmados, aceitos no período, *antes* dos descontos.
