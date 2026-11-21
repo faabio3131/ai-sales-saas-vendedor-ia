@@ -6,6 +6,9 @@ import { requireBusinessScope } from '../business/service';
 import { catalogError,catalogId,catalogText } from '../commerce/service';
 import type { UnitCatalogRepository } from '../commerce/model';
 import { priceOrder } from './pricing';
+import {assessDelivery,rejected} from '../fulfillment/policy';
+import type {FulfillmentSettingsRepository} from '../fulfillment/model';
+import type {PricedOrder} from './pricing';
 import type {
   Order,OrderRepository,OrderConfirmationEvidence,CreateOrderInput,UpdateOrderInput,
   ConfirmOrderInput,CancelOrderInput,OrderDispatchIntent,OrderLineSelection
@@ -63,7 +66,18 @@ export class OrderService {
     private readonly customers:CustomerRepository,
     private readonly confirmation:OrderConfirmationEvidence,
     private readonly clock:()=>Date=()=>new Date(),
+    private readonly deliveryPolicies?:Pick<FulfillmentSettingsRepository,'get'>,
   ){}
+  private async validateDeliveryBeforePayment(
+    tenantId:string,unitId:string,profile:import('../business/model').BusinessProfileRevision,
+    catalog:import('../commerce/model').UnitCatalogRevision,
+    priced:Pick<PricedOrder,'fulfillment'|'deliveryFeeMinor'>):Promise<void>{
+    if(priced.fulfillment.kind==='PICKUP'||!this.deliveryPolicies)return;
+    const settings=await this.deliveryPolicies.get(tenantId,unitId);
+    if(!settings||settings.operationMode!==profile.capabilityRegistry.operationMode)
+      rejected('FULFILLMENT_DELIVERY_POLICY_MISSING');
+    assessDelivery(priced,settings,catalog); // fail before payment/confirmation
+  }
   private scope(ctx:TenantContext,unitId:string){
     authorize(ctx);
     return requireBusinessScope(ctx,unitId);
@@ -114,6 +128,7 @@ export class OrderService {
       !ready.profile.capabilityRegistry.capabilities.includes('DELIVERY'))
       catalogError('ORDER_DELIVERY_DISABLED','CONFLICT');
     const priced=priceOrder(ready.catalog,input,now);
+    await this.validateDeliveryBeforePayment(s.tenantId,s.unitId,ready.profile,ready.catalog,priced);
     const draft:Order={
       id:'order_'+randomUUID().replace(/-/g,''),
       ...s,orderNumber:0,version:0,customerId,
@@ -145,6 +160,7 @@ export class OrderService {
       !ready.profile.capabilityRegistry.capabilities.includes('DELIVERY'))
       catalogError('ORDER_DELIVERY_DISABLED','CONFLICT');
     const priced=priceOrder(ready.catalog,input,now);
+    await this.validateDeliveryBeforePayment(before.tenantId,before.unitId,ready.profile,ready.catalog,priced);
     const after:Order={...before,...priced,catalogVersion:ready.catalog.version,
       businessProfileVersion:ready.profile.version,version:before.version+1,
       updatedAt:now};
@@ -169,6 +185,8 @@ export class OrderService {
     if(ready.catalog.version!==previous.catalogVersion||
       ready.profile.capabilityRegistry.operationMode!==previous.operationMode)
       catalogError('ORDER_REQUOTE_REQUIRED','CONFLICT');
+    await this.validateDeliveryBeforePayment(previous.tenantId,previous.unitId,
+      ready.profile,ready.catalog,previous);
     if(!(await this.confirmation.verify(previous.tenantId,previous.customerId,
       evidenceRef,previous.id,previous.totalMinor)))
       catalogError('ORDER_CUSTOMER_CONFIRMATION_UNVERIFIED','CONFLICT');
@@ -201,6 +219,8 @@ export class OrderService {
   Promise<OrderDispatchIntent>{
     const order=await this.get(ctx,unitId,orderId);
     if(order.status!=='CONFIRMED')catalogError('ORDER_NOT_CONFIRMED','CONFLICT');
+    if(order.productionState!=='NOT_DISPATCHED')
+      catalogError('ORDER_ALREADY_RELEASED_TO_PRODUCTION','CONFLICT');
     return {tenantId:order.tenantId,unitId:order.unitId,
       orderId:order.id,orderNumber:order.orderNumber,
       operationMode:order.operationMode,status:'NOT_DISPATCHED',dispatchEnabled:false};

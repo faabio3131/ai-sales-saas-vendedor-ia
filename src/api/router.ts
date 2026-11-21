@@ -16,6 +16,7 @@ import { aiRealReadinessHandler, aiRealSmokeHandler } from '../operations/aiReal
 import { firebaseRealReadinessHandler } from '../operations/firebaseRealReadinessRoute';
 import { createPaymentsRouter } from '../payments/routes';
 import { createOrderPaymentsRouter } from '../orderPayments/routes';
+import {createFulfillmentRouter} from '../fulfillment/routes';
 import { mercadoPagoWebhookHandler } from '../payments/webhook';
 import {PaymentWebhookProcessor,handleBankWebhook} from '../payments/providerWebhooks';
 import {createBankPaymentRuntime} from '../payments/bankRuntime';
@@ -73,6 +74,7 @@ export function createApiRouter(): Router {
   });
   router.use('/payments', authenticationMiddleware, tenantAuthorizationMiddleware, createPaymentsRouter());
   router.use('/order-payments', authenticationMiddleware, tenantAuthorizationMiddleware, createOrderPaymentsRouter());
+  router.use('/fulfillment', authenticationMiddleware, tenantAuthorizationMiddleware, createFulfillmentRouter());
   router.use('/revenue-expansion', authenticationMiddleware, tenantAuthorizationMiddleware, createRevenueExpansionRouter());
   router.use('/plans', authenticationMiddleware, tenantAuthorizationMiddleware, createPlansRouter());
   router.use('/pilot', authenticationMiddleware, tenantAuthorizationMiddleware, createPilotRouter());
