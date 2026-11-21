@@ -25,7 +25,8 @@ A acumulação dos papéis de arquitetura e execução pelo ChatGPT não altera 
 7. `docs/DATA_MODEL.md`
 8. `docs/IMPLEMENTATION_PLAN.md`
 9. `docs/EXECUTION_PROTOCOL.md`
-10. tarefa/bloco atualmente autorizado e ADRs aplicáveis.
+10. `CRONOGRAMA_MESTRE_ATENDEVENDEIA_COM_TRAVA.md` — roteiro das evoluções T01–T12, decisões Food Service Pack, dois modos de operação e gates sequenciais;
+11. tarefa/bloco atualmente autorizado e ADRs aplicáveis.
 
 ## Regra de conflito
 
