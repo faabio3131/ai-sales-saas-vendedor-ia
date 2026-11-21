@@ -7,6 +7,7 @@ import {createElement} from 'react';
 import {FulfillmentWorker} from '../src/fulfillment/worker';
 import {createFulfillmentRouter} from '../src/fulfillment/routes';
 import {ChannelCustomerNoticePort} from '../src/fulfillment/notifications';
+import type {VerifiedCustomerChannelRepository} from '../src/fulfillment/trustedChannelIdentity';
 import {ChannelService} from '../src/channels/service';
 import type {ChannelInterface,OutboundChannelMessage} from '../src/channels/contracts';
 import {parseSettings,extractCep,stateProjection,assessDelivery} from '../src/fulfillment/policy';
@@ -15,6 +16,13 @@ import {ProductionBoard} from '../src/ui/ProductionBoard';
 import {ctx,config,fixture,NOW,sampleOrder,sampleCatalog} from './helpers/t06Fixtures';
 
 const anchor=Date.parse(NOW);
+const trustedChannel:VerifiedCustomerChannelRepository={
+ get:async(tenantId,customerId,channel)=>({
+  tenantId,customerId,channel,recipient:'5513999999999',
+  verifiedAt:NOW,proofRef:'signed-provider-event-123',
+  provenance:'SIGNED_PROVIDER_WEBHOOK' as const,
+ }),
+};
 describe('T06 — deterministic delivery, native KDS, payment gates and isolation',()=>{
  it('releases a paid delivery once and persists preparation, ready, dispatch and completion',async()=>{
   const e=await fixture();
@@ -213,7 +221,7 @@ describe('T06 — deterministic delivery, native KDS, payment gates and isolatio
      {source:'WHATSAPP_VERIFIED',value:'5513999999999'}],
     createdAt:NOW,updatedAt:NOW,
    }),
-  });
+  },trustedChannel);
   await sender.send(event,op);
   expect(sendMessage).toHaveBeenCalledOnce();
   expect(sendMessage.mock.calls[0][0]).toMatchObject({
@@ -223,9 +231,12 @@ describe('T06 — deterministic delivery, native KDS, payment gates and isolatio
   const unverified=new ChannelCustomerNoticePort(new ChannelService([channel]),{
    findById:async()=>({
     id:op.customerId,tenantId:op.tenantId,name:'Maria',status:'ACTIVE' as const,
-    phone:'5513999999999',externalIdentities:[],createdAt:NOW,updatedAt:NOW,
+    phone:'5513999999999',
+    // A forged, CRM-editable claim is NOT signed verification.
+    externalIdentities:[{source:'WHATSAPP_VERIFIED',value:'5513999999999'}],
+    createdAt:NOW,updatedAt:NOW,
    }),
-  });
+  },{get:async()=>null});
   await expect(unverified.send(event,op))
    .rejects.toMatchObject({code:'FULFILLMENT_CUSTOMER_CHANNEL_NOT_VERIFIED'});
   expect(sendMessage).toHaveBeenCalledTimes(1);
@@ -239,7 +250,7 @@ describe('T06 — deterministic delivery, native KDS, payment gates and isolatio
     phone:'5513999999999',externalIdentities:[
       {source:'WHATSAPP_VERIFIED',value:'5513999999999'}],createdAt:NOW,updatedAt:NOW,
    }),
-  });
+  },trustedChannel);
   const worker=new FulfillmentWorker(e.operations,e.operations,e.service,e.adapters,sender,
    ()=>anchor);
   expect(await worker.runOnce()).toMatchObject({claimed:1,delivered:0,retried:1});
