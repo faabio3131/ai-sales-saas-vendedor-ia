@@ -8,6 +8,6 @@ export interface BusinessProfileRepository {
 export interface ScopedMemoryRepository {
   get(tenantId:string,unitId:string,customerId:string):Promise<ScopedCustomerMemory|null>;
   save(record:ScopedCustomerMemory,expectedVersion:number):Promise<void>;
-  delete(tenantId:string,unitId:string,customerId:string):Promise<void>;
+  delete(tenantId:string,unitId:string,customerId:string,expectedVersion:number):Promise<void>;
   purgeExpired(asOf:string,limit?:number):Promise<number>;
 }
