@@ -1,4 +1,9 @@
 import { describe,expect,it } from 'vitest';
+import express from 'express';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import { createCommerceRouter } from '../src/commerce/routes';
+import { errorHandler } from '../src/api/middleware/errorHandler';
 import type { BusinessProfileRevision } from '../src/business/model';
 import { UnitCatalogService } from '../src/commerce/service';
 import { priceOrder } from '../src/orders/pricing';
@@ -116,6 +121,38 @@ describe('T03 — unit-scoped Catalog and Food Service pricing',()=>{
     const b=await catalogFixture('unit-b','pizza-b');
     expect((await a.repo.effective('pizza-b','unit-a',NOW))).toBeNull();
     expect((await b.repo.effective('pizza-a','unit-b',NOW))).toBeNull();
+  });
+  it('serves authenticated scoped catalog revisions with fail-closed HTTP roles and version conflicts',async()=>{
+    const repo=new InMemoryCatalog();
+    const app=express();app.use(express.json());
+    // Test-only approved identity; real API mounts authentication + membership.
+    app.use('/commerce',(req,_res,next)=>{
+      req.tenantContext=ctx(req.header('x-test-tenant')??'pizza-a',
+        req.header('x-test-role')??'OWNER');
+      next();
+    },createCommerceRouter(repo,profiles));
+    app.use(errorHandler);
+    const server=app.listen(0,'127.0.0.1');
+    await once(server,'listening');
+    try{
+      const url='http://127.0.0.1:'+(server.address() as AddressInfo).port+'/commerce/units/main/catalog';
+      const viewer=await fetch(url+'/revisions',{method:'POST',
+        headers:{'content-type':'application/json','x-test-role':'VIEWER'},
+        body:JSON.stringify(catalogInput())});
+      expect(viewer.status).toBe(403);
+      const created=await fetch(url+'/revisions',{method:'POST',
+        headers:{'content-type':'application/json'},body:JSON.stringify(catalogInput())});
+      expect(created.status).toBe(201);
+      expect((await created.json()).data).toMatchObject({version:1,unitId:'main'});
+      const active=await fetch(url);
+      expect((await active.json()).data).toMatchObject({currency:'BRL',version:1});
+      const otherTenant=await fetch(url,{headers:{'x-test-tenant':'pizza-b'}});
+      expect((await otherTenant.json()).data).toBeNull();
+      const duplicate=await fetch(url+'/revisions',{method:'POST',
+        headers:{'content-type':'application/json'},body:JSON.stringify(catalogInput())});
+      expect(duplicate.status).toBe(409);
+      expect((await duplicate.json()).error.code).toBe('COMMERCE_VERSION_CONFLICT');
+    }finally{server.close();await once(server,'close');}
   });
   it('enforces food capability before allowing pizza catalog but permits horizontal products',async()=>{
     const p={...profiles,effective:async(t:string,u:string)=>({
