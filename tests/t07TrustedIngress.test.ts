@@ -44,8 +44,7 @@ function fixture(signed=true){
    createdAt:date,updatedAt:date};}} as unknown as Pick<CustomerRepository,'findById'>;
  const identities={async get(){return {tenantId:'pizza-a',customerId:'customer_111',
    channel:'WHATSAPP',recipient:'5513999999999',
-   provenance:'SIGNED_PROVIDER_WEBHOOK',verifiedAt:date,proofRef:'webhook_111'};}}
-   as unknown as VerifiedCustomerChannelRepository;
+   provenance:'SIGNED_PROVIDER_WEBHOOK',verifiedAt:date,proofRef:'webhook_111'};}} as unknown as VerifiedCustomerChannelRepository;
  const orders={async findById(){return {id:'order_111',tenantId:'pizza-a',unitId:'main',
    customerId:'customer_111',status:'DRAFT'};}} as unknown as OrderRepository;
  const trust={
