@@ -187,6 +187,9 @@ export class OrderService {
     version(input.expectedVersion);
     if(before.version!==input.expectedVersion||before.status==='CANCELLED')
       catalogError('ORDER_NOT_CANCELLABLE','CONFLICT');
+    // T04 owns the settlement/refund saga once a payment attempt exists.
+    if(before.paymentState!=='NOT_REQUESTED')
+      catalogError('ORDER_CANCELLATION_REQUIRES_PAYMENT_REVIEW','CONFLICT');
     const reason=catalogText(input.reason,240);
     const now=this.clock().toISOString();
     // No refund/payment action happens in T03, even for already confirmed orders.
