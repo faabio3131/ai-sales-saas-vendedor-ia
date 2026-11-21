@@ -28,6 +28,7 @@ import { createReleaseRouter } from '../release/routes';
 import { createRevenueExpansionRouter } from '../revenueExpansion/routes';
 import { firebaseWebRuntimeConfigHandler } from '../runtimeConfig/firebaseWeb';
 import { createSalesRouter } from '../sales/routes';
+import { createGovernanceRouter } from '../governance/routes';
 import { tenantAuthorizationMiddleware } from '../tenancy/middleware';
 import { activeTenantMembershipsHandler, createTenancyRouter } from '../tenancy/routes';
 import { healthCheckHandler } from './routes/health';
@@ -58,6 +59,7 @@ export function createApiRouter(): Router {
   router.use('/conversations', authenticationMiddleware, tenantAuthorizationMiddleware, createConversationRouter());
   router.use('/leads', authenticationMiddleware, tenantAuthorizationMiddleware, createLeadsRouter());
   router.use('/sales', authenticationMiddleware, tenantAuthorizationMiddleware, createSalesRouter());
+  router.use('/autonomy', authenticationMiddleware, tenantAuthorizationMiddleware, createGovernanceRouter());
   router.use('/followups', authenticationMiddleware, tenantAuthorizationMiddleware, createFollowUpsRouter());
   router.use('/recovery', authenticationMiddleware, tenantAuthorizationMiddleware, createRecoveryRouter());
   router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());

@@ -90,13 +90,13 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | **T04** | `✅ ENTREGUE` | Payment Engine (Pix Dinâmico, Checkout Governado, Webhooks e Reconciliação) | 8d | `[x] ENTREGUE` | `21/11/2026` | `PR #14 / SHA 704304eb98635479f168f2a932517772b9ba8db3 / CI #44935718242 SUCCESS` |
 | **T05** | `✅ ENTREGUE` | Gestão Financeira Comercial e Consultas Administrativas IA | 6d | `[x] ENTREGUE` | `21/11/2026` | `PR #15 / SHA 49dcae65424c2f579cc650803e6b88aff1c34f9b / CI #44940142925 SUCCESS` |
 | **T06** | `✅ T05 autorizado` | Food Service Pack — delivery, produção e 2 modos (nativo/integrado) | 6d | `[x] ENTREGUE INTERNAMENTE` | `21/11/2026` | `PR #16 / SHA 3058161dd0a08486f3ca80d2e135d01c8d5e194a / CI #44954585318 SUCCESS` |
-| **T07** | `🔒 Aprovação humana pós-T06` | Autonomia Operacional Governada e Resolução de Exceções | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T07** | `✅ T06 concluída + autorização do Diretor em 21/11/2026` | Autonomia Operacional Governada e Resolução de Exceções | 6d | `[x] ENTREGUE INTERNAMENTE` | `21/11/2026` | `PR #18 / SHA 588d6ce4491cb14ea4380b8edeedb276dc364c1e / CI #44957683634 SUCCESS` |
 
 ### Trilha 2 — T08: Piloto Pizzaria Americana & Habilitação Externa (Pós-T07)
 
 | ID | Gate / Trava | Etapa do Piloto e Certificação Externa | Prazo Est. | Status | Data Entrega | Evidência (Runbook / Logs / Aprovação) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T08.1** | `🔒 Finalize T07` | Cadastro real da pizzaria, validação e escolha de modo operacional | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Validação Proprietária ___` |
+| **T08.1** | `🔒 Aprovação humana de avanço pós-T07 + validação proprietária real` | Cadastro real da pizzaria, validação e escolha de modo operacional | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Validação Proprietária ___` |
 | **T08.2** | `🔒 Finalize T08.1` | Credenciais Externas Isoladas (Conta PSP Pix + WhatsApp Oficial) | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Cofre / Teste Pix Real ___` |
 | **T08.3** | `🔒 Finalize T08.2` | Deploy Contabo, Feature Flag do Piloto, Backup e Rollback | 3d | `[ ] BLOQUEADO` | `__/__/____` | `Healthcheck / Rollback ___` |
 | **T08.4** | `🔒 Finalize T08.3` | Certificação E2E das 10 jornadas + modo escolhido e testes dos 2 contratos | 4d | `[ ] BLOQUEADO` | `__/__/____` | `Relatório 10/10 Jornadas ___` |
@@ -168,14 +168,15 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Modo integrado: contrato testado para ACK, idempotência, payloads, versionamento, deduplicação e estados externos; indisponível sem conector homologado, com fallback humano explicitamente governado.
   - [x] Ambos os modos possuem suíte interna de contrato/E2E; somente um destino de produção ativo por pedido e nenhum cross-tenant/unidade; integração externa real pertence ao T08 quando adotada pela pizzaria.
 
-### T07 — Autonomia Operacional Governada e Exceções (`🔒 Aprovação humana pendente após T06`)
+### T07 — Autonomia Operacional Governada e Exceções (`✅ CERTIFICADA INTERNAMENTE — 21/11/2026`)
 - **Escopo:** Formalizar modos `ASSIST`, `COPILOT` e `AUTONOMOUS_GOVERNED`; Tool Gateway com allowlist estrita e recibos auditáveis; workflow formal de aprovação humana vinculada a escopo/valor/validade; integração com recuperação de vendas (respeitando consentimento/opt-out); bateria adversarial e de permissões.
 - **Critério de Aceite (DoD):**
-  - [ ] Pedidos rotineiros completam o fluxo sem intervenção humana respeitando confirmação e evidências.
-  - [ ] Casos de risco (alergias sem dado, disputa financeira, desconto fora de política, prompt injection) são bloqueados/escalados.
-  - [ ] Nenhuma elevação autônoma de privilégio; suíte cumulativa E2E interna 100% verde.
-  - [ ] Fluxo do WhatsApp fechado: proposta → confirmação explícita → pedido/cobrança → operação selecionada → notificações por estado real → pós-venda conforme consentimento; controle de duplicidade e retry em cada transição.
-  - [ ] Testes adversariais impedem IA de trocar `OPERATION_MODE`, autorizar integração externa inexistente, fabricar status ou acessar finanças sem RBAC.
+  - [x] Jornada interna de pedido rotineiro simulada de ponta a ponta, sem aprovação humana em `AUTONOMOUS_GOVERNED` dentro dos limites: rascunho determinístico → confirmação verificada → cobrança T04 → liberação T06 após confirmação/condição financeira. O gateway não simula recebimento; adaptações reais são T08.
+  - [x] Riscos (alérgenos não confirmados, disputa financeira, desconto fora da política e prompt injection) escalados e bloqueados com classificação determinística e evidência confiável.
+  - [x] Nenhuma elevação autônoma de privilégio; 336 testes TypeScript PASS / 58 arquivos e 7 testes Python PASS; CI integral #44957683634 SUCCESS.
+  - [x] Contratos e E2E internos simulados de canal WhatsApp assinado, confirmação explícita, pedido/cobrança, modo operacional exclusivo, notificações T06 por outbox de estado persistido e recuperação condicionada ao opt-in; idempotência, replay e retry seguros. **Webhook WhatsApp/PSP real, envio real ao cliente e dez jornadas em produção são T08, não resultados T07.**
+  - [x] Testes adversariais proíbem a IA de modificar `OPERATION_MODE`, habilitar integração externa inexistente, fabricar estado, conceder permissões, acessar finanças administrativas ou realizar estorno sem RBAC.
+- **Evidência de fechamento:** `docs/T07_CLOSURE_CERTIFICATION.md`; commit funcional `588d6ce4491cb14ea4380b8edeedb276dc364c1e`, CI https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44957683634.
 
 ### T08 — Piloto Pizzaria Americana (`🔒 Travado em T07`)
 - **T08.1:** Cadastro real validado pela proprietária (nome da atendente, cardápio, regra meio a meio, horários, taxas, perfis) e **escolha explícita do modo** `NATIVE_OPERATIONS` ou `INTEGRATED_OPERATIONS`, com registro da decisão por tenant/unidade. A coleta preliminar nesta semana não destrava este gate.
@@ -191,16 +192,16 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 ### 4.1 Motores e Componentes Arquiteturais
 | Componente | Tarefa Responsável | Cobertura |
 | :--- | :---: | :---: |
-| Commercial Cognitive Core (Router, Context Pack, Output Guard, Resilience, FinOps) | `T01`, `T07` | `[ ] DoD da evolução não certificado` |
+| Commercial Cognitive Core (Router, Context Pack, Output Guard, Resilience, FinOps) | `T01`, `T07` | `[x] Guardrails/T01 e gateway de execução T07 certificados internamente; IA real em T08` |
 | Business Knowledge & Memory Layer (Multi-tenant) | `T02` | `[x] T02 certificada (código interno; sem ativação externa)` |
 | Catalog Engine & Order Engine | `T03` | `[x] T03 certificada internamente; cobrança/despacho em T04/T06` |
-| Payment Engine (Pix Dinâmico, Checkout, Webhooks, Reconciliação) | `T04` | `[ ] DoD da evolução não certificado` |
+| Payment Engine (Pix Dinâmico, Checkout, Webhooks, Reconciliação) | `T04` | `[x] Engine e contratos internos certificados em T04 e T07; PSP real em T08.2` |
 | Financial Engine & Admin Cognitive Queries | `T05` | `[ ] DoD da evolução não certificado` |
-| Delivery, Production & Notification Engine | `T06` | `[ ] DoD da evolução não certificado` |
-| Customer, Sales, Recovery & Autonomous Governance | `T01`, `T02`, `T07` | `[ ] DoD da evolução não certificado` |
+| Delivery, Production & Notification Engine | `T06` | `[x] Contratos e testes internos T06 e T07 certificados; canal real em T08` |
+| Customer, Sales, Recovery & Autonomous Governance | `T01`, `T02`, `T07` | `[x] Modos/consentimento/aprovação/handoff e E2E internos T07 certificados` |
 | Business Capability Registry / configuração por tenant e unidade | `T02`, `T09` | `[x] Contrato/persistência interna T02 certificados; RBAC de unidade futura` |
-| Food Service Pack — operação nativa / painel de produção | `T03`, `T06`, `T07` | `[ ] Não certificado para a evolução` |
-| Food Service Pack — integração por PDV/KDS/delivery | `T03`, `T06`, `T07`, `T08.4` | `[ ] Contratos e runtime real não homologados` |
+| Food Service Pack — operação nativa / painel de produção | `T03`, `T06`, `T07` | `[x] Operação nativa certificada internamente; piloto real T08.4 ainda bloqueado` |
+| Food Service Pack — integração por PDV/KDS/delivery | `T03`, `T06`, `T07`, `T08.4` | `[x] Contratos internos T06/T07 certificados; [ ] conector/ACK real somente em T08.4 se selecionado` |
 | Scheduling Engine / salão / estética / novos setores | `T09`–`T12` | `[ ] Futuro — BLOQUEADO até T08.5` |
 
 ### 4.2 10 Jornadas Obrigatórias de Aceite do Piloto (Seção 13.2)
