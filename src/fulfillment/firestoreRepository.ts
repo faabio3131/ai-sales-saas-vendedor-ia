@@ -181,11 +181,27 @@ export class FirestoreOperationRepository implements OperationRepository{
 export class FirestoreOperationOutboxRepository implements OperationOutboxRepository{
  async claim(now:number,limit:number):Promise<OperationOutboxItem[]>{
   const max=Math.max(1,Math.min(100,Math.floor(limit)));
-  const rows=await database().collection('productionOutbox')
-    .where('deliveryStatus','in',['PENDING','PROCESSING'])
-    .limit(max*5).get();
+  // Fetch only jobs that are actually due. A bounded scan over all PENDING
+  // rows can be permanently starved by delayed retries; an expired lease must
+  // also be recoverable even while new jobs keep arriving.
+  const [pending,expired]=await Promise.all([
+    database().collection('productionOutbox')
+      .where('deliveryStatus','==','PENDING')
+      .where('nextAttemptAt','<=',now)
+      .orderBy('nextAttemptAt','asc').limit(max).get(),
+    database().collection('productionOutbox')
+      .where('deliveryStatus','==','PROCESSING')
+      .where('leaseUntil','<=',now)
+      .orderBy('leaseUntil','asc').limit(max).get(),
+  ]);
+  // Alternate new work with abandoned leases so neither queue can starve.
+  const rows:typeof pending.docs=[];
+  for(let i=0;i<max;i++){
+    if(pending.docs[i])rows.push(pending.docs[i]);
+    if(expired.docs[i])rows.push(expired.docs[i]);
+  }
   const output:OperationOutboxItem[]=[];
-  for(const row of rows.docs){
+  for(const row of rows){
    if(output.length>=max)break;
    const token=randomUUID();
    const claimed=await database().runTransaction(async tx=>{
