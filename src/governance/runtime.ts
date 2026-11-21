@@ -20,7 +20,6 @@ import {FirestoreGovernanceRepository,FirestoreContactConsentRepository} from '.
 import {FirestoreTrustedInboundRepository,AutonomousInboundTrust} from './trust';
 import {GovernedAutonomyService} from './service';
 import type {GovernedToolPorts} from './model';
-import type {TenantContext} from '../types/contracts';
 import {deny} from './validation';
 
 export function createGovernanceRuntime(){
@@ -89,7 +88,7 @@ export function createGovernanceRuntime(){
      risk.status!=='CLEARED'||risk.source!=='VERIFIED_CUSTOMER_MESSAGE'||
      !Array.isArray(risk.signals))
     return ['RISK_ASSESSMENT_NOT_VERIFIED'];
-   return risk.signals.length?risk.signals:[''].filter(Boolean);
+   return risk.signals;
   },
  };
  return new GovernedAutonomyService(store,ports);

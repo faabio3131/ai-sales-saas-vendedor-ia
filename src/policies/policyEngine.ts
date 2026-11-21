@@ -26,8 +26,17 @@ export class PolicyEngine implements PolicyEngineInterface {
       return { ok: true, data: { allowed: true, requiresHumanApproval: !autoAllowed, reasonCode: autoAllowed ? 'COPILOT_SAFE_ACTION' : 'COPILOT_SENSITIVE_ACTION', effectiveLimits: {} } };
     }
 
+    if (input.autonomyMode === 'AUTONOMOUS_GOVERNED') {
+      // Recommendations are not execution grants. The T07 Tool Gateway
+      // enforces trusted evidence, scoped policy and durable human approval.
+      const safe = ['RESPOND','QUALIFY','FOLLOW_UP','NO_ACTION'].includes(input.action);
+      return { ok: true, data: { allowed: true, requiresHumanApproval: !safe,
+        reasonCode: safe ? 'GOVERNED_COMMERCIAL_ADVICE' : 'GOVERNED_TOOL_GATEWAY_REQUIRED',
+        effectiveLimits: {} } };
+    }
     if (input.autonomyMode === 'AUTONOMOUS') {
-      return { ok: true, data: { allowed: true, requiresHumanApproval: false, reasonCode: 'AUTONOMOUS_POLICY_ALLOWED', effectiveLimits: {} } };
+      return { ok: true, data: { allowed: false, requiresHumanApproval: true,
+        reasonCode: 'LEGACY_AUTONOMY_DISABLED', effectiveLimits: {} } };
     }
 
     return createErrorResult('VALIDATION', 'AUTONOMY_MODE_INVALID', 'Autonomy mode is invalid.', false);

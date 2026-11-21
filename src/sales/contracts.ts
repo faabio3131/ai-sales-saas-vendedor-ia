@@ -5,7 +5,7 @@ export const SALES_ACTIONS = [
   'OFFER_UPSELL','OFFER_CROSS_SELL','CREATE_PAYMENT','NO_ACTION',
 ] as const;
 export type SalesAction = (typeof SALES_ACTIONS)[number];
-export type AutonomyMode = 'ASSIST' | 'COPILOT' | 'AUTONOMOUS';
+export type AutonomyMode = 'ASSIST' | 'COPILOT' | 'AUTONOMOUS_GOVERNED' | 'AUTONOMOUS';
 
 export interface SalesContext {
   tenantId: string;

@@ -58,7 +58,8 @@ export class FirestoreGovernanceRepository implements GovernanceRepository {
     if(!grant||grant.tenantId!==next.tenantId||grant.unitId!==next.unitId||
       grant.tool!==next.tool||grant.requestHash!==next.requestHash||
       grant.granteeUserId!==next.actorId||grant.status!=='APPROVED'||
-      grant.expiresAt<=now||grant.maxAmountMinor<amountMinor)
+      grant.expiresAt<=now||grant.policyVersion!==next.policyVersion||
+      grant.maxAmountMinor<amountMinor)
       deny('AUTONOMY_APPROVAL_SCOPE_DENIED');
     tx.set(approvalRef,{...grant,status:'CONSUMED',consumedAt:now});
    }

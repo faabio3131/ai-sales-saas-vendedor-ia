@@ -43,7 +43,7 @@ export class GovernedAutonomyService{
   if(!policy.allowedTools.includes(command.tool))deny('AUTONOMY_APPROVAL_TOOL_NOT_ALLOWED');
   const a:HumanApproval={id:'grant_'+randomUUID().replace(/-/g,''),
    ...s,tool:command.tool,requestHash:hashRequest(s,command),
-   granteeUserId:input.granteeUserId,approvedBy:ctx.userId!,
+   granteeUserId:input.granteeUserId,approvedBy:ctx.userId!,policyVersion:policy.version,
    maxAmountMinor:Number(input.maxAmountMinor),expiresAt:expires.toISOString(),
    createdAt:now.toISOString(),status:'APPROVED'};
   return this.store.createApproval(a);
@@ -87,8 +87,7 @@ export class GovernedAutonomyService{
    if(canonical?.status!=='CONFIRMED')deny('AUTONOMY_CONFIRMED_ORDER_REQUIRED');
    // Historical confirmation must also be corroborated by immutable signed
    // inbound evidence. A user-authored CRM message cannot unlock automation.
-   const evidence=await this.ports.orderStatus(s,orderId!);
-   if(!evidence||!await this.ports.verifyTrustedInbound(s.tenantId,s.unitId,orderId!,
+   if(!await this.ports.verifyTrustedInbound(s.tenantId,s.unitId,orderId!,
      await this.confirmationRef(s,orderId!)))
     deny('AUTONOMY_CUSTOMER_CHANNEL_UNVERIFIED');
   }
@@ -129,7 +128,7 @@ export class GovernedAutonomyService{
    return reservation.receipt;
   }
   try{
-   const result=await this.dispatch(ctx,unitId,command,canonical);
+   const result=await this.dispatch(ctx,unitId,command,canonical,policy);
    return await this.store.finish(receipt,'COMPLETED',this.clock().toISOString(),result);
   }catch{
    // Ambiguous provider I/O or persistence may already have happened:
@@ -142,12 +141,12 @@ export class GovernedAutonomyService{
  private async confirmationRef(s:{tenantId:string;unitId:string},orderId:string){
   // The T03/T04 canonical order is authoritative for customer confirmation.
   const order=await this.ports.orderStatus(s,orderId);
-  const evidence=(order as unknown as {customerConfirmation?:{evidenceRef?:string}}).customerConfirmation;
+  const evidence=order.customerConfirmation;
   if(!evidence?.evidenceRef)deny('AUTONOMY_CONFIRMED_ORDER_REQUIRED');
   return evidence.evidenceRef;
  }
  private async dispatch(ctx:TenantContext,u:string,command:ToolRequest,
-  order?:{id:string;totalMinor:number}):Promise<Record<string,unknown>>{
+  order?:{id:string;totalMinor:number},policy?:AutonomyPolicy):Promise<Record<string,unknown>>{
   const p=command.payload;
   if(command.tool==='ORDER_STATUS'){
    if(!order)deny('AUTONOMY_ORDER_NOT_FOUND','NOT_FOUND');
@@ -163,7 +162,7 @@ export class GovernedAutonomyService{
     deny('AUTONOMY_DRAFT_TOTAL_INVALID');
    // Draft only; exceeding the autonomous limit cannot create payment/release.
    return {orderId:created.id,totalMinor:total,version:created.version,
-     status:created.status,requiresAmountReview:Number(total)>0};
+     status:created.status,requiresAmountReview:Number(total)>(policy?.maxOrderMinor??0)};
   }
   if(command.tool==='ORDER_CONFIRM'){
    const confirmed=await this.ports.confirm(ctx,u,p);

@@ -8,7 +8,7 @@ import {GOVERNED_TOOLS,type GovernedTool,type ToolRequest,type PublishAutonomyPo
 export function deny(code:string,category:'VALIDATION'|'FORBIDDEN'|'CONFLICT'|'NOT_FOUND'='FORBIDDEN'):never{
   throw new ApplicationError({category,code,message:'Governed commercial operation denied or requires review.'});
 }
-export const ID=/^[A-Za-z0-9_:-]{6,100}$/;
+export const ID=/^[A-Za-z0-9_:-]{6,90}$/;
 const ACTION_PAYLOAD:Record<GovernedTool,readonly string[]>={
  ORDER_STATUS:['orderId'],
  ORDER_DRAFT:['customerId','expectedCatalogVersion','lines','fulfillment','promotionCode'],

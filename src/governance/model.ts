@@ -29,7 +29,7 @@ export interface ToolReceipt {
 }
 export interface HumanApproval {
   id:string;tenantId:string;unitId:string;tool:GovernedTool;requestHash:string;
-  granteeUserId:string;approvedBy:string;maxAmountMinor:number;
+  granteeUserId:string;approvedBy:string;policyVersion:number;maxAmountMinor:number;
   expiresAt:string;createdAt:string;status:'APPROVED'|'CONSUMED'|'REVOKED';
   consumedAt?:string;revokedAt?:string;
 }
@@ -52,6 +52,7 @@ export interface GovernanceRepository {
 export interface GovernedToolPorts {
   orderStatus(scope:{tenantId:string;unitId:string},orderId:string):Promise<{
     id:string;customerId:string;tenantId:string;unitId:string;totalMinor:number;
+    customerConfirmation?:{evidenceRef:string;totalMinor:number};
     status:string;paymentState:string;productionState:string;version:number;
   }>;
   draft(ctx:import('../types/contracts').TenantContext,unitId:string,payload:Record<string,unknown>,
