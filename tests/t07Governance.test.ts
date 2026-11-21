@@ -223,3 +223,103 @@ describe('T07 — transações governadas, aprovação e fluxo completo',()=>{
    .toMatchObject({status:'PREPARED',outboundSent:false});
  });
 });
+
+
+describe('T07 — adversarial security, failure fencing and escalation',()=>{
+ it('rejects unknown tools, fake operation status and finance/refund privilege escalation',async()=>{
+  const f=await setup();
+  for(const tool of ['REFUND','FINANCE_QUERY','SET_OPERATION_MODE','FORGE_STATUS',
+    'SEND_WHATSAPP','AUTHORIZE_INTEGRATION']){
+   await expect(f.service.execute(actor(),'main',{tool,idempotencyKey:'attack_111',
+    payload:{orderId:'order_111'}})).rejects.toMatchObject({code:'AUTONOMY_TOOL_NOT_ALLOWLISTED'});
+  }
+  await expect(f.service.execute(actor(),'main',{...draft(),
+    payload:{...draft().payload,operationMode:'INTEGRATED_OPERATIONS'}}))
+   .rejects.toMatchObject({code:'AUTONOMY_TOOL_PAYLOAD_INVALID'});
+  await expect(f.service.execute(actor(),'main',{...payment(),
+    payload:{...payment().payload,discountPercent:100}}))
+   .rejects.toMatchObject({code:'AUTONOMY_TOOL_PAYLOAD_INVALID'});
+  expect(f.events).toHaveLength(0);
+ });
+ it('rejects unauthenticated AI identity, wrong tenant, and unauthorized human approvals',async()=>{
+  const f=await setup();
+  await expect(f.service.execute(actor('AI'),'main',draft())).rejects.toMatchObject({code:'AUTONOMY_ACTOR_FORBIDDEN'});
+  await expect(f.service.execute(actor('OWNER','pizza-b'),'main',draft()))
+   .rejects.toMatchObject({code:'AUTONOMY_TOOL_NOT_ENABLED'});
+  await f.service.execute(actor(),'main',draft());
+  await expect(f.service.execute(actor('OWNER','pizza-b'),'main',
+   request('ORDER_STATUS',{orderId:'order_111'},'other_111')))
+   .rejects.toMatchObject({code:'AUTONOMY_TOOL_NOT_ENABLED'});
+  await expect(f.service.approve(actor('MANAGER'),'main',{command:draft(),
+   granteeUserId:'operator1',maxAmountMinor:10000,expiresAt:'2026-11-21T18:30:00.000Z'}))
+   .rejects.toMatchObject({code:'BUSINESS_MANAGEMENT_DENIED'});
+ });
+ it('cannot confirm order using unsigned customer message, fabricated total or late version',async()=>{
+  const f=await setup();
+  await f.service.execute(actor(),'main',draft());
+  f.state.trust=false;
+  await expect(f.service.execute(actor(),'main',confirm()))
+   .rejects.toMatchObject({code:'AUTONOMY_CUSTOMER_CHANNEL_UNVERIFIED'});
+  f.state.trust=true;
+  await expect(f.service.execute(actor(),'main',{...confirm(),payload:{
+   ...confirm().payload,expectedVersion:999}}))
+   .rejects.toMatchObject({code:'AUTONOMY_CONFIRMATION_STALE'});
+  await expect(f.service.execute(actor(),'main',{...confirm(),payload:{
+   ...confirm().payload,confirmation:{kind:'CUSTOMER_MESSAGE',
+    evidenceRef:'conversation:conv_111:msg_111',totalMinor:1}}}))
+   .rejects.toMatchObject({code:'AUTONOMY_CONFIRMATION_STALE'});
+  expect(f.events.filter(x=>x==='confirm')).toHaveLength(0);
+ });
+ it('escalates trusted risk signals for allergies, financial disputes, discount and injection',async()=>{
+  for(const risk of ['UNVERIFIED_ALLERGEN','FINANCIAL_DISPUTE','UNAUTHORIZED_DISCOUNT',
+    'PROMPT_INJECTION','RISK_ASSESSMENT_NOT_VERIFIED']){
+   const f=await setup();
+   await f.service.execute(actor(),'main',draft());
+   f.state.risk=[risk];
+   await expect(f.service.execute(actor(),'main',confirm()))
+    .rejects.toMatchObject({code:'AUTONOMY_RISK_ESCALATION_REQUIRED'});
+   expect(f.events.filter(x=>x==='confirm')).toHaveLength(0);
+  }
+ });
+ it('cannot reuse idempotency for different action or repeat uncertain financial side effects',async()=>{
+  const f=await setup();
+  await f.service.execute(actor(),'main',draft());
+  await expect(f.service.execute(actor(),'main',
+   request('ORDER_DRAFT',{...draft().payload,customerId:'customer_222'},'draft_111')))
+   .rejects.toMatchObject({code:'AUTONOMY_IDEMPOTENCY_CONFLICT'});
+  await f.service.execute(actor(),'main',confirm());
+  f.state.failPayment=true;
+  await expect(f.service.execute(actor(),'main',payment()))
+   .rejects.toMatchObject({code:'AUTONOMY_EXECUTION_UNCERTAIN'});
+  const receipt=[...f.store.receipts.values()].find(x=>x.tool==='PAYMENT_CREATE');
+  expect(receipt).toMatchObject({status:'REVIEW_REQUIRED',failureCode:'AUTONOMY_EXECUTION_UNCERTAIN'});
+  f.state.failPayment=false;
+  await expect(f.service.execute(actor(),'main',payment()))
+   .rejects.toMatchObject({code:'AUTONOMY_REPLAY_REQUIRES_HUMAN_REVIEW'});
+  expect(f.events.filter(x=>x.startsWith('payment'))).toHaveLength(1);
+ });
+ it('does not issue the same order creation twice when competing command calls race',async()=>{
+  const f=await setup();
+  const answers=await Promise.allSettled([
+   f.service.execute(actor(),'main',draft()),f.service.execute(actor(),'main',draft()),
+  ]);
+  expect(answers.some(a=>a.status==='fulfilled')).toBe(true);
+  expect(f.events.filter(x=>x.startsWith('draft'))).toHaveLength(1);
+  expect(f.store.receipts.size).toBe(1);
+ });
+ it('rejects cross-user grant use, over-cap financial command, and expired grants',async()=>{
+  const f=await setup('COPILOT');
+  await f.service.execute(actor(),'main',
+   request('ORDER_STATUS',{orderId:'missing_111'},'any_111')).catch(()=>undefined);
+  const g=await f.service.approve(actor(),'main',{command:draft(),
+   granteeUserId:'operator1',maxAmountMinor:10000,
+   expiresAt:'2026-11-21T18:30:00.000Z'});
+  await expect(f.service.execute(actor('ATTENDANT','pizza-a','different_user'),'main',
+   {...draft(),approvalId:g.id})).rejects.toMatchObject({code:'AUTONOMY_APPROVAL_SCOPE_DENIED'});
+  const a=await f.service.approve(actor(),'main',{command:draft(),
+   granteeUserId:'different_user',maxAmountMinor:10000,
+   expiresAt:'2026-11-21T18:30:00.000Z'});
+  await expect(f.service.execute(actor(),'main',{...draft(),approvalId:a.id}))
+   .rejects.toMatchObject({code:'AUTONOMY_APPROVAL_SCOPE_DENIED'});
+ });
+});
