@@ -16,6 +16,8 @@ export interface PaymentWebhookEventRepository {
 
 export interface PaymentProviderInterface {
   readonly id: string;
+  /** Explicit capability negotiation; absent means Pix-only by default. */
+  readonly supportedMethods?: ReadonlyArray<'PIX'|'PAYMENT_LINK'|'CHECKOUT'>;
   createPix(input: ProviderPaymentRequest): Promise<ProviderPaymentResult>;
   createPaymentLink(input: ProviderPaymentRequest): Promise<ProviderPaymentResult>;
   createCheckout(input: ProviderPaymentRequest): Promise<ProviderPaymentResult>;
