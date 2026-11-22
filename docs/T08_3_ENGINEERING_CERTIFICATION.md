@@ -2,15 +2,15 @@
 
 **Data local:** 21/11/2026.  
 **Dependência:** T08.2 PR #22, main `75b3411858298ebf496c52766e35966a0bcf7c55`, CI pós-merge #44966871296 SUCCESS.  
-**Entrega:** PR #23; HEAD do código de engenharia `e9c8ac6f894bc91b75c6b210a4f32f0a186ee6da`.  
-**CI cumulativa do código:** [#44968619639](https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44968619639) — **SUCCESS**.  
+**Entrega:** PR #23; HEAD do código de engenharia `f650dc0f17751cced268c57db29057ea657442c5`.  
+**CI cumulativa do código:** [#44969389933](https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44969389933) — **SUCCESS**.  
 **Gate adicional:** merge autorizado só depois da CI da PR no HEAD documental final; emitir CI pós-merge da main. O documento não atesta esses eventos antecipadamente.
 
 ## Matriz de engenharia implementada
 
 | Requisito | Evidência interna | Limite comprovado |
 |---|---|---|
-| Kill switch e feature flags | `src/operations/pilotFlags.ts`, `tests/t08_3PilotFlags.test.ts` | PSP create e WhatsApp outbound só liberados com controle global + aprovação declarada em env + tenant/unidade/capability exatos |
+| Kill switch e feature flags | `src/operations/pilotFlags.ts`, `tests/t08_3PilotFlags.test.ts` | PSP create, PSP refund e WhatsApp outbound só liberados com controle global + aprovação declarada em env + tenant/unidade/capability exatos |
 | Caminhos protegidos | `src/payments/service.ts`, `src/orderPayments/service.ts`, `src/channels/whatsappDelivery.ts` e legado `src/channels/service.ts` | Contrato legado WhatsApp sem unidade autenticada fica proibido de envio real |
 | Staging isolado | `deploy/t08-3-staging.compose.yaml` + gate CI `docker compose config` | Bind exclusivo 127.0.0.1, sem conexão de workers, sem publicação em proxy/Cloud Run/Contabo |
 | Deploy reproduzível | `scripts/t08_3_ops.py deploy` + teste Python e staging Docker smoke CI | CLI exige imagem OCI por digest e projeto staging, dry-run por padrão, health antes de gravar estado |
@@ -21,10 +21,10 @@
 
 ## Resultado cumulativo
 
-- **380 testes TypeScript PASS** em Vitest local à CI (64 arquivos).
+- **382 testes TypeScript PASS** em Vitest local à CI (65 arquivos).
 - **7 testes Python PASS** para o serviço cognitivo.
 - **8 testes Python PASS** específicos de backup, restauração, deploy e rollback.
-- **Docker build:** 379 testes TS PASS, 1 SKIP por ambiente (total de 380), zero falhas.
+- **Docker build:** 381 testes TS PASS, 1 SKIP por ambiente (total de 382), zero falhas.
 - **Build, typecheck, isolamento de autenticação, limites de payload, health, configuração de cofre e staging Compose:** PASS.
 - **Smoke real de contêiner em staging de CI:** PASS; somente loopback, flags live desligadas.
 - **Smoke do contêiner cognitivo privado:** PASS.
@@ -37,3 +37,9 @@
 4. Efeitos de transferência de tráfego, cutover, alta disponibilidade e continuidade operacional de produção.
 
 **Critério:** estes itens não bloqueiam a conclusão da engenharia T08.3 de staging e dos mecanismos de recuperação, mas bloqueiam alegar ambiente real homologado ou realizar go-live. T08.4 só inicia após CI pós-merge T08.3 verde, obedecendo a trava sequencial.
+
+## Correções adicionais certificadas antes da integração
+
+- O `deploy/payment-reconciler.compose.yaml` agora preserva corretamente `$$legacy_failed` e `$$order_failed` após expansão do Docker Compose. Gate de regressão e execução acumulada verdes.
+- Estorno PSP real usa autorização separada `PSP_REFUND`, obrigatória antes de transição do ledger/efeito externo. Estorno offline é preservado como pendência de operador; testes de regressão verdes.
+- A CI do SHA f650dc0f17751cced268c57db29057ea657442c5 é a evidência de certificação do código funcional. As alterações documentais posteriores devem passar CI do novo HEAD antes do merge.
