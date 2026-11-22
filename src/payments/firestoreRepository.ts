@@ -31,7 +31,16 @@ export class FirestorePaymentRepository implements PaymentRepository {
     const s = await db().collection('payments').where('tenantId','==',tenantId).where('provider','==',provider).where('providerPaymentId','==',providerPaymentId).limit(1).get();
     return s.empty ? null : s.docs[0].data() as Payment;
   }
-  async create(payment: Payment) { await db().collection('payments').doc(payment.id).create(payment); return payment; }
+  async create(payment: Payment) {
+    if(payment.status==='CONFIRMED'&&!payment.confirmedAt)
+      throw Error('PAYMENT_CONFIRMATION_TIMESTAMP_REQUIRED');
+    const ref=db().collection('payments').doc(payment.id);
+    await db().runTransaction(async tx=>{
+      await ensureFiscalIntentInTransaction(tx,payment);
+      tx.create(ref,payment);
+    });
+    return payment;
+  }
   async update(payment: Payment) {
     if(payment.status==='CONFIRMED'&&!payment.confirmedAt)
       throw Error('PAYMENT_CONFIRMATION_TIMESTAMP_REQUIRED');
