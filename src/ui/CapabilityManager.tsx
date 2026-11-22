@@ -4,6 +4,7 @@ import type {BusinessVertical} from '../business/model';
 import type {CapabilityAssignment,CapabilityId,CapabilityManifest,
  CapabilityTemplate,CapabilityTemplateId} from '../capabilities/model';
 import {ProductionBoard} from './ProductionBoard';
+import {SchedulingPanel} from './SchedulingPanel';
 
 interface CatalogResponse {
  schemaVersion:1;manifests:CapabilityManifest[];templates:CapabilityTemplate[];
@@ -16,7 +17,7 @@ const LABELS:Record<CapabilityId,string>={
  FOOD_DELIVERY:'Entrega',FOOD_FINANCE:'Financeiro alimentar',
  RETAIL_CATALOG:'Catálogo de varejo (futuro)',RETAIL_CHECKOUT:'Checkout de varejo (futuro)',
  RETAIL_INVENTORY:'Estoque de varejo (futuro)',
- SERVICE_CATALOG:'Catálogo de serviços (futuro)',SCHEDULING:'Agenda (T10)',
+ SERVICE_CATALOG:'Catálogo de serviços',SCHEDULING:'Agenda horizontal',
  SERVICE_BOOKING:'Reservas de serviços (futuro)',
  BEAUTY_SERVICES:'Serviços de estética (T11)',BEAUTY_BOOKING:'Agendamento de estética (T11)',
  HEALTH_ADMIN:'Administração clínica (futuro)',
@@ -237,5 +238,8 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
   </>}
  </section>
  {allowFoodBoard&&<ProductionBoard tenantId={tenantId} role={role}/>}
+ {!loading&&assignment?.state==='ENABLED_INTERNAL'&&assignment.vertical===vertical&&
+  assignment.enabledCapabilities.includes('SCHEDULING')&&assignment.enabledCapabilities.includes('SERVICE_CATALOG')&&
+  <SchedulingPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} role={role}/>}
  </>;
 }
