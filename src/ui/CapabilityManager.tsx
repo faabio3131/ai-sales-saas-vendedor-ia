@@ -34,6 +34,7 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
  const [catalog,setCatalog]=useState<CatalogResponse|null>(null);
  const [assignment,setAssignment]=useState<CapabilityAssignment|null>(null);
  const [vertical,setVertical]=useState<BusinessVertical|null>(null);
+ const [legacyProductionAllowed,setLegacyProductionAllowed]=useState(false);
  const [templateId,setTemplateId]=useState<CapabilityTemplateId|'UNSELECTED'>('UNSELECTED');
  const [enabled,setEnabled]=useState<CapabilityId[]>([]);
  const [reason,setReason]=useState('Atualizar capacidades internas da unidade');
@@ -56,11 +57,13 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
   Promise.all([
    api<CatalogResponse>(prefix+'/catalog',{signal:ctrl.signal}),
    api<CapabilityAssignment|null>(prefix+'/assignment',{signal:ctrl.signal}),
-   api<{capabilityRegistry:{vertical:BusinessVertical}}|null>(
+   api<{capabilityRegistry:{vertical:BusinessVertical;operationMode:string;capabilities:string[]}}|null>(
     '/api/business/units/'+encodeURIComponent(unitId)+'/active',{signal:ctrl.signal}),
   ]).then(([c,a,p])=>{
    if(ctrl.signal.aborted)return;
    setCatalog(c);setAssignment(a);setVertical(p?.capabilityRegistry.vertical??null);
+   setLegacyProductionAllowed(Boolean(p?.capabilityRegistry.capabilities.includes('PRODUCTION'))&&
+    p?.capabilityRegistry.operationMode==='NATIVE_OPERATIONS');
    setTemplateId(a?.templateId??c.templates.find(t=>t.vertical===p?.capabilityRegistry.vertical)?.id??'UNSELECTED');
    setEnabled(a?.enabledCapabilities??[]);
   }).catch(e=>{if(!ctrl.signal.aborted)setError(e instanceof Error?e.message:'Não foi possível consultar módulos.');})
@@ -108,7 +111,7 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
   finally{setBusy(false);}
  }
  const allowed=vertical!==null&&template!==undefined;
- const allowFoodBoard=assignment?.state==='ENABLED_INTERNAL'&&
+ const allowFoodBoard=legacyProductionAllowed&&assignment?.state==='ENABLED_INTERNAL'&&
   assignment?.vertical==='FOOD_SERVICE'&&vertical==='FOOD_SERVICE'&&
   assignment.operationMode==='NATIVE_OPERATIONS'&&
   assignment.enabledCapabilities.includes('FOOD_PRODUCTION')&&
