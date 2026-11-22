@@ -55,6 +55,8 @@ export class FirestoreBusinessProfileRepository implements BusinessProfileReposi
           currentRevision.capabilityRegistry.vertical!==next.capabilityRegistry.vertical||
           currentRevision.capabilityRegistry.operationMode!==next.capabilityRegistry.operationMode||
           currentRevision.policy.timezone!==next.policy.timezone)){
+          const retail=await tx.get(db().collection('retailUnits').doc(key(next.tenantId,next.unitId)));
+          if(Number(retail.get('activeOrders')??0)>0)conflict('BUSINESS_ACTIVE_RETAIL_ORDERS_BLOCK_CHANGE');
           const now=Date.now();
           await tx.get(db().collection('schedulingTenants').doc(key(next.tenantId)));
           const activeBookings=await tx.get(db().collection('schedulingUnits')

@@ -78,6 +78,11 @@ export class FirestoreCapabilityRepository implements CapabilityRepository {
      d.get('status')==='HELD'&&Number(d.get('holdUntilMs'))>now))
       failure('CAPABILITY_ACTIVE_BOOKINGS_BLOCK_CHANGE');
    }
+   if(previous?.vertical==='RETAIL'&&(next.vertical!=='RETAIL'||previous.operationMode!==next.operationMode||
+    previous.enabledCapabilities.some(c=>c.startsWith('RETAIL_')&&!next.enabledCapabilities.includes(c)))){
+    const retail=await tx.get(db().collection('retailUnits').doc(key(next.tenantId,next.unitId)));
+    if(Number(retail.get('activeOrders')??0)>0)failure('CAPABILITY_ACTIVE_RETAIL_ORDERS_BLOCK_CHANGE');
+   }
    const item=ref.collection('versions').doc(String(next.version));
    tx.create(item,next);
    tx.set(ref,{tenantId:next.tenantId,unitId:next.unitId,

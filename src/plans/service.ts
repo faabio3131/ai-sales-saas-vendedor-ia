@@ -11,7 +11,7 @@ export class FeatureEntitlementService implements FeatureEntitlementServiceInter
     const subscription = await this.subscriptions.findByTenant(tenantId);
     if (!subscription || subscription.status !== 'ACTIVE') throw new ApplicationError({ category:'FORBIDDEN', code:'SUBSCRIPTION_INACTIVE', message:'Active subscription required.' });
     const now = Date.now();
-    if (Date.parse(subscription.periodStart) > now || Date.parse(subscription.periodEnd) < now) throw new ApplicationError({ category:'FORBIDDEN', code:'SUBSCRIPTION_OUT_OF_PERIOD', message:'Subscription is outside its active period.' });
+    if (subscription.tenantId!==tenantId || !['BASIC','STANDARD','PRO','PREMIUM'].includes(subscription.planCode) || !Number.isFinite(Date.parse(subscription.periodStart)) || !Number.isFinite(Date.parse(subscription.periodEnd)) || Date.parse(subscription.periodStart) > now || Date.parse(subscription.periodEnd) <= now) throw new ApplicationError({ category:'FORBIDDEN', code:'SUBSCRIPTION_OUT_OF_PERIOD', message:'Subscription is outside its active period.' });
     return subscription;
   }
 
