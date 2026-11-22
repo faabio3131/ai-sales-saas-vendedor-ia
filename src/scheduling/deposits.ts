@@ -28,7 +28,11 @@ function verified(b:Booking,r:ProviderPaymentResult){
 export class BookingDepositService{
  constructor(private readonly store:ScheduleRepository,private readonly scheduling:SchedulingService,
   private readonly resolver:DepositProviderResolver,
-  private readonly live:(scope:ScheduleScope)=>void=s=>requirePilotLiveFeature('ONLINE_PAYMENT_CREATE',s.tenantId,s.unitId)){}
+  private readonly live:(scope:ScheduleScope)=>void=s=>{
+   if(process.env.NODE_ENV!=='test'&&process.env.ATENDEVENDE_SCHEDULING_PAYMENT_LIVE_ENABLED!=='true')
+    return reject('SCHEDULE_DEPOSIT_LIVE_DISABLED','FORBIDDEN');
+   requirePilotLiveFeature('ONLINE_PAYMENT_CREATE',s.tenantId,s.unitId);
+  }){}
  private update(b:Booking,ctx:TenantContext,deposit:Booking['deposit']):Booking{
   return {...b,deposit,version:b.version+1,updatedAt:new Date(this.scheduling.now()).toISOString(),transitionBy:ctx.userId!};
  }

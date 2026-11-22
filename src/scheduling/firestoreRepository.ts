@@ -23,6 +23,8 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
     return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');
    const staged=new Map<string,Booking>(),stagedReceipts=new Map<string,RequestReceipt>();
    const config=u.exists?u.get('config') as ScheduleConfig:null;
+   if(config&&(config.tenantId!==scope.tenantId||config.unitId!==scope.unitId))
+    return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');
    let nextConfig:ScheduleConfig|undefined;
    function checkRow(b:Booking|Occupancy){
     if(b.tenantId!==scope.tenantId)return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');
