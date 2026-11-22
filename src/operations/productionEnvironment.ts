@@ -24,7 +24,11 @@ function isHttpsUrl(value: string | undefined): boolean {
 
 export function validateProductionEnvironment(env: NodeJS.ProcessEnv = process.env): ProductionEnvironmentReport {
   const issues: ProductionEnvironmentIssue[] = [];
-  const required = ['SESSION_SECRET', 'FIREBASE_PROJECT_ID', 'PUBLIC_APP_URL'] as const;
+  const required = ['FIREBASE_PROJECT_ID', 'PUBLIC_APP_URL'] as const;
+  if (!has(env.SESSION_SECRET) && !has(env.SESSION_SECRET_FILE))
+    issues.push({key:'SESSION_SECRET',code:'REQUIRED',message:'Session secret source is required.'});
+  if (has(env.SESSION_SECRET) && has(env.SESSION_SECRET_FILE))
+    issues.push({key:'SESSION_SECRET',code:'AMBIGUOUS',message:'Only one source is permitted.'});
 
   for (const key of required) {
     if (!has(env[key])) issues.push({ key, code: 'REQUIRED', message: `${key} is required in production.` });

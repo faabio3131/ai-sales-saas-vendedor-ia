@@ -1,5 +1,6 @@
 import { Request, Response, Router } from 'express';
 import { ApplicationError } from '../infrastructure/errors';
+import {sessionSecretFromRuntime} from './runtimeSecret';
 import { AuthProviderInterface } from './contracts';
 import { FirebaseAuthProvider } from './firebaseProvider';
 import {
@@ -16,7 +17,7 @@ export interface AuthDependencies {
 }
 
 function defaultDependencies(): AuthDependencies {
-  const secret = process.env.SESSION_SECRET ?? '';
+  const secret = sessionSecretFromRuntime();
   return {
     provider: new FirebaseAuthProvider(),
     sessionService: new SessionService(secret),
