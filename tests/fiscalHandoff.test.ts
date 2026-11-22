@@ -93,6 +93,16 @@ describe('V2-16.4 Vendedor IA fiscal handoff', () => {
     expect(handoffs.records[0].state).toBe('BLOCKED_UNSUPPORTED_SALE_CONTENT');
   });
 
+  it('refuses to reuse a settled fiscal event for a different amount or confirmation instant', async()=>{
+    const handoffs=new HandoffRepo();
+    const service=new SalesFiscalHandoffService(handoffs,new QuoteRepo(quote()),new ItemRepo([item()]));
+    await service.onConfirmed(payment());
+    await expect(service.onConfirmed({...payment(),amountMinor:8000}))
+      .rejects.toMatchObject({code:'FISCAL_HANDOFF_IDEMPOTENCY_CONFLICT'});
+    await expect(service.onConfirmed({...payment(),confirmedAt:'2026-09-13T10:06:00.000Z'}))
+      .rejects.toMatchObject({code:'FISCAL_HANDOFF_IDEMPOTENCY_CONFLICT'});
+    expect(handoffs.records).toHaveLength(1);
+  });
   it('rejeita divergencia entre pagamento confirmado e quote fonte', async () => {
     const handoffs = new HandoffRepo();
     const mismatched = { ...payment(), amountMinor: 8000 };

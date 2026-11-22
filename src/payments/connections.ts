@@ -10,6 +10,7 @@ export interface MerchantProviderConnection {
   status:'PENDING_VERIFICATION'|'ACTIVE'|'DISABLED';
   recipientId?:string;
   credentialRef?:string; // secure secret-manager reference, not the credential
+  version?:number; // merchant lifecycle CAS version; included in historical binding
 }
 export interface TenantProviderPreferences {
   tenantId:string;
