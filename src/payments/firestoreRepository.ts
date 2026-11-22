@@ -36,8 +36,15 @@ export class FirestorePaymentRepository implements PaymentRepository {
     const ref=db().collection('payments').doc(payment.id);
     await db().runTransaction(async tx=>{
       const old=(await tx.get(ref)).data() as Payment|undefined;
-      if(!old||old.tenantId!==payment.tenantId||old.id!==payment.id)
+      if(!old||old.tenantId!==payment.tenantId||old.id!==payment.id||
+         old.quoteId!==payment.quoteId||old.amountMinor!==payment.amountMinor||
+         old.currency!==payment.currency||old.provider!==payment.provider||
+         old.providerPaymentId!==payment.providerPaymentId)
         throw Error('PAYMENT_UPDATE_SCOPE_CONFLICT');
+      if(old.status==='REFUNDED'&&payment.status!=='REFUNDED')
+        throw Error('PAYMENT_TERMINAL_STATUS_REGRESSION');
+      if(old.status==='CONFIRMED'&&!['CONFIRMED','REFUNDED'].includes(payment.status))
+        throw Error('PAYMENT_CONFIRMED_STATUS_REGRESSION');
       await ensureFiscalIntentInTransaction(tx,payment);
       tx.set(ref,payment,{merge:false});
     });
