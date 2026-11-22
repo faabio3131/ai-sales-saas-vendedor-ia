@@ -1,3 +1,4 @@
+import {ensureFiscalIntentInTransaction} from '../fiscal/outbox';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { PaymentRepository, PaymentWebhookEventRepository } from './contracts';
@@ -31,7 +32,17 @@ export class FirestorePaymentRepository implements PaymentRepository {
     return s.empty ? null : s.docs[0].data() as Payment;
   }
   async create(payment: Payment) { await db().collection('payments').doc(payment.id).create(payment); return payment; }
-  async update(payment: Payment) { await db().collection('payments').doc(payment.id).set(payment,{merge:false}); return payment; }
+  async update(payment: Payment) {
+    const ref=db().collection('payments').doc(payment.id);
+    await db().runTransaction(async tx=>{
+      const old=(await tx.get(ref)).data() as Payment|undefined;
+      if(!old||old.tenantId!==payment.tenantId||old.id!==payment.id)
+        throw Error('PAYMENT_UPDATE_SCOPE_CONFLICT');
+      await ensureFiscalIntentInTransaction(tx,payment);
+      tx.set(ref,payment,{merge:false});
+    });
+    return payment;
+  }
 }
 
 export class FirestorePaymentWebhookEventRepository implements PaymentWebhookEventRepository {
