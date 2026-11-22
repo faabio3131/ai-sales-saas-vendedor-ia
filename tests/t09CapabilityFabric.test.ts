@@ -373,10 +373,10 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
    const path='http://127.0.0.1:'+(server.address() as AddressInfo).port+
      '/capabilities/units/kitchen';
    const request=async(resource:string,options:RequestInit={})=>{
-    const res=await fetch(path+resource,{
-     headers:{'content-type':'application/json','x-test-tenant':'tenant-food',
-       ...(options.headers??{})},...options,
-    });
+    const headers=new Headers(options.headers);
+    if(!headers.has('x-tenant-id'))headers.set('x-tenant-id','tenant-food');
+    if(!headers.has('content-type'))headers.set('content-type','application/json');
+    const res=await fetch(path+resource,{...options,headers,signal:AbortSignal.timeout(4000)});
     return {res,data:await res.json()};
    };
    expect((await request('/catalog',{headers:{'x-test-tenant':'NO_AUTH'}})).res.status).toBe(403);
@@ -404,6 +404,6 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
      reason:'Retornar para baseline anterior aprovado'})});
    expect(rollback.res.status).toBe(201);
    expect(rollback.data.data).toMatchObject({version:3,rollbackOfVersion:1});
-  }finally{server.close();await once(server,'close');}
+  }finally{server.closeAllConnections();server.close();await once(server,'close');}
  });
 });
