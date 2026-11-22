@@ -130,9 +130,9 @@ describe('T06 — integrated PDV/KDS versioned production port',()=>{
   ] satisfies OperationEventName[]);
   expect(e.notices).toHaveLength(0);
   const sent=await worker.runOnce();
-  expect(sent).toEqual({claimed:3,delivered:3,retried:0});
+  expect(sent).toEqual({claimed:5,delivered:5,retried:0});
   expect(e.notices.map(x=>x.name)).toEqual([
-   'OrderReady','DeliveryDispatched','DeliveryCompleted',
+   'OrderReleasedToProduction','ProductionStarted','OrderReady','DeliveryDispatched','DeliveryCompleted',
   ]);
   expect((await e.settings.get('pizza-a','main'))?.activeOperations).toBe(0);
  });
