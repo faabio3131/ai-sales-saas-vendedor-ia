@@ -13,11 +13,21 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+      - name: T13 verify immutable GitHub Actions refs
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const source=fs.readFileSync('.github/workflows/blk010-validation.yml','utf8');
+          const refs=[...source.matchAll(/^\s+uses:\s+([^\s#]+)/gm)].map(x=>x[1]);
+          if(refs.length!==5||refs.some(r=>!/^[-\w]+\/[-\w]+@[0-9a-f]{40}$/.test(r)))
+            throw new Error('Unpinned or unexpected GitHub Actions references');
+          console.log('t13_github_actions_immutable_refs_verified:'+refs.length);
+          NODE
       - name: Install dependencies (immutable lock)
         run: npm ci --no-audit --no-fund
       - name: T13 auditable dependencies and SBOM
@@ -27,7 +37,7 @@ jobs:
           npm sbom --sbom-format=cyclonedx > t13-sbom.cdx.json
           node -e "const b=require('./t13-sbom.cdx.json');if(!b.components?.length)process.exit(1)"
       - name: T13 upload software bill of materials
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: t13-sbom-cyclonedx
           path: t13-sbom.cdx.json
@@ -58,7 +68,7 @@ jobs:
           npm test -- --coverage --coverage.provider=v8 --coverage.include='src/**/*.{ts,tsx}' --coverage.reporter=json-summary
           node scripts/t13CoverageGate.mjs coverage/coverage-summary.json
       - name: T13 upload quantitative source coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: t13-source-coverage-json
           path: coverage/coverage-summary.json
@@ -333,7 +343,7 @@ jobs:
       - name: T13 candidate provenance (non-deployed, non-promoted)
         run: node scripts/t13EvidenceManifest.mjs
       - name: T13 upload immutable-input candidate manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: t13-candidate-evidence
           path: t13-evidence-manifest.json
