@@ -42,6 +42,10 @@ jobs:
           test "$READY" = 1
           node -e "const h=require('/tmp/cognitive-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
           npm test
+      - name: T08.4 10-journey and dual-operation-mode acceptance matrix
+        env:
+          NODE_ENV: test
+        run: npm test -- tests/t08_4PilotJourneys.test.ts tests/t08_4ModesAndWhatsApp.test.ts
       - name: Runtime security boundaries
         env:
           NODE_ENV: production

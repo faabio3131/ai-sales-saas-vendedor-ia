@@ -42,7 +42,7 @@ export class ChannelCustomerNoticePort implements CustomerNoticePort{
     DeliveryDispatched:'Seu pedido nº '+number+' saiu para entrega. Não há rastreamento GPS ao vivo.',
     DeliveryCompleted:'Seu pedido nº '+number+' foi registrado como entregue.',
     OrderPickupCompleted:'Seu pedido nº '+number+' foi registrado como retirado.',
-    OrderReleasedToProduction:'Seu pedido nº '+number+' foi encaminhado à produção.',
+    OrderReleasedToProduction:'Seu pedido nº '+number+' foi confirmado e encaminhado à produção.',
   };
   const body=templates[event.name];
   if(!body)rejected('FULFILLMENT_NOTICE_EVENT_UNSUPPORTED');

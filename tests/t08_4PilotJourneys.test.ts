@@ -207,7 +207,7 @@ function finance(orders:Orders,ledger:Ledger){
    events:ledger.eventLog.filter(e=>e.tenantId===t&&e.unitId===u),
   }),
  },{effective:async(t:string,u:string)=>t==='pizza-a'&&u==='main'?profile:null} as never,
- {get:async()=>null,update:async(v:unknown)=>v} as never,()=>new Date(NOW));
+ {get:async()=>null,update:async(v:unknown)=>v} as never,()=>new Date(Date.parse(NOW)+60_000));
 }
 
 describe('T08.4 — 10 jornadas obrigatórias verificadas sem ambiente externo',()=>{
