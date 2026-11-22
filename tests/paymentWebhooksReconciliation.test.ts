@@ -205,9 +205,11 @@ describe('T13 independent audit PAG-001: synchronous delivery is leased',()=>{
    rawBody:raw,payload:JSON.parse(raw.toString('utf8'))};
   const first=processor.process(input);
   const second=processor.process(input);
+  // Attach rejection handlers immediately; Vitest treats late catches as unhandled.
+  const settled=Promise.allSettled([first,second]);
   await new Promise(resolve=>setTimeout(resolve,15));
   release();
-  const results=await Promise.allSettled([first,second]);
+  const results=await settled;
   expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
   expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);
   expect(refresh).toHaveBeenCalledTimes(1);
