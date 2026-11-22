@@ -39,7 +39,7 @@ function version(value:unknown,allowZero:boolean):number{
 }
 function reason(value:unknown):string{
  if(typeof value!=='string'||value.trim().length<8||value.trim().length>240||
-  /[\u0000-\u001f]/.test(value))invalid('CAPABILITY_REASON_INVALID');
+  /[\u0000-\u001f]/.test(value))return invalid('CAPABILITY_REASON_INVALID');
  return value.trim();
 }
 /** Legacy food feature flags are independently enforced: new registry cannot grant them. */
