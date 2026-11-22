@@ -222,6 +222,8 @@ export class SchedulingService{
      const state=b.startMs<=now?'CANCELLED':'READY';
      tx.saveBooking(this.next(b,ctx,now,{reminder:{...b.reminder,state}}));
      if(state==='READY')ready++;else missed++;
+    }else if(b.status==='CONFIRMED'&&b.reminder?.state==='READY'&&b.startMs<=now){
+     tx.saveBooking(this.next(b,ctx,now,{reminder:{...b.reminder,state:'CANCELLED'}}));missed++;
     }
    }
    return {expired,ready,missed,more:records.length===100};

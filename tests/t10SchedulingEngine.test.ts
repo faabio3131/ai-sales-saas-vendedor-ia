@@ -178,6 +178,15 @@ describe('T10 reservation lifecycle, atomicity, cross-unit locks, privacy',()=>{
   h.advance(2*60*MINUTE);
   expect((await h.service.complete(t,u,c.id,{expectedVersion:ack.version,idempotencyKey:'complete'})).status).toBe('COMPLETED');
  });
+ it('a ready reminder expires at appointment start, never falsely remains sendable',async()=>{
+  const h=await setup(),b=await h.service.reserve(t,u,input('tenant-a','2026-11-23T14:00:00Z'));
+  await h.service.confirm(t,u,b.id,{expectedVersion:1,idempotencyKey:'confirm'});
+  h.advance(60*MINUTE);await h.service.maintainDue(scope());
+  expect((await h.service.get(t,u,b.id)).reminder?.state).toBe('READY');
+  h.advance(60*MINUTE);
+  expect(await h.service.maintainDue(scope())).toMatchObject({missed:1});
+  expect((await h.service.get(t,u,b.id)).reminder?.state).toBe('CANCELLED');
+ });
  it('maintenance expires long-horizon holds and ignores foreign units; overdue reminders never become sendable',async()=>{
   const h=await setup();h.store.enable(scope('tenant-b',u));await h.service.configure(actor('tenant-b'),u,config());
   const b=await h.service.reserve(t,u,input('tenant-a','2027-01-01T13:00:00Z','far'));

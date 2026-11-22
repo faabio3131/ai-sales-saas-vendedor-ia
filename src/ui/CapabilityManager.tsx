@@ -238,8 +238,10 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
   </>}
  </section>
  {allowFoodBoard&&<ProductionBoard tenantId={tenantId} role={role}/>}
- {!loading&&assignment?.state==='ENABLED_INTERNAL'&&assignment.vertical===vertical&&
+ {!loading&&assignment?.state==='ENABLED_INTERNAL'&&assignment.operationMode==='NATIVE_OPERATIONS'&&assignment.vertical===vertical&&
   assignment.enabledCapabilities.includes('SCHEDULING')&&assignment.enabledCapabilities.includes('SERVICE_CATALOG')&&
   <SchedulingPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} role={role}/>}
+ {!loading&&assignment?.operationMode==='INTEGRATED_OPERATIONS'&&assignment.enabledCapabilities.includes('SCHEDULING')&&
+  <p className="text-sm text-amber-300">Agenda nativa não habilitada no modo integrado. Aguarde um adaptador de agenda externa certificado; nenhum horário é confirmado em duplicidade.</p>}
  </>;
 }

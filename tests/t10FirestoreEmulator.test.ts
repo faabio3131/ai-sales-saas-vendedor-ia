@@ -63,15 +63,16 @@ describe.skipIf(!enabled)('T10 Firestore emulator transaction and ledger accepta
   expect(lock.customerId).toBeUndefined();expect(lock.deposit).toBeUndefined();
  },60000);
  it('capability removal blocked while active; cancellation and rollback release locks and preserve revision history',async()=>{
-  const t=tenant(),{s,ctx,capabilities}=await provision(t,'main');
-  const b=await s.reserve(ctx,'main',input(t,'2026-12-01T13:00:00Z','future'));
+  const t=tenant(),now=Date.now(),{s,ctx,capabilities}=await provision(t,'main',now);
+  const day=new Date(now+3*86400000).toISOString().slice(0,10);
+  const b=await s.reserve(ctx,'main',input(t,day+'T13:00:00Z','future'));
   const remove={expectedVersion:1,templateId:'SERVICES_STD' as const,templateVersion:1 as const,
     enabledCapabilities:['CORE_KNOWLEDGE' as const],reason:'Desativação em teste'};
   await expect(capabilities.publish(ctx,'main',remove)).rejects.toMatchObject({code:'CAPABILITY_ACTIVE_BOOKINGS_BLOCK_CHANGE'});
   await s.cancel(ctx,'main',b.id,{expectedVersion:1,idempotencyKey:'cancel',reason:'Teste de cancelamento'});
   const updated=await capabilities.publish(ctx,'main',remove);
   expect(updated.enabledCapabilities).toEqual(['CORE_KNOWLEDGE']);
-  await expect(s.availability(ctx,'main',{date:'2026-12-01',professionalId:'pro-a',serviceId:'service-a'}))
+  await expect(s.availability(ctx,'main',{date:day,professionalId:'pro-a',serviceId:'service-a'}))
    .rejects.toMatchObject({code:'SCHEDULE_CAPABILITY_REQUIRED'});
   expect((await s.get(ctx,'main',b.id)).status).toBe('CANCELLED');
  },60000);

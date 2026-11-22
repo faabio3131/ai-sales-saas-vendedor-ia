@@ -51,6 +51,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
      const assignment=ar.data() as CapabilityAssignment|undefined;
      if(!assignment||assignment.tenantId!==scope.tenantId||assignment.unitId!==scope.unitId||
        assignment.version!==v||assignment.state!=='ENABLED_INTERNAL'||
+       assignment.operationMode!=='NATIVE_OPERATIONS'||
        !assignment.enabledCapabilities.includes('SCHEDULING')||
        !assignment.enabledCapabilities.includes('SERVICE_CATALOG'))return false;
      const p=await trx.get(db.collection('businessProfiles').doc(key));
@@ -110,7 +111,8 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
      // Persist only one next due timestamp, enabling a bounded indexed worker.
      const {maintenanceDueMs:_old,...rest}=b;
      const due=b.status==='HELD'?b.holdUntilMs:
-      b.status==='CONFIRMED'&&b.reminder?.state==='PENDING'?b.reminder.dueMs:undefined;
+      b.status==='CONFIRMED'&&b.reminder?.state==='PENDING'?b.reminder.dueMs:
+      b.status==='CONFIRMED'&&b.reminder?.state==='READY'?b.startMs:undefined;
      const persisted:Booking=due===undefined?rest:{...rest,maintenanceDueMs:due};
      trx.set(bookings.doc(b.id),persisted);
      trx.create(bookings.doc(b.id).collection('versions').doc(String(b.version)),persisted);
