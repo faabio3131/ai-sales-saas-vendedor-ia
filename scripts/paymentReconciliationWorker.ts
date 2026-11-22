@@ -1,3 +1,4 @@
+import {FirestoreGovernanceRepository} from '../src/governance/repository';
 import {createBankPaymentRuntime} from '../src/payments/bankRuntime';
 import {FirestoreReconciliationRepository,PaymentReconciliationWorker} from '../src/payments/reconciliation';
 import {PaymentWebhookProcessor} from '../src/payments/providerWebhooks';
@@ -8,9 +9,12 @@ const worker=new PaymentReconciliationWorker(new FirestoreReconciliationReposito
 const processor=new PaymentWebhookProcessor(runtime);
 const webhookWorker=new VerifiedWebhookRecoveryWorker(runtime.recovery,
  event=>processor.reconcileVerified(event));
-Promise.all([worker.runOnce(100),webhookWorker.runOnce(100)]).then(([result,webhooks])=>{
+Promise.all([worker.runOnce(100),webhookWorker.runOnce(100),
+ new FirestoreGovernanceRepository().reconcileStaleReservations(new Date().toISOString())])
+ .then(([result,webhooks,governance])=>{
  console.info(JSON.stringify({event:'payment_reconciliation_completed',...result}));
  console.info(JSON.stringify({event:'verified_webhook_recovery_completed',...webhooks}));
+ console.info(JSON.stringify({event:'governance_reservation_reconciliation_completed',...governance}));
  if(result.failed||webhooks.failed)process.exitCode=1;
 }).catch(error=>{
  console.error('payment_reconciliation_failed',error instanceof Error?error.name:'unknown');
