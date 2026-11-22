@@ -44,3 +44,6 @@ credentials/
 *.pem
 *.key
 *.secret.json
+
+# T08.3 local deployment state and recovery evidence (never version)
+.t08-3/

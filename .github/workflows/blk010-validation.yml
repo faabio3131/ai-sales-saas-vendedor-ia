@@ -149,6 +149,28 @@ jobs:
           docker logs vendedor-ia-ci || true
           exit 1
 
+      - name: T08.3 actual isolated staging Docker smoke
+        env:
+          ATENDEVENDE_IMAGE: vendedor-ia-ci
+          SESSION_SECRET: ci-staging-session-secret-0123456789abcdef
+          FIREBASE_PROJECT_ID: av-staging-isolated
+          ATENDEVENDE_STAGING_PORT: "18181"
+        run: |
+          set -euo pipefail
+          docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml up -d --no-build
+          cleanup() {
+            docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml logs || true
+            docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml down --remove-orphans || true
+          }
+          trap cleanup EXIT
+          READY=0
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18181/api/health > /tmp/atendevende-t083-health.json; then READY=1; break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          node -e "const h=require('/tmp/atendevende-t083-health.json');if(h.status!=='ok'||h.governance?.tenantIsolationEnforced!==true)process.exit(1)"
+          docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml ps
       - name: Private Python cognitive Docker smoke
         env:
           COGNITIVE_S2S_SECRET: ci-cognitive-service-secret-0123456789abc

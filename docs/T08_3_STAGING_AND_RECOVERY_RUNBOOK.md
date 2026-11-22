@@ -6,7 +6,7 @@
 
 ## Topologia e fronteira
 
-Há referências históricas a backend Google Cloud Run e a workers Contabo. **Nenhuma migração pode ser presumida**. O T08.3 cria apenas um stack Docker Compose isolado para ensaio e uma CLI local; deploy real requer inventário de infraestrutura, autorização e janela operacional. A API/worker devem ter a mesma imagem OCI certificada pelo digest em qualquer implantação posterior. Os workers e PSP ficam desligados neste compose; suas overlays existentes não são ativadas.
+Há referências históricas a backend Google Cloud Run e a workers Contabo. **Nenhuma migração pode ser presumida**. O T08.3 cria apenas um stack Docker Compose isolado para ensaio e uma CLI local; deploy real requer inventário de infraestrutura, autorização e janela operacional. A API/worker devem ter a mesma imagem OCI certificada pelo digest em qualquer implantação posterior. Os workers e PSP ficam desligados neste compose; suas overlays existentes não são ativadas. O caminho legado `ChannelService` não possui escopo de unidade autenticado e, portanto, não pode enviar WhatsApp real: apenas o `WhatsAppDeliveryService` vinculado a tenant+unidade pode fazê-lo. O estado local `.t08-3/` é ignorado pelo Git.
 
 `deploy/t08-3-staging.compose.yaml` publica somente `127.0.0.1` e fixa três controles: LIVE_ENABLED=false, GO_LIVE_APPROVED=false e ALLOWED_UNITS={}. Sem mudança no proxy, tráfego público é zero. A CLI não altera DNS, proxy, Firestore, Cloud Run, nem flags no runtime de terceiros.
 

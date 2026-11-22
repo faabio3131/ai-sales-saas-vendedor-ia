@@ -1,4 +1,5 @@
 import { createErrorResult } from '../infrastructure/errors';
+import {pilotLiveFeatureEnabled} from '../operations/pilotFlags';
 import { Result } from '../types/contracts';
 import { ChannelInterface, ChannelName, ChannelSendResult, NormalizedInboundMessage, OutboundChannelMessage, WebhookEnvelope } from './contracts';
 
@@ -21,6 +22,12 @@ export class ChannelService {
     if (!message.recipient?.trim()) return createErrorResult('VALIDATION','CHANNEL_RECIPIENT_REQUIRED','Recipient is required.',false);
     if (!message.idempotencyKey?.trim()) return createErrorResult('VALIDATION','CHANNEL_IDEMPOTENCY_REQUIRED','Idempotency key is required.',false);
     if (!message.text?.trim() && !message.mediaRef?.trim()) return createErrorResult('VALIDATION','CHANNEL_CONTENT_REQUIRED','Message content is required.',false);
+    // The legacy channel contract does not authenticate a unit. It cannot send live WhatsApp.
+    // The T08.2 official worker uses the tenant+unit-bound WhatsAppDeliveryService instead.
+    if(message.channel==='WHATSAPP' &&
+       !pilotLiveFeatureEnabled('WHATSAPP_OUTBOUND',message.tenantId,undefined))
+      return createErrorResult('FORBIDDEN','PILOT_FEATURE_DISABLED',
+        'Legacy WhatsApp delivery has no verified unit scope.',false);
     const adapter = this.adapters.get(message.channel);
     if (!adapter) return createErrorResult('PROVIDER','CHANNEL_UNAVAILABLE','Channel is unavailable.',false);
     try { return await adapter.sendMessage({ ...message, tenantId: message.tenantId.trim(), recipient: message.recipient.trim(), idempotencyKey: message.idempotencyKey.trim() }); }
