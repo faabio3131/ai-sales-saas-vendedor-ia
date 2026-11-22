@@ -20,6 +20,11 @@ export const META_ID=/^[1-9][0-9]{5,30}$/;
 export function channelError(code:string,category:'FORBIDDEN'|'CONFLICT'|'VALIDATION'|'PROVIDER'='FORBIDDEN'){
  return new ApplicationError({code,category,message:'WhatsApp channel is unavailable or its configuration is incomplete.'});
 }
+export function requireExclusivePhoneClaim(
+ claim:{tenantId:string;unitId:string}|undefined,tenantId:string,unitId:string){
+ if(claim&&(claim.tenantId!==tenantId||claim.unitId!==unitId))
+  throw channelError('CHANNEL_PHONE_ALREADY_BOUND','CONFLICT');
+}
 export function channelDocId(tenantId:string,unitId:string){
  if(!CHANNEL_TENANT.test(tenantId)||!CHANNEL_UNIT.test(unitId))throw channelError('CHANNEL_SCOPE_INVALID');
  return createHash('sha256').update(JSON.stringify([tenantId,unitId])).digest('hex');
@@ -49,8 +54,7 @@ export class FirestoreWhatsAppConnectionStore implements WhatsAppConnectionStore
     throw channelError('CHANNEL_VERSION_CONFLICT','CONFLICT');
    if(data&&(data.tenantId!==next.tenantId||data.unitId!==next.unitId))
     throw channelError('CHANNEL_SCOPE_MISMATCH');
-   if(claim&&(claim.tenantId!==next.tenantId||claim.unitId!==next.unitId))
-    throw channelError('CHANNEL_PHONE_ALREADY_BOUND','CONFLICT');
+   requireExclusivePhoneClaim(claim,next.tenantId,next.unitId);
    if(next.version!==expectedVersion+1)throw channelError('CHANNEL_VERSION_CONFLICT','CONFLICT');
    let previousPhoneRef:FirebaseFirestore.DocumentReference|undefined;
    if(data&&data.phoneNumberId!==next.phoneNumberId){

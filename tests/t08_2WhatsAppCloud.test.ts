@@ -6,7 +6,7 @@ import express from 'express';
 import {once} from 'node:events';
 import type {AddressInfo} from 'node:net';
 import {describe,it,expect,vi} from 'vitest';
-import {WhatsAppRegistrationService,whatsappVaultReference,
+import {WhatsAppRegistrationService,whatsappVaultReference,requireExclusivePhoneClaim,
  type WhatsAppConnection,type WhatsAppConnectionStore} from '../src/channels/whatsappConnections';
 import {MountedWhatsAppVault,type WhatsAppSecrets} from '../src/channels/whatsappVault';
 import {createWhatsAppWebhookRouter,verifyMetaSignature,verifyWhatsAppAccountPayload,
@@ -46,6 +46,15 @@ const payload=()=>({
 });
 function sig(raw:string,s=secret.appSecret){return 'sha256='+createHmac('sha256',s).update(raw).digest('hex');}
 describe('T08.2 — official WhatsApp account, verification, inbound and delivery',()=>{
+ it('rejects same Meta phone ID used by another company or unit before writing connection',()=>{
+  expect(()=>requireExclusivePhoneClaim(undefined,tenant,unit)).not.toThrow();
+  expect(()=>requireExclusivePhoneClaim({tenantId:tenant,unitId:unit},tenant,unit)).not.toThrow();
+  expect(()=>requireExclusivePhoneClaim({tenantId:'other',unitId:unit},tenant,unit))
+   .toThrowError(expect.objectContaining({code:'CHANNEL_PHONE_ALREADY_BOUND'}));
+  expect(()=>requireExclusivePhoneClaim({tenantId:tenant,unitId:'store-2'},tenant,unit))
+   .toThrowError(expect.objectContaining({code:'CHANNEL_PHONE_ALREADY_BOUND'}));
+ });
+
  it('keeps registration metadata scoped by tenant and unit and never writes credentials to repository',async()=>{
   const store=new Store(),verifier=vi.fn(async()=>({verified:false,evidenceRef:''}));
   const api=new WhatsAppRegistrationService(store,{verify:verifier});
