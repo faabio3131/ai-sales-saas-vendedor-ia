@@ -404,6 +404,11 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
      reason:'Retornar para baseline anterior aprovado'})});
    expect(rollback.res.status).toBe(201);
    expect(rollback.data.data).toMatchObject({version:3,rollbackOfVersion:1});
-  }finally{server.closeAllConnections();server.close();await once(server,'close');}
- });
+  }finally{
+    await new Promise<void>((resolve,reject)=>{
+      server.close(err=>err?reject(err):resolve());
+      server.closeAllConnections();
+    });
+   }
+ },15000);
 });
