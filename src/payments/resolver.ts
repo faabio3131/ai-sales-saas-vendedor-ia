@@ -54,14 +54,14 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
   async forRecordedPayment(payment:Payment):Promise<PaymentProviderInterface> {
     // Existing payments must never be sent to whichever merchant account is
     // currently configured. Unknown pre-migration bindings require investigation.
-    if(!payment.merchantBindingHash||!/^[a-f0-9]{64}$/.test(payment.merchantBindingHash))
-      throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_HISTORICAL_BINDING_MISMATCH',
-        message:'Historical payment requires independently verified merchant binding.'});
     const provider=payment.provider as PaymentProviderId;
     const active=await this.connections.get(payment.tenantId,provider);
     if(active?.status!=='ACTIVE')
       throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_CONNECTION_NOT_ACTIVE',
         message:'Merchant account is disabled; manual reconciliation required.'});
+    if(!payment.merchantBindingHash||!/^[a-f0-9]{64}$/.test(payment.merchantBindingHash))
+      throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_HISTORICAL_BINDING_MISMATCH',
+        message:'Historical payment requires independently verified merchant binding.'});
     if(merchantConnectionBindingHash(active)===payment.merchantBindingHash)
       return (await this.resolve(payment.tenantId,provider)).provider;
     const original=await this.connections.findGenerationByBinding?.(
