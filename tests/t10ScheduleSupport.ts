@@ -34,6 +34,7 @@ export class MemorySchedule implements ScheduleRepository{
     due:async(now)=>rows().filter(b=>b.status==='HELD'&&b.holdUntilMs<=now||
      b.status==='CONFIRMED'&&(b.reminder?.state==='PENDING'&&b.reminder.dueMs<=now||
      b.reminder?.state==='READY'&&b.startMs<=now)).slice(0,100).map(copy),
+    communicationDue:async(now)=>rows().filter(b=>b.notices?.some(n=>n.state==='PENDING'&&n.dueMs<=now||n.state==='CLAIMED'&&(n.claimUntilMs??0)<=now)).slice(0,25).map(copy),
     receipt:async(r)=>copy(this.receipts.get(k+':'+r)??null),
     saveConfig:c=>{nextConfig=copy(c);},
     saveBooking:b=>{staged.set(b.id,copy(b));},

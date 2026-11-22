@@ -1,19 +1,33 @@
+export type BookingPack='SALON'|'BARBERSHOP'|'AESTHETICS_ADMIN'|'PROFESSIONAL_SERVICES';
+export interface PackPolicy {
+ kind:BookingPack;cancelNoticeMinutes:number;noShowGraceMinutes:number;
+ notifyWhatsApp:boolean;
+}
+export interface PackSnapshot extends PackPolicy {
+ configVersion:number;priceMinor:number;acceptedBy:string;acceptedAt:string;
+}
+export interface BookingNotice {
+ key:string;kind:'CONFIRMATION'|'RESCHEDULE'|'CANCELLATION'|'REMINDER';
+ state:'PENDING'|'CLAIMED'|'ACCEPTED_BY_PROVIDER'|'BLOCKED'|'REVIEW_REQUIRED'|'SUPERSEDED';
+ dueMs:number;claimUntilMs?:number;externalMessageId?:string;failureCode?:string;
+}
 export interface ScheduleScope {tenantId:string;unitId:string}
 export interface Shift {day:number;startMinute:number;endMinute:number}
-export interface ScheduleProfessional {id:string;name:string;active:boolean;shifts:Shift[]}
+export interface ScheduleProfessional {id:string;name:string;active:boolean;shifts:Shift[];title?:string}
 export interface ScheduleResource {id:string;name:string;active:boolean;shifts:Shift[]}
 export interface ScheduleServiceDefinition {
  id:string;name:string;active:boolean;durationMinutes:number;
- professionalIds:string[];resourceIds:string[];depositMinor:number;
+ professionalIds:string[];resourceIds:string[];depositMinor:number;priceMinor?:number;category?:string;
 }
 export interface ScheduleBlock {id:string;target:'UNIT'|'PROFESSIONAL'|'RESOURCE';targetId?:string;startMs:number;endMs:number}
 export interface ScheduleConfig extends ScheduleScope {
  version:number;timezone:string;holdMinutes:number;reminderMinutes:number;
  shifts:Shift[];holidays:string[];professionals:ScheduleProfessional[];
  resources:ScheduleResource[];services:ScheduleServiceDefinition[];blocks:ScheduleBlock[];
+ pack?:PackPolicy;
  updatedAt:string;updatedBy:string;
 }
-export type BookingStatus='HELD'|'CONFIRMED'|'CANCELLED'|'EXPIRED'|'COMPLETED';
+export type BookingStatus='HELD'|'CONFIRMED'|'CANCELLED'|'EXPIRED'|'COMPLETED'|'NO_SHOW';
 export type DepositStatus='NOT_REQUIRED'|'UNPAID'|'CREATING'|'PENDING'|'CONFIRMED'|'FAILED'|'REVIEW_REQUIRED'|'REFUNDED';
 export interface BookingDeposit {
  amountMinor:number;currency:'BRL';status:DepositStatus;
@@ -25,6 +39,8 @@ export interface Booking extends ScheduleScope {
  id:string;version:number;configVersion:number;customerId:string;serviceId:string;
  professionalId:string;resourceIds:string[];startMs:number;endMs:number;timezone:string;
  status:BookingStatus;holdUntilMs:number;deposit:BookingDeposit;reminder?:BookingReminder;
+ pack?:PackSnapshot;checkedInAt?:string;lateCancellation?:boolean;noShowAt?:string;
+ notices?:BookingNotice[];communicationDueMs?:number;
  maintenanceDueMs?:number;
  createdAt:string;updatedAt:string;createdBy:string;transitionBy:string;cancelReason?:string;
 }
@@ -36,12 +52,13 @@ export interface ScheduleSlot {professionalId:string;resourceIds:string[];startA
 export interface RequestReceipt {fingerprint:string;bookingId:string}
 export interface ScheduleTransaction {
  config():Promise<ScheduleConfig|null>;
- grant(nowMs:number):Promise<boolean>;
+ grant(nowMs:number,pack?:BookingPack):Promise<boolean>;
  booking(id:string):Promise<Booking|null>;
  window(startMs:number,endMs:number):Promise<Occupancy[]>;
  records(startMs:number,endMs:number):Promise<Booking[]>;
  future(nowMs:number):Promise<Booking[]>;
  due(nowMs:number):Promise<Booking[]>;
+ communicationDue(nowMs:number):Promise<Booking[]>;
  receipt(key:string):Promise<RequestReceipt|null>;
  saveConfig(config:ScheduleConfig):void;
  saveBooking(booking:Booking):void;

@@ -46,6 +46,12 @@ export function createSchedulingRouter(
  router.post('/units/:unitId/bookings/:id/complete',async(req,res,next)=>{
   try{res.json({ok:true,data:await service.complete(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
  });
+ router.post('/units/:unitId/bookings/:id/check-in',async(req,res,next)=>{
+  try{res.json({ok:true,data:await service.checkIn(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
+ });
+ router.post('/units/:unitId/bookings/:id/no-show',async(req,res,next)=>{
+  try{res.json({ok:true,data:await service.noShow(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
+ });
  router.post('/units/:unitId/bookings/:id/deposit/pix',async(req,res,next)=>{
   try{res.json({ok:true,data:await deposits.issue(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
  });
