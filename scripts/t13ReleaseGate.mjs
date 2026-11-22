@@ -3,7 +3,6 @@
  * environment, merged exact SHA, and post-merge main CI SUCCESS.
  */
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
 const apiRoot='https://api.github.com/';
 function requireReady({sha,expected,ref,pr,reviews,runs,environment}){
  assert.match(sha,/^[a-f0-9]{40}$/);
@@ -51,7 +50,7 @@ if(process.argv.includes('--self-test')){
  process.exit(0);
 }
 if(!process.argv.includes('--verify'))throw Error('RELEASE_GUARD_MODE_REQUIRED');
-const sha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+const sha=process.env.GITHUB_SHA;
 const expected=process.env.T13_EXPECTED_SHA;
 const ref=process.env.GITHUB_REF;
 const repo=process.env.GITHUB_REPOSITORY;
