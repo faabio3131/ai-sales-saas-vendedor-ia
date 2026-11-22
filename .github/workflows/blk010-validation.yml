@@ -100,6 +100,8 @@ jobs:
             assert.match(JSON.stringify(service.healthcheck),/payment-reconciler\.last-success/);
             assert.match(JSON.stringify(service.command),/payment_reconciliation_cycle_failed/);
             assert.equal(service.read_only,true);
+            assert.match(JSON.stringify(service.command),/\\$legacy_failed/);
+            assert.match(JSON.stringify(service.command),/\\$order_failed/);
           }
           NODE
       - name: T08.3 staging ops guards and recovery drills

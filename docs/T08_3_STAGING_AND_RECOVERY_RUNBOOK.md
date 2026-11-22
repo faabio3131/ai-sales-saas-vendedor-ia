@@ -38,3 +38,7 @@ Backup usa `gcloud firestore export` e espera a conclusão da operação remota 
 5. Após PR/CI do HEAD verde e merge/CI pós-merge, concluir **apenas engenharia interna T08.3**; T08.4 destrava para simulação das 10 jornadas. Deploy real, prova externa, restaurar dados reais e T08.5 continuam NO_GO.
 
 **Limite da evidência:** teste unitário do orquestrador não prova um backup remoto existente, RTO/RPO real, restore real, acesso Contabo/Cloud Run ou homologação da pizzaria. Registrar os itens como externos até demonstração separada.
+
+## Reconciliador legado — proteção de expansão do Compose
+
+A revisão de CI detectou interpolação acidental das variáveis locais `legacy_failed` e `order_failed` do shell no `deploy/payment-reconciler.compose.yaml`. A sintaxe correta no arquivo Compose é `$$legacy_failed` e `$$order_failed`, para preservar as variáveis até a execução do script dentro do contêiner. O gate de configuração valida a preservação de ambas; sem isso o supervisor pode interpretar falsamente o resultado dos workers. O ajuste não ativa o reconciliador nem acessa bancos reais.
