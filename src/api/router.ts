@@ -5,6 +5,8 @@ import { createCatalogRouter } from '../catalog/routes';
 import { createCommerceRouter } from '../commerce/routes';
 import { createOrdersRouter } from '../orders/routes';
 import { createBusinessRouter } from '../business/routes';
+import {createCapabilitiesRouter} from '../capabilities/routes';
+import {capabilityHttpGate} from '../capabilities/httpGuard';
 import { createChannelsRouter } from '../channels/routes';
 import {createWhatsAppWebhookRouter} from '../channels/whatsappWebhooks';
 import { createConversationRouter } from '../conversations/routes';
@@ -55,8 +57,9 @@ export function createApiRouter(): Router {
   router.use('/tenancy', authenticationMiddleware, tenantAuthorizationMiddleware, createTenancyRouter());
   router.use('/catalog', authenticationMiddleware, tenantAuthorizationMiddleware, createCatalogRouter());
   router.use('/commerce', authenticationMiddleware, tenantAuthorizationMiddleware, createCommerceRouter());
-  router.use('/orders', authenticationMiddleware, tenantAuthorizationMiddleware, createOrdersRouter());
+  router.use('/orders', authenticationMiddleware, tenantAuthorizationMiddleware, capabilityHttpGate('FOOD_ORDERING'),createOrdersRouter());
   router.use('/business', authenticationMiddleware, tenantAuthorizationMiddleware, createBusinessRouter());
+  router.use('/capabilities', authenticationMiddleware, tenantAuthorizationMiddleware, createCapabilitiesRouter());
   router.use('/customers', authenticationMiddleware, tenantAuthorizationMiddleware, createCustomersRouter());
   router.use('/conversations', authenticationMiddleware, tenantAuthorizationMiddleware, createConversationRouter());
   router.use('/leads', authenticationMiddleware, tenantAuthorizationMiddleware, createLeadsRouter());
@@ -67,7 +70,7 @@ export function createApiRouter(): Router {
   router.use('/channels/webhooks/whatsapp', createWhatsAppWebhookRouter());
   router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());
   router.use('/dashboard', authenticationMiddleware, tenantAuthorizationMiddleware, createDashboardRouter());
-  router.use('/finance',authenticationMiddleware,tenantAuthorizationMiddleware,createFinanceRouter());
+  router.use('/finance',authenticationMiddleware,tenantAuthorizationMiddleware,capabilityHttpGate('FOOD_FINANCE'),createFinanceRouter());
   router.use('/quotes', authenticationMiddleware, tenantAuthorizationMiddleware, createQuotesRouter());
   router.post('/payments/webhooks/mercadopago', (req,res,next) => {
     mercadoPagoWebhookHandler(req,res).catch(next);
@@ -78,8 +81,8 @@ export function createApiRouter(): Router {
     handleBankWebhook(req,res,processor).catch(next);
   });
   router.use('/payments', authenticationMiddleware, tenantAuthorizationMiddleware, createPaymentsRouter());
-  router.use('/order-payments', authenticationMiddleware, tenantAuthorizationMiddleware, createOrderPaymentsRouter());
-  router.use('/fulfillment', authenticationMiddleware, tenantAuthorizationMiddleware, createFulfillmentRouter());
+  router.use('/order-payments', authenticationMiddleware, tenantAuthorizationMiddleware, capabilityHttpGate('FOOD_ORDERING'),createOrderPaymentsRouter());
+  router.use('/fulfillment', authenticationMiddleware, tenantAuthorizationMiddleware, capabilityHttpGate('FOOD_PRODUCTION'),createFulfillmentRouter());
   router.use('/revenue-expansion', authenticationMiddleware, tenantAuthorizationMiddleware, createRevenueExpansionRouter());
   router.use('/plans', authenticationMiddleware, tenantAuthorizationMiddleware, createPlansRouter());
   router.use('/pilot', authenticationMiddleware, tenantAuthorizationMiddleware, createPilotRouter());

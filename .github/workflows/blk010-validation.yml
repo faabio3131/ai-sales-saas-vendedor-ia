@@ -46,6 +46,10 @@ jobs:
         env:
           NODE_ENV: test
         run: npm test -- tests/t08_4PilotJourneys.test.ts tests/t08_4ModesAndWhatsApp.test.ts
+      - name: T09 multi-sector capability registry, migration and rollback acceptance
+        env:
+          NODE_ENV: test
+        run: npm test -- tests/t09CapabilityFabric.test.ts tests/t09BusinessProfileIsolation.test.ts tests/t09CapabilityHttpGuard.test.ts
       - name: Runtime security boundaries
         env:
           NODE_ENV: production
@@ -63,7 +67,7 @@ jobs:
           grep -qi '^x-frame-options: DENY' /tmp/headers.txt
           grep -qi '^x-request-id:' /tmp/headers.txt
           if grep -qi '^x-powered-by:' /tmp/headers.txt; then exit 1; fi
-          for PATHNAME in tenancy/context tenancy/memberships catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness pilot/units/main/onboarding release/readiness operations/ai-readiness fulfillment/units/main/queue autonomy/units/main/policy; do
+          for PATHNAME in tenancy/context tenancy/memberships capabilities/units/main/assignment catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness pilot/units/main/onboarding release/readiness operations/ai-readiness fulfillment/units/main/queue autonomy/units/main/policy; do
             STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
             test "$STATUS" = "401"
           done

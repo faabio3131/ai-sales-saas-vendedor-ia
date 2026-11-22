@@ -106,8 +106,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 | ID | Gate / Trava | Entrega Funcional Consolidada | Prazo Est. | Status | Data Entrega | Evidência (PR / SHA / CI Run) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T09** | `🔒 CI pós-merge T08.4` | Business Capability Registry evoluído, contratos dos packs e configuração multissetorial | 5d | `[ ] LIBERÁVEL APÓS CI PÓS-MERGE T08.4, NÃO DEPENDE DO T08.5 REAL` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
-| **T10** | `🔒 Finalize T09` | Scheduling Engine horizontal — agenda, disponibilidade, reserva atômica, reagendamento e lembretes | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T09** | `✅ T08.4 PR #24 + CI #44972851608 SUCCESS` | Capability Fabric multissetorial, 6 templates versionados, ativação e rollback por tenant/unidade, proteção de rotas | 5d | `[x] IMPLEMENTAÇÃO E TESTES T09 / [ ] GATE FINAL CI, MERGE E PÓS-MERGE` | `21/11/2026 (engenharia)` | `PR #25 / código bd2e1d3e49d84efde02a4bf6360f9fd3c3083ec6 / CI #44975161245 em execução ao registrar; evidência final na PR` |
+| **T10** | `🔒 CI pós-merge T09` | Scheduling Engine horizontal — agenda, disponibilidade, reserva atômica, reagendamento e lembretes | 8d | `[ ] BLOQUEADO ATÉ CERTIFICAÇÃO INTEGRAL T09` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T11** | `🔒 Finalize T10` | Service Booking Packs — salão, barbearia e clínica de estética (escopo administrativo) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T12** | `🔒 Finalize T11` | Templates de comércio/serviços, onboarding por capabilities e certificação multissetorial | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 
@@ -228,9 +228,11 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 
 ## 5. Expansão multissetorial posterior — definição e gates T09–T12
 
-### T09 — Business Capability Registry / módulo plugável (`🔒 Até CI pós-merge T08.4; independente de T08.5 real`)
-- Formalizar contratos de capacidades reutilizáveis e ativação por tenant/unidade; catálogo de templates por segmento, migração/configuração segura, isolamento e rollback.
-- **DoD:** 3 tenants de segmentos distintos sem vazamento, autorização e seleção de capabilities; nenhum domínio especializado contamina o núcleo.
+### T09 — Business Capability Registry / módulos plugáveis (`✅ CÓDIGO E TESTES IMPLEMENTADOS — PR #25; CERTIFICAÇÃO PÓS-MERGE EXIGIDA`)
+- **Escopo:** manifests e capabilities horizontais tipadas; 6 templates por vertical; atribuições T09 por tenant/unidade com histórico e CAS Firestore, guardas de pedidos em aberto, RBAC, audit trail e rollback como revisão imutável. API e painel administrativo; gate obrigatório nos endpoints alimentares e na autonomia cognitiva. Nenhum dado de estabelecimento é fixado no código.
+- **DoD de engenharia interno:** 3 tenants FOOD_SERVICE, RETAIL e BEAUTY com escolhas segregadas e sem vazamento; mais 3 verticais SERVICES, HEALTH_SERVICE e OTHER; versões e dependências, autorizações, concorrência, migração segura, rollback, proteção de runtime e testes HTTP.
+- **Evidências de código:** `tests/t09CapabilityFabric.test.ts`, `tests/t09BusinessProfileIsolation.test.ts`, `tests/t09CapabilityHttpGuard.test.ts` e documentação `docs/T09_CAPABILITY_FABRIC_SYSTEM_DESIGN.md`; PR #25 e CI cumulativa registrada na PR. O encerramento formal exige CI do HEAD final e CI da `main` pós-merge verde.
+- **Escopo externo:** nenhum produto futuro habilitado; SCHEDULING e packs retail/beauty/health permanecem PLANNED e travados em T10–T12. Homologação da Pizzaria Americana e go-live T08.5 continuam NO_GO, sem impedir a próxima engenharia.
 
 ### T10 — Scheduling Engine horizontal (`🔒 Travado em T09`)
 - Agenda, serviços com duração, profissionais, unidades, recursos, turnos, disponibilidade, reserva atômica, confirmação, reagendamento/cancelamento, lembrete e integração opcional a pagamento de sinal.

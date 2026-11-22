@@ -92,6 +92,15 @@ export class BusinessProfileService {
       !Array.isArray(capability.capabilities)||capability.capabilities.length>BUSINESS_CAPABILITIES.length||
       capability.capabilities.some(x=>!BUSINESS_CAPABILITIES.includes(x))||
       new Set(capability.capabilities).size!==capability.capabilities.length)fail('BUSINESS_CAPABILITIES_INVALID');
+    // Legacy T02 operational capabilities belong to the food domain only.
+    // Retail/beauty/health/service modules are configured through the T09
+    // capability fabric, never by reusing food-specific operational flags.
+    if(capability.vertical!=='FOOD_SERVICE'&&capability.capabilities.length)
+      fail('BUSINESS_VERTICAL_CAPABILITY_CONFLICT');
+    if(capability.vertical==='FOOD_SERVICE'&&
+      capability.capabilities.some(x=>x!=='FOOD_SERVICE')&&
+      !capability.capabilities.includes('FOOD_SERVICE'))
+      fail('BUSINESS_FOOD_CAPABILITY_DEPENDENCY');
     if(!Number.isInteger(policy.memoryRetentionDays)||policy.memoryRetentionDays<1||
       policy.memoryRetentionDays>365||policy.personalMemoryDefault!=='DENY'||
       policy.prohibitUnverifiedClaims!==true||policy.locale!=='pt-BR')fail('BUSINESS_POLICY_INVALID');

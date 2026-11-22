@@ -51,8 +51,12 @@ export class FirestoreBusinessProfileRepository implements BusinessProfileReposi
       if(v>0){
         const currentRevision=(await tx.get(ref.collection('versions').doc(String(v))))
           .data() as BusinessProfileRevision|undefined;
-        if(currentRevision&&currentRevision.capabilityRegistry.operationMode!==
-          next.capabilityRegistry.operationMode){
+        if(currentRevision&&(
+          currentRevision.capabilityRegistry.operationMode!==next.capabilityRegistry.operationMode||
+          currentRevision.capabilityRegistry.vertical!==next.capabilityRegistry.vertical||
+          currentRevision.capabilityRegistry.capabilities.some(c=>
+            !next.capabilityRegistry.capabilities.includes(c))
+        )){
           // Profile changes and production release both read/write Orders.
           // With a transaction this blocks a concurrent mode change during
           // a confirmed, unfinished order. 201+ records: fail closed.
