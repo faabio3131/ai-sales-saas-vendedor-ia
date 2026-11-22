@@ -23,6 +23,24 @@ export interface WhatsAppOutbox{
  reserve(record:WhatsAppSendRecord):Promise<WhatsAppSendRecord>;
  settle(record:WhatsAppSendRecord):Promise<void>;
 }
+export interface WhatsAppCustomerServicePolicy{
+ hasRecentVerifiedInbound(tenantId:string,unitId:string,recipient:string):Promise<boolean>;
+}
+/** A real signed, stored inbound message is required; owner-provided booleans alone cannot authorize unsolicited messages. */
+export class FirestoreWhatsAppCustomerServicePolicy implements WhatsAppCustomerServicePolicy{
+ async hasRecentVerifiedInbound(t:string,u:string,recipient:string){
+  const now=Date.now(),cutoff=new Date(now-24*60*60*1000).toISOString();
+  const rows=await db().collection('whatsappInboundInbox')
+   .where('tenantId','==',t).where('unitId','==',u)
+   .where('event.sender','==',recipient).orderBy('receivedAt','desc').limit(10).get();
+  return rows.docs.some(d=>{
+   const event=d.data() as {receivedAt?:string;event?:{occurredAt?:string}};
+   const received=Date.parse(event.receivedAt??''),occurred=Date.parse(event.event?.occurredAt??'');
+   return Number.isFinite(received)&&received>=Date.parse(cutoff)&&
+    Number.isFinite(occurred)&&occurred>=Date.parse(cutoff)&&occurred<=now+5*60*1000;
+  });
+ }
+}
 function db(){
  if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
  return getFirestore();
@@ -90,13 +108,15 @@ export class WhatsAppDeliveryService{
   private readonly vault:WhatsAppCredentialsVault,
   private readonly outbox:WhatsAppOutbox,
   private readonly graph:MetaGraphSender,
+  private readonly policy:WhatsAppCustomerServicePolicy,
   private readonly clock:()=>Date=()=>new Date()){}
  async send(input:WhatsAppSendInput):Promise<{externalMessageId:string;duplicate:boolean}>{
   if(!CHANNEL_TENANT.test(input.tenantId)||!CHANNEL_UNIT.test(input.unitId)||
    !E164.test(input.recipient)||!DEDUPE.test(input.idempotencyKey)||
    typeof input.text!=='string'||!input.text.trim()||input.text.length>4096)
    throw channelError('WHATSAPP_SEND_INPUT_INVALID','VALIDATION');
-  if(input.authorizedCustomerServiceWindow!==true)
+  if(input.authorizedCustomerServiceWindow!==true||
+   !(await this.policy.hasRecentVerifiedInbound(input.tenantId,input.unitId,input.recipient)))
    throw channelError('WHATSAPP_CUSTOMER_CONSENT_REQUIRED');
   const conn=await this.connections.get(input.tenantId,input.unitId);
   if(!conn||conn.status!=='ACTIVE'||!conn.credentialRef)
@@ -128,5 +148,6 @@ export class WhatsAppDeliveryService{
 }
 export function createWhatsAppDeliveryService(){
  return new WhatsAppDeliveryService(new FirestoreWhatsAppConnectionStore(),
-  createWhatsAppVault(),new FirestoreWhatsAppOutbox(),new OfficialMetaGraphSender());
+  createWhatsAppVault(),new FirestoreWhatsAppOutbox(),new OfficialMetaGraphSender(),
+  new FirestoreWhatsAppCustomerServicePolicy());
 }
