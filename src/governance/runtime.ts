@@ -6,6 +6,8 @@ import {OrderService} from '../orders/service';
 import {ConversationOrderConfirmationVerifier} from '../orders/confirmationVerifier';
 import {FirestoreUnitCatalogRepository} from '../commerce/firestoreRepository';
 import {FirestoreBusinessProfileRepository} from '../business/firestoreRepository';
+import {FirestoreCapabilityRepository} from '../capabilities/firestoreRepository';
+import {CapabilityRegistryService} from '../capabilities/service';
 import {FirestoreCustomerRepository} from '../customers/firestoreRepository';
 import {FirestoreConversationRepository,FirestoreMessageRepository} from '../conversations/firestoreRepository';
 import {FirestoreVerifiedCustomerChannelRepository} from '../fulfillment/trustedChannelIdentity';
@@ -23,6 +25,7 @@ import {deny} from './validation';
 
 export function createGovernanceRuntime(){
  const store=new FirestoreGovernanceRepository();
+ const capability=new CapabilityRegistryService(new FirestoreCapabilityRepository(),new FirestoreBusinessProfileRepository());
  const orders=new FirestoreOrderRepository();
  const conversations=new FirestoreConversationRepository();
  const messages=new FirestoreMessageRepository();
@@ -52,19 +55,28 @@ export function createGovernanceRuntime(){
    if(!record)deny('AUTONOMY_ORDER_NOT_FOUND','NOT_FOUND');
    return record!;
   },
-  async draft(ctx,u,p,key){return orderService.createDraft(ctx,u,{...p,idempotencyKey:key} as
+  async draft(ctx,u,p,key){
+   await capability.requireInternal(ctx,u,'FOOD_ORDERING');
+   return orderService.createDraft(ctx,u,{...p,idempotencyKey:key} as
     unknown as import('../orders/model').CreateOrderInput);},
-  async confirm(ctx,u,p){return orderService.confirm(ctx,u,String(p.orderId),{
+  async confirm(ctx,u,p){
+   await capability.requireInternal(ctx,u,'FOOD_ORDERING');
+   return orderService.confirm(ctx,u,String(p.orderId),{
     expectedVersion:Number(p.expectedVersion),
     confirmation:p.confirmation as import('../orders/model').ConfirmOrderInput['confirmation'],
   });},
-  async payment(ctx,u,p,key){return payments.create(ctx,u,String(p.orderId),{
+  async payment(ctx,u,p,key){
+   await capability.requireInternal(ctx,u,'FOOD_ORDERING');
+   return payments.create(ctx,u,String(p.orderId),{
     method:p.method as import('../orderPayments/model').CreateOrderPaymentInput['method'],
     idempotencyKey:key,...(p.providerId?{providerId:String(p.providerId)}:{}),
     ...(p.payerEmail?{payerEmail:String(p.payerEmail)}:{}),
     ...(p.cashTenderedMinor!==undefined?{cashTenderedMinor:Number(p.cashTenderedMinor)}:{}),
   });},
-  async release(ctx,u,orderId){return fulfillment.release(ctx,u,orderId);},
+  async release(ctx,u,orderId){
+   await capability.requireInternal(ctx,u,'FOOD_PRODUCTION');
+   return fulfillment.release(ctx,u,orderId);
+  },
   async recovery(ctx,candidateId){return recovery.prepareAction(ctx,candidateId);},
   async recoveryCustomer(t,candidateId){
    const candidate=await candidates.findById(t,candidateId);
