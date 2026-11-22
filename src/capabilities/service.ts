@@ -7,7 +7,7 @@ import {capabilityManifest,capabilityTemplate,listCapabilityManifests,
  listCapabilityTemplates,templateForVertical} from './catalog';
 import type {CapabilityId,CapabilityAssignment,CapabilityPublishInput,
  CapabilityRollbackInput,CapabilityResolution,CapabilityRepository,
- CapabilityTemplateId} from './model';
+} from './model';
 
 const forbidden=(code:string):never=>{throw new ApplicationError({
  category:'FORBIDDEN',code,message:'Capability assignment is not authorized.',

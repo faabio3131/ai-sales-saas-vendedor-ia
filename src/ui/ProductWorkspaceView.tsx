@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Bot, Boxes, LockKeyhole, MessageCircle, RefreshCw, Target, Users } from 'lucide-react';
+import { Activity, Bot, LockKeyhole, MessageCircle, RefreshCw, Target, Users } from 'lucide-react';
 import { resolveWorkspaceMemberships, WorkspaceMembership } from './workspaceAccess';
 import { FinancialPanel } from './FinancialPanel';
-import { ProductionBoard } from './ProductionBoard';
+import {CapabilityManager} from './CapabilityManager';
 import { PilotOnboardingPanel } from './PilotOnboardingPanel';
 import {ProviderConnectionPanel} from './ProviderConnectionPanel';
 
@@ -207,14 +207,12 @@ export function ProductWorkspaceView() {
         </article>
 
         <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <div className="mb-4 flex items-center gap-2"><Boxes className="h-5 w-5 text-sky-400" /><h2 className="font-semibold text-white">Módulos comerciais</h2></div>
-          <div className="space-y-2 text-sm">
-            {['Clientes e CRM', 'Conversas', 'Leads e oportunidades', 'Follow-up', 'Recuperação de vendas', 'Catálogo'].map((label) => (
-              <div key={label} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2.5">
-                <span className="text-slate-300">{label}</span><span className="text-xs text-emerald-400">Disponível</span>
-              </div>
-            ))}
-          </div>
+          <h2 className="font-semibold text-white">Capacidades multissetoriais</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            As capacidades de cada empresa são configuradas por unidade no registro seguro abaixo.
+            Módulos planejados não aparecem como disponíveis até certificação.
+          </p>
+          <p className="mt-3 text-xs text-amber-300">Ativação comercial não autorizada.</p>
         </article>
       </section>
       {(selectedMembership.role === 'OWNER' || selectedMembership.role === 'ADMIN') && (
@@ -226,7 +224,7 @@ export function ProductWorkspaceView() {
       {selectedMembership.role === 'OWNER' && (
         <ProviderConnectionPanel key={'providers-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
       )}
-      <ProductionBoard key={'production-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+      <CapabilityManager key={'capabilities-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
         </>
       )}
     </div>
