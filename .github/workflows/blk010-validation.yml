@@ -257,7 +257,7 @@ jobs:
           # Local-only Redis exercises the same atomic NX/EX replay gate that
           # production runs on authenticated rediss. The test container uses
           # host networking so only 127.0.0.1 is reachable.
-          docker run -d --name atendevende-replay-ci -p 127.0.0.1:16379:6379 redis:7-alpine \
+          docker run -d --name atendevende-replay-ci -p 127.0.0.1:16379:6379 redis@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe \
             redis-server --save "" --appendonly no
           docker run --rm -d --name atendevende-cognitive-ci \
             --read-only --cap-drop=ALL --security-opt no-new-privileges \
@@ -276,3 +276,49 @@ jobs:
           done
           test "$READY" = 1
           node -e "const h=require('/tmp/cognitive-docker-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
+          docker exec atendevende-replay-ci redis-cli ping | grep -qx PONG
+          # A signed request is accepted once but may not be replayed after a
+          # complete service restart while the shared nonce store survives.
+          python3 - <<'PY'
+          import hashlib,hmac,os,time,urllib.request,urllib.error
+          from pathlib import Path
+          raw=b'{}'
+          ts=str(int(time.time()))
+          nonce='c'*32
+          signature=hmac.new(os.environ['COGNITIVE_S2S_SECRET'].encode(),
+             (ts+'.'+nonce+'.').encode()+raw,hashlib.sha256).hexdigest()
+          header=f't={ts},nonce={nonce},v1={signature}'
+          Path('/tmp/av-t13-replay-header.txt').write_text(header)
+          req=urllib.request.Request('http://127.0.0.1:18185/v1/execute',
+            data=raw,headers={'Content-Type':'application/json','X-AV-Signature':header})
+          try:
+            urllib.request.urlopen(req,timeout=5)
+            raise AssertionError('Invalid request unexpectedly succeeded')
+          except urllib.error.HTTPError as e:
+            assert e.code==422,('First signed request must pass auth',e.code)
+          PY
+          docker rm -f atendevende-cognitive-ci
+          docker run --rm -d --name atendevende-cognitive-ci \
+            --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            --network host \
+            -e COGNITIVE_S2S_SECRET \
+            -e COGNITIVE_SERVICE_PORT=18185 \
+            -e COGNITIVE_SERVICE_HOST=127.0.0.1 \
+            -e COGNITIVE_REPLAY_REDIS_URL=redis://127.0.0.1:16379 \
+            atendevende-cognitive-ci
+          for i in {1..20}; do
+            curl --fail --silent http://127.0.0.1:18185/health >/dev/null && break
+            sleep 1
+          done
+          python3 - <<'PY'
+          import urllib.request,urllib.error
+          from pathlib import Path
+          header=Path('/tmp/av-t13-replay-header.txt').read_text()
+          req=urllib.request.Request('http://127.0.0.1:18185/v1/execute',
+           data=b'{}',headers={'Content-Type':'application/json','X-AV-Signature':header})
+          try:
+            urllib.request.urlopen(req,timeout=5)
+            raise AssertionError('Replay unexpectedly accepted after restart')
+          except urllib.error.HTTPError as e:
+            assert e.code==401,('Replay must be denied after restart',e.code)
+          PY
