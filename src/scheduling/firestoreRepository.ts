@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {bookingFiscalIntent} from '../fiscal/multisectorIntents';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import type {ScheduleRepository,ScheduleScope,ScheduleTransaction,ScheduleConfig,Booking,Occupancy,RequestReceipt,BookingPack} from './model';
@@ -121,6 +122,13 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
    };
    const result=await work(port);
    if(staged.size||stagedReceipts.size||nextConfig){
+    // All Firestore reads precede writes. Emit a fiscal intent only on the
+    // first COMPLETED transition, not on later deposit reconciliation.
+    const firstCompletions=new Set<string>();
+    for(const b of staged.values())if(b.status==='COMPLETED'){
+     const existing=await readBooking(b.id);
+     if(existing?.status!=='COMPLETED')firstCompletions.add(b.id);
+    }
     trx.set(tenant,{tenantId:scope.tenantId,sequence:Number(fence.get('sequence')??0)+1});
     if(nextConfig){
      trx.set(unit,{...scope,config:nextConfig});
@@ -140,6 +148,10 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
       ...(pending.length?{communicationDueMs:Math.min(...pending)}:{})};
      trx.set(bookings.doc(b.id),persisted);
      trx.create(bookings.doc(b.id).collection('versions').doc(String(b.version)),persisted);
+     if(firstCompletions.has(b.id)){
+      const fiscal=bookingFiscalIntent(b);
+      trx.create(db.collection('multisectorFiscalIntents').doc(fiscal.id),fiscal);
+     }
      const lock=asOccupancy(b);
      if(lock)trx.set(occupancy.doc(b.id),lock);else trx.delete(occupancy.doc(b.id));
     }
