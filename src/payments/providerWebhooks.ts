@@ -10,6 +10,7 @@ import type {MerchantCredentialsVault} from './merchantVault';
 import type {PaymentRepository} from './contracts';
 import type {VerifiedPaymentWebhookLedger} from './webhookLedger';
 import type {MultisectorWebhookResult,MultisectorWebhookService} from './multisectorWebhook';
+import type {VerifiedWebhookKey,VerifiedWebhookRecoveryRepository} from './webhookRecovery';
 
 type Headers=Record<string,string|string[]|undefined>;
 type EventDetails={paymentIds:string[];eventId:string};
@@ -133,6 +134,7 @@ export interface PaymentWebhookRuntime {
  orderPayments?:Pick<OrderPaymentRepository,'byProvider'>;
  orderService?:Pick<OrderPaymentService,'refreshFromWebhook'>;
  multisector?:MultisectorWebhookService;
+ recovery?:VerifiedWebhookRecoveryRepository;
 }
 export class PaymentWebhookProcessor {
  constructor(private readonly runtime:PaymentWebhookRuntime){}
@@ -150,28 +152,42 @@ export class PaymentWebhookProcessor {
   const event=parsePaymentWebhook(provider,payload);
   const statuses:Array<PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status']>=[];
   for(const providerPaymentId of event.paymentIds){
-   const persisted=await this.runtime.payments.findByProviderPaymentId(tenantId,provider,providerPaymentId);
+   const delivery={tenantId,provider,eventId:event.eventId,providerPaymentId};
+   // Persist only signed notification coordinates before attempting PSP GET.
+   // Unknown payment references and temporary PSP errors remain retryable.
+   await this.runtime.recovery?.enqueue(delivery,Date.now());
+   const status=await this.reconcileVerified(delivery);
+   await this.runtime.recovery?.finish(
+    (await import('./webhookRecovery')).verifiedWebhookDeliveryId(delivery),
+    Date.now(),true,'PSP_GET_VERIFIED');
+   statuses.push(status);
+  }
+  return statuses;
+ }
+ /** Invoked only by the trusted worker using previously signature-verified inbox records. */
+ async reconcileVerified(delivery:VerifiedWebhookKey):
+ Promise<PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status']>{
+  const {tenantId,provider,eventId,providerPaymentId}=delivery;
+  const persisted=await this.runtime.payments.findByProviderPaymentId(tenantId,provider,providerPaymentId);
    // Webhook payload status is NEVER used. Only tenant-bound PSP GET can
    // reconcile a legacy quote payment or a new T04 order payment.
    if(persisted){
     const result=await this.runtime.service.refresh({tenantId,requestId:'bank-webhook'},persisted.id);
     await this.runtime.audit?.record({
-     tenantId,provider,eventId:event.eventId,providerPaymentId,
+     tenantId,provider,eventId,providerPaymentId,
      paymentId:persisted.id,verifiedStatus:result.status,
     });
-    statuses.push(result.status);
-    continue;
+    return result.status;
    }
    const orderPayment=await this.runtime.orderPayments?.byProvider(tenantId,provider,providerPaymentId);
    if(orderPayment&&this.runtime.orderService){
     const result=await this.runtime.orderService.refreshFromWebhook(tenantId,provider,providerPaymentId);
     if(!result)return deny();
     await this.runtime.audit?.record({
-     tenantId,provider,eventId:event.eventId,providerPaymentId,
+     tenantId,provider,eventId,providerPaymentId,
      paymentId:orderPayment.id,verifiedStatus:result.status,domain:'ORDER_PAYMENT',
     });
-    statuses.push(result.status);
-    continue;
+    return result.status;
    }
    // The same verified notification can also refer to retail checkout or
    // scheduled-service deposits. Never trust its claimed settlement state.
@@ -180,12 +196,10 @@ export class PaymentWebhookProcessor {
     throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_REFERENCE_UNMATCHED',
       message:'Authenticated payment notification has no uniquely bound source.'});
    await this.runtime.audit?.record({
-    tenantId,provider,eventId:event.eventId,providerPaymentId,
+    tenantId,provider,eventId,providerPaymentId,
     paymentId:multi.paymentId,verifiedStatus:multi.status,domain:multi.domain,
    });
-   statuses.push(multi.status);
-  }
-  return statuses;
+   return multi.status;
  }
 }
 export async function handleBankWebhook(req:Request,res:Response,processor:PaymentWebhookProcessor):Promise<void>{

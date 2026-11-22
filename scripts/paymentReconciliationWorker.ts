@@ -1,11 +1,17 @@
 import {createBankPaymentRuntime} from '../src/payments/bankRuntime';
 import {FirestoreReconciliationRepository,PaymentReconciliationWorker} from '../src/payments/reconciliation';
+import {PaymentWebhookProcessor} from '../src/payments/providerWebhooks';
+import {VerifiedWebhookRecoveryWorker} from '../src/payments/webhookRecovery';
 /** Run as a separate scheduled single-shot worker (e.g. cron every 5 minutes). */
-const {service}=createBankPaymentRuntime();
-const worker=new PaymentReconciliationWorker(new FirestoreReconciliationRepository(),service);
-worker.runOnce(100).then(result=>{
+const runtime=createBankPaymentRuntime();
+const worker=new PaymentReconciliationWorker(new FirestoreReconciliationRepository(),runtime.service);
+const processor=new PaymentWebhookProcessor(runtime);
+const webhookWorker=new VerifiedWebhookRecoveryWorker(runtime.recovery,
+ event=>processor.reconcileVerified(event));
+Promise.all([worker.runOnce(100),webhookWorker.runOnce(100)]).then(([result,webhooks])=>{
  console.info(JSON.stringify({event:'payment_reconciliation_completed',...result}));
- if(result.failed)process.exitCode=1;
+ console.info(JSON.stringify({event:'verified_webhook_recovery_completed',...webhooks}));
+ if(result.failed||webhooks.failed)process.exitCode=1;
 }).catch(error=>{
  console.error('payment_reconciliation_failed',error instanceof Error?error.name:'unknown');
  process.exitCode=1;

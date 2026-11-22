@@ -8,6 +8,8 @@ import type {Payment} from '../src/payments/model';
 import {PaymentReconciliationWorker} from '../src/payments/reconciliation';
 import {InMemoryVerifiedWebhookLedger} from '../src/payments/webhookLedger';
 import type {PaymentReconciliationRepository} from '../src/payments/reconciliation';
+import {verifiedWebhookDeliveryId,VerifiedWebhookRecoveryWorker} from '../src/payments/webhookRecovery';
+import type {VerifiedWebhookDelivery,VerifiedWebhookKey,VerifiedWebhookRecoveryRepository} from '../src/payments/webhookRecovery';
 
 const secret='distinct-and-long-test-secret';
 const tenant='tenant-a';
@@ -102,6 +104,57 @@ describe('Provider-specific payment webhook authentication',()=>{
   expect(()=>parsePaymentWebhook('ASAAS',{id:'evt',payment:{id:'wrong'}})).toThrow();
   expect(()=>parsePaymentWebhook('PAGARME',{id:'evt',data:{id:'ch_not_order'}})).toThrow();
   expect(()=>parsePaymentWebhook('EFI',{pix:[{txid:'../foreign'}]})).toThrow();
+ });
+});
+class FakeVerifiedInbox implements VerifiedWebhookRecoveryRepository{
+ readonly rows=new Map<string,VerifiedWebhookDelivery>();
+ async enqueue(e:VerifiedWebhookKey,now:number){
+  const id=verifiedWebhookDeliveryId(e);
+  if(!this.rows.has(id))this.rows.set(id,{...e,id,state:'PENDING',attempts:0,
+   leaseUntil:0,nextAttemptAt:now,firstSeenAt:now,updatedAt:now});
+ }
+ async due(_limit:number,now:number){return [...this.rows.values()].filter(r=>r.state==='PENDING'&&r.nextAttemptAt<=now);}
+ async claim(id:string,now:number){
+  const row=this.rows.get(id);
+  if(!row||row.leaseUntil>now||row.state!=='PENDING')return false;
+  row.leaseUntil=now+120000;return true;
+ }
+ async finish(id:string,now:number,success:boolean,reason:string){
+  const row=this.rows.get(id)!;
+  row.attempts++;
+  row.lastErrorCode=reason;
+  row.state=success?'COMPLETED':row.attempts>=8?'DLQ':'PENDING';
+  row.leaseUntil=0;row.updatedAt=now;row.nextAttemptAt=success?Number.MAX_SAFE_INTEGER:now+30000;
+ }
+}
+describe('T13 durable authenticated webhook inbox and retry',()=>{
+ it('recovers unknown PSP references only after a signed notification was saved',async()=>{
+  const inbox=new FakeVerifiedInbox(),noLegacy:PaymentRepository={
+   ...payments,findByProviderPaymentId:async()=>null,
+  };
+  let found=false;
+  const multisector={refreshVerified:vi.fn(async()=>{
+   return found?{domain:'RETAIL' as const,paymentId:'order-1',status:'VERIFIED' as const}:null;
+  })};
+  const processor=new PaymentWebhookProcessor({connections,vault,payments:noLegacy,
+   service:{refresh:vi.fn()},multisector,recovery:inbox});
+  const delivery={provider:'ASAAS',tenantId:tenant,headers:asaasHeaders,
+   rawBody:raw,payload:JSON.parse(raw.toString('utf8'))};
+  await expect(processor.process(delivery))
+   .rejects.toMatchObject({code:'PAYMENT_WEBHOOK_REFERENCE_UNMATCHED'});
+  expect(inbox.rows.size).toBe(1);
+  const retry=new VerifiedWebhookRecoveryWorker(inbox,event=>processor.reconcileVerified(event),()=>Date.now());
+  found=true;
+  expect((await retry.runOnce()).reconciled).toBe(1);
+  expect([...inbox.rows.values()][0].state).toBe('COMPLETED');
+  expect((await retry.runOnce()).scanned).toBe(0);
+ });
+ it('moves unresolved authenticated payments to human-review DLQ after bounded retries',async()=>{
+  const inbox=new FakeVerifiedInbox(),e={tenantId:tenant,provider:'ASAAS',providerPaymentId:'pay_lost',eventId:'evt_1'};
+  await inbox.enqueue(e,0);
+  const retry=new VerifiedWebhookRecoveryWorker(inbox,async()=>{throw Error('unknown');},()=>0);
+  for(let i=0;i<8;i++){const record=[...inbox.rows.values()][0];record.nextAttemptAt=0;await retry.runOnce();}
+  expect([...inbox.rows.values()][0].state).toBe('DLQ');
  });
 });
 class FakeReconciliationStore implements PaymentReconciliationRepository {
