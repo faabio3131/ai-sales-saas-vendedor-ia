@@ -83,7 +83,7 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
       return (await this.resolve(payment.tenantId,provider)).provider;
     const original=await this.connections.findGenerationByBinding?.(
       payment.tenantId,provider,payment.merchantBindingHash);
-    if(!original||merchantConnectionBindingHash(original)!==payment.merchantBindingHash||
+    if(!original||!original.recipientId||merchantConnectionBindingHash(original)!==payment.merchantBindingHash||
       !this.createAdapter)
       throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_HISTORICAL_BINDING_MISMATCH',
         message:'Original payment account cannot be verified; manual reconciliation required.'});
