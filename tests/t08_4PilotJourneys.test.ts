@@ -2,7 +2,6 @@ import {describe,it,expect,vi} from 'vitest';
 import type {Order,OrderRepository,CreateOrderInput} from '../src/orders/model';
 import type {OrderPayment,OrderPaymentRepository,OrderPaymentEventKind,OutboxRecord} from '../src/orderPayments/model';
 import type {ProviderPaymentRequest,ProviderPaymentResult} from '../src/payments/model';
-import type {TenantContext} from '../src/types/contracts';
 import {OrderService} from '../src/orders/service';
 import {OrderPaymentService} from '../src/orderPayments/service';
 import {PaymentWebhookProcessor} from '../src/payments/providerWebhooks';
