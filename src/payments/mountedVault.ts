@@ -24,7 +24,7 @@ export class MountedMerchantCredentialsVault implements MerchantCredentialsVault
   try {
    const rootMeta=await lstat(this.root);
    const metadata=await lstat(file);
-   if(!rootMeta.isDirectory()||rootMeta.isSymbolicLink()||!metadata.isFile()||metadata.isSymbolicLink()||
+   if(!rootMeta.isDirectory()||rootMeta.isSymbolicLink()||(rootMeta.mode&0o022)!==0||!metadata.isFile()||metadata.isSymbolicLink()||
      (metadata.mode&0o077)!==0||metadata.size>16384||metadata.size===0) return restricted();
    const content=await readFile(file,'utf8');
    const secret=JSON.parse(content) as MerchantBankSecrets;

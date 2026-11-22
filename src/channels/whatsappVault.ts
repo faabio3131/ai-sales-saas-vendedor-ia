@@ -28,7 +28,7 @@ export class MountedWhatsAppVault implements WhatsAppCredentialsVault{
   const file=path.join(this.root,conn.credentialRef.slice(8)+'.json');
   try{
    const [rootStat,stat]=await Promise.all([lstat(this.root),lstat(file)]);
-   if(!rootStat.isDirectory()||rootStat.isSymbolicLink()||!stat.isFile()||
+   if(!rootStat.isDirectory()||rootStat.isSymbolicLink()||(rootStat.mode&0o022)!==0||!stat.isFile()||
     stat.isSymbolicLink()||(stat.mode&0o077)!==0||stat.size===0||stat.size>16384)
     throw new Error('Unsafe secret mount');
    return check(conn,JSON.parse(await readFile(file,'utf8')));

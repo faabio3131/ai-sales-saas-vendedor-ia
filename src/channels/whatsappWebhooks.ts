@@ -3,6 +3,7 @@ import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {Request,Response,Router} from 'express';
 import {Router as ExpressRouter} from 'express';
+import {ApplicationError} from '../infrastructure/errors';
 import {WhatsAppAdapter} from './whatsappAdapter';
 import {ChannelService} from './service';
 import type {NormalizedInboundMessage} from './contracts';
@@ -29,7 +30,7 @@ export function verifyWhatsAppAccountPayload(value:unknown,conn:WhatsAppConnecti
    !e.changes.length||e.changes.length>20)return false;
   for(const change of e.changes){
    if(!plain(change)||change.field!=='messages'||!plain(change.value)||
-    !plain(change.value.metadata)||
+    change.value.messaging_product!=='whatsapp'||!plain(change.value.metadata)||
     change.value.metadata.phone_number_id!==conn.phoneNumberId)return false;
    if(Array.isArray(change.value.messages)&&change.value.messages.length>50)return false;
    changes++;
@@ -118,7 +119,11 @@ export function createWhatsAppWebhookRouter(deps:{
    }
    // Status callbacks may have no inbound messages. Never create a fake sale or AI reply.
    res.status(200).json({ok:true,accepted,duplicates});
-  }catch{res.status(503).json({ok:false});}
+  }catch(error){
+   if(error instanceof ApplicationError&&
+    (error.category==='FORBIDDEN'||error.category==='VALIDATION'))return forbidden(res);
+   res.status(503).json({ok:false});
+  }
  });
  return router;
 }
