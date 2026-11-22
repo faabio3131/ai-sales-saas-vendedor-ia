@@ -98,15 +98,15 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
 | **T08.1** | `✅ Engenharia certificada` | Configuração multiempresa/unidade e coleta de dados da Pizzaria Americana | 3d | `[x] ENGENHARIA CONCLUÍDA / [ ] ACEITE CLIENTE EXTERNO NO_GO` | `21/11/2026 (código)` | `PR #19/#20 e API genérica de estabelecimentos; cliente no Firestore` |
 | **T08.2** | `✅ T08.1 engenharia certificada` | Provisionamento seguro multibanco por tenant, canal WhatsApp oficial por unidade, PagBank ECDSA, Meta HMAC/webhooks, inbox/outbox, testes e observabilidade | 3d | `[x] ENGENHARIA INTERNA CERTIFICADA / [ ] ATIVAÇÃO REAL EXTERNA PENDENTE` | `21/11/2026 (código)` | `PR #22 / CI #44966258243 SUCCESS (375 TS PASS + 7 Python PASS); merge e CI pós-merge no histórico da PR` |
-| **T08.3** | `✅ T08.2 PR #22 + CI #44966871296 SUCCESS` | Flags por tenant/unidade, compose staging isolado, deploy controlado, backup/import Firestore staging, rollback e testes | 3d | `[x] ENGENHARIA INTERNA CERTIFICADA NA PR / [ ] DEPLOY REAL EXTERNO NO_GO` | `21/11/2026 (engenharia)` | `PR #23 / SHA f650dc0f17751cced268c57db29057ea657442c5 / CI #44969389933 SUCCESS; 382 TS, 7+8 Python; staging Docker smoke PASS. Certificação da main exige CI pós-merge` |
-| **T08.4** | `🔒 CI pós-merge T08.3` | Testar 10 jornadas com doubles/sandbox e os dois modos; homologar jornadas reais separadamente | 4d | `[ ] LIBERÁVEL APÓS GATE PÓS-MERGE T08.3; PILOTO REAL NO_GO` | `__/__/____` | `Matriz 10/10 internos ___; 10/10 reais pendentes` |
+| **T08.3** | `✅ T08.2 PR #22 + CI #44966871296 SUCCESS` | Flags por tenant/unidade, compose staging isolado, deploy controlado, backup/import Firestore staging, rollback e testes | 3d | `[x] ENGENHARIA INTERNA CERTIFICADA / [ ] DEPLOY REAL EXTERNO NO_GO` | `21/11/2026 (engenharia)` | `PR #23 / merge cdf19a8 / CI pós-merge #44969942528 SUCCESS; 382 TS + 15 Python; staging Docker PASS` |
+| **T08.4** | `✅ T08.3 PR #23 + CI #44969942528 SUCCESS` | Dez jornadas internas, 2 modos, PSP webhook mock + GET, KDS/PDV/ACK, WhatsApp oficial por unidade, resiliência | 4d | `[x] ENGENHARIA INTERNAMENTE TESTADA / [ ] HOMOLOGAÇÃO EXTERNA NO_GO` | `21/11/2026 (código)` | `PR #24 / SHA código 46720031fca33bd0de1c6d282bc798194dfd6093 / CI #44972280781 SUCCESS; matriz 10/10 + modos 8/8. CI pós-merge a registrar na PR` |
 | **T08.5** | `🔒 Engenharia T08.4 + aceite/homologação EXTERNA real` | Diretor aprova ou nega go-live após evidência real e rollback | 2d | `[ ] NO_GO REAL, NÃO BLOQUEIA ENGENHARIA FUTURA` | `__/__/____` | `Autorização formal e homologação reais ___` |
 
 ### Trilha 3 — Expansão Horizontal e Agendamentos (Pós-piloto, sem antecipar T08)
 
 | ID | Gate / Trava | Entrega Funcional Consolidada | Prazo Est. | Status | Data Entrega | Evidência (PR / SHA / CI Run) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
-| **T09** | `🔒 T08.4 engenharia certificada` | Business Capability Registry evoluído, contratos dos packs e configuração multissetorial | 5d | `[ ] AGUARDA GATE INTERNO T08.4, NÃO T08.5 REAL` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T09** | `🔒 CI pós-merge T08.4` | Business Capability Registry evoluído, contratos dos packs e configuração multissetorial | 5d | `[ ] LIBERÁVEL APÓS CI PÓS-MERGE T08.4, NÃO DEPENDE DO T08.5 REAL` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T10** | `🔒 Finalize T09` | Scheduling Engine horizontal — agenda, disponibilidade, reserva atômica, reagendamento e lembretes | 8d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T11** | `🔒 Finalize T10` | Service Booking Packs — salão, barbearia e clínica de estética (escopo administrativo) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T12** | `🔒 Finalize T11` | Templates de comércio/serviços, onboarding por capabilities e certificação multissetorial | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
@@ -178,11 +178,11 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
   - [x] Testes adversariais proíbem a IA de modificar `OPERATION_MODE`, habilitar integração externa inexistente, fabricar estado, conceder permissões, acessar finanças administrativas ou realizar estorno sem RBAC.
 - **Evidência de fechamento:** `docs/T07_CLOSURE_CERTIFICATION.md`; commit funcional `588d6ce4491cb14ea4380b8edeedb276dc364c1e`, CI https://github.com/faabio3131/ai-sales-saas-vendedor-ia/actions/runs/44957683634.
 
-### T08 — Engenharia separada do go-live (T08.2 certificada; T08.3 engenharia certificada na PR; CI pós-merge pendente; T08.5 real NO_GO)
+### T08 — Engenharia separada do go-live (T08.2/T08.3 certificadas; T08.4 engenharia certificada na PR; T08.5 real NO_GO)
 - **T08.1:** Cadastro, endereço, telefones, nome da atendente, horários, catálogo e modo são **configurações versionadas por empresa/unidade no Firestore** (`/api/establishments`); código é horizontal. Material específico da Pizzaria Americana é fonte externa para digitação/importação autorizada, **não parte do runtime nem arquivo de dados da aplicação**. Aceite real da proprietária permanece `NO_GO` para ativação da pizzaria, **mas não impede construir T08.2**. Ver `docs/T08_1_OWNER_VALIDATION_RUNBOOK.md`.
 - **T08.2:** Engenharia de inscrição bancária OWNER por tenant (apenas metadados), cofre GCP/mounted sem segredos em Firestore, habilitação somente operacional após prova externa; WhatsApp Cloud API por tenant/unidade com challenge Meta, HMAC do corpo bruto, WABA/phone binding, inbox persistente deduplicada, envio protegido por janela de 24h comprovada e outbox fail-closed. **Cliente real/credenciais/HTTPS/homologação ainda externos; não bloqueiam desenvolvimento T08.3.** Ver `docs/T08_2_SECURE_PROVIDER_ONBOARDING.md`.
 - **T08.3:** Engenharia implementada na PR #23: compose isolado em loopback, kill switch e allowlist tenant/unidade fail-closed, CLI dry-run para deploy, backup/import Firestore entre projetos staging e rollback de imagem; testes e smoke Docker em CI. **Não houve backup/restore GCP reais, migração do backend Cloud Run ou worker Contabo, nem deploy público**. Continuam externos o inventário da infraestrutura efetiva, segredos de execução, homologação real e aprovação de go-live. Evidências: `docs/T08_3_ENGINEERING_CERTIFICATION.md`.
-- **T08.4:** Certificação evidenciada das **10 Jornadas Obrigatórias de Aceite** (Atendimento, Pedido, Entrega, Pix, Produção, Notificação, Financeiro, Exceções, Isolamento e Resiliência) no **modo escolhido**. Verificação documental dos testes de contrato de ambos os modos. Se o modo for integrado, exigir homologação real do PDV/KDS escolhido antes do aceite; caso nativo, não inventar integração externa.
+- **T08.4:** Matriz interna 10/10 e ambos os modos executada na PR #24 com doubles e componentes reais de domínio, sem chamadas financeiras/mensagens reais; sender oficial por tenant/unidade, confirmação/preparo apenas após eventos persistidos, ACK PDV mockado e deduplicação. A homologação das dez jornadas reais ainda é **0/10** e depende do modo que a proprietária escolher. Ver `docs/T08_4_INTERNAL_ACCEPTANCE_MATRIX.md` e `docs/T08_4_ENGINEERING_CERTIFICATION.md`.
 - **T08.5:** Manual operacional, reconciliação diária, relatório final com evidências e autorização formal de Go-Live pelo Diretor.
 
 ---
@@ -205,28 +205,30 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | Scheduling Engine / salão / estética / novos setores | `T09`–`T12` | `[ ] Engenharia futura após gates internos T08.2–T08.4, sem aguardar T08.5 real` |
 
 ### 4.2 10 Jornadas Obrigatórias de Aceite do Piloto (Seção 13.2)
-- [ ] **01. Atendimento:** Responde cardápio, horário e regras cadastradas sem inventar dados (`T02`, `T08.4`).
-- [ ] **02. Pedido:** Pizza de dois sabores e adicionais calculados corretamente com número único (`T03`, `T08.4`).
-- [ ] **03. Entrega:** Endereço e taxa validados antes da confirmação; opção de retirada (`T03`, `T06`, `T08.4`).
-- [ ] **04. Pix:** QR Code e Copia e Cola válidos com confirmação oficial via webhook (`T04`, `T08.2`, `T08.4`).
-- [ ] **05. Produção:** Liberação única após validação financeira/política (`T06`, `T08.4`).
-- [ ] **06. Notificação:** Cliente recebe status real de confirmação, preparo e entrega (`T06`, `T08.4`).
-- [ ] **07. Financeiro:** Dono autenticado consulta dia/semana/mês com totais reconciliados (`T05`, `T08.4`).
-- [ ] **08. Exceções:** Expiração, duplicidade, valor divergente, alteração e cancelamento tratados (`T04`, `T07`, `T08.4`).
-- [ ] **09. Isolamento:** Cliente ou admin de outro tenant não acessa dados da pizzaria (`T01`, `T02`, `T05`, `T08.4`).
-- [ ] **10. Resiliência:** Falha de IA, webhook repetido, timeout e reinício não duplicam efeitos (`T01`, `T04`, `T06`, `T08.4`).
+- [x] **01. Atendimento:** Responde cardápio, horário e regras cadastradas sem inventar dados (`T02`, `T08.4`).
+- [x] **02. Pedido:** Pizza de dois sabores e adicionais calculados corretamente com número único (`T03`, `T08.4`).
+- [x] **03. Entrega:** Endereço e taxa validados antes da confirmação; opção de retirada (`T03`, `T06`, `T08.4`).
+- [x] **04. Pix:** contrato Pix de teste com payload QR/Copia e Cola de demonstração, webhook assinado mockado e confirmação por GET PSP simulado (`T04`, `T08.2`, `T08.4`).
+- [x] **05. Produção:** Liberação única após validação financeira/política (`T06`, `T08.4`).
+- [x] **06. Notificação:** avisos simulados baseados somente em estados operacionais persistidos de confirmação, preparo e entrega (`T06`, `T08.4`).
+- [x] **07. Financeiro:** Dono autenticado consulta dia/semana/mês com totais reconciliados (`T05`, `T08.4`).
+- [x] **08. Exceções:** Expiração, duplicidade, valor divergente, alteração e cancelamento tratados (`T04`, `T07`, `T08.4`).
+- [x] **09. Isolamento:** Cliente ou admin de outro tenant não acessa dados da pizzaria (`T01`, `T02`, `T05`, `T08.4`).
+- [x] **10. Resiliência:** Falha de IA, webhook repetido, timeout e reinício não duplicam efeitos (`T01`, `T04`, `T06`, `T08.4`).
+
+**Observação:** [x] comprova apenas **aceite interno simulado**, NUNCA aprovação de produção. A jornada J04 usa Pix de demonstração; autenticidade/validade bancária real e escaneamento/baixa são homologação externa independente. As 10 jornadas reais permanecem 0/10 homologadas.
 
 ### 4.3 Matriz adicional obrigatória dos dois modos — sem reduzir as 10 jornadas
-- [ ] **Nativo:** caixa/fila de pedidos própria, alteração de status por papéis autorizados, confirmação de recebimento na entrega e notificação somente após evento persistido.
-- [ ] **Integrado (contrato interno):** pedido único enviado via adapter, ACK/recusa, timeout, reentrega, versão, alteração/cancelamento, status remoto verificado e deduplicação.
-- [ ] **Modo mutuamente exclusivo:** um só destino de produção por pedido, troca controlada de modo sem migrar pedidos abertos silenciosamente; isolamento por tenant/unidade e permissões.
+- [x] **Nativo (interno simulado):** caixa/fila de pedidos própria, alteração de status por papéis autorizados, confirmação de recebimento na entrega e notificação somente após evento persistido.
+- [x] **Integrado (contrato interno simulado; alteração/cancelamento inseguro bloqueado e encaminhado à revisão):** pedido único enviado via adapter, ACK/recusa, timeout, reentrega, versão, alteração/cancelamento, status remoto verificado e deduplicação.
+- [x] **Modo mutuamente exclusivo (interno simulado):** um só destino de produção por pedido, troca controlada de modo sem migrar pedidos abertos silenciosamente; isolamento por tenant/unidade e permissões.
 - [ ] **Piloto real:** homologação do modo escolhido, prova de operação com a proprietária; o modo não escolhido fica desabilitado em produção até homologação própria.
 
 ---
 
 ## 5. Expansão multissetorial posterior — definição e gates T09–T12
 
-### T09 — Business Capability Registry / módulo plugável (`🔒 Travado em T08.5`)
+### T09 — Business Capability Registry / módulo plugável (`🔒 Até CI pós-merge T08.4; independente de T08.5 real`)
 - Formalizar contratos de capacidades reutilizáveis e ativação por tenant/unidade; catálogo de templates por segmento, migração/configuração segura, isolamento e rollback.
 - **DoD:** 3 tenants de segmentos distintos sem vazamento, autorização e seleção de capabilities; nenhum domínio especializado contamina o núcleo.
 
