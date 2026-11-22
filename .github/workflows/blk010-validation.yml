@@ -53,6 +53,10 @@ jobs:
           node scripts/t13FirestoreRulesGate.mjs --self-test
           node scripts/t13ReleaseGate.mjs --self-test
           node scripts/t13WorkflowGate.mjs
+      - name: T13 committed secret regression gate
+        run: |
+          node scripts/t13SecretGate.mjs --self-test
+          node scripts/t13SecretGate.mjs
       - name: T13 production topology and deploy script static gate
         env:
           ATENDEVENDE_IMAGE: ghcr.io/example/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
