@@ -99,8 +99,10 @@ export class FirestoreFiscalOutboxRepository{
   });
  }
 }
+export type FiscalOutboxStore = Pick<FirestoreFiscalOutboxRepository,
+ 'backfillConfirmed'|'due'|'claim'|'confirmedPayment'|'finish'>;
 export class FiscalHandoffReconciliationWorker {
- constructor(private readonly outbox:FirestoreFiscalOutboxRepository,
+ constructor(private readonly outbox:FiscalOutboxStore,
   private readonly observer:PaymentConfirmationObserver,private readonly clock:()=>number=Date.now){}
  async runOnce(limit=100){
   const backfill=await this.outbox.backfillConfirmed(limit);
