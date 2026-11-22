@@ -31,6 +31,9 @@ function scanSource(filename,contents){
   findings.push({filename:path.relative(ROOT,filename),line,reason});
  };
  const isModule=s=>ts.isStringLiteral(s)&&/^(?:node:)?child_process$/.test(s.text);
+ const memberName=node=>ts.isPropertyAccessExpression(node)?node.name.text:
+  ts.isElementAccessExpression(node)&&ts.isStringLiteral(node.argumentExpression)?node.argumentExpression.text:null;
+ const memberObject=node=>ts.isPropertyAccessExpression(node)||ts.isElementAccessExpression(node)?node.expression:null;
  const moduleCall=node=>{
   if(ts.isAwaitExpression(node))return moduleCall(node.expression);
   return ts.isCallExpression(node)&&node.arguments.length===1&&
@@ -61,19 +64,30 @@ function scanSource(filename,contents){
     }
    }
   }
+  if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.initializer){
+   const init=node.initializer;
+   const target=memberObject(init),name=memberName(init);
+   if(target&&unsafe.has(name)&&
+     ((ts.isIdentifier(target)&&namespaces.has(target.text))||moduleCall(target)))
+      imported.add(node.name.text);
+   if(ts.isIdentifier(init)&&namespaces.has(init.text))namespaces.add(node.name.text);
+   if(ts.isIdentifier(init)&&imported.has(init.text))imported.add(node.name.text);
+  }
   ts.forEachChild(node,bindings);
  }
- bindings(source);
+ // Iterate to resolve bindings declared after their use or chained aliases.
+ for(let i=0;i<4;i++)bindings(source);
  function walk(node){
   if(ts.isCallExpression(node)){
    const fn=node.expression;
    if(ts.isIdentifier(fn)&&(['eval','Function'].includes(fn.text)||imported.has(fn.text)))
     flag(node,imported.has(fn.text)?'UNSAFE_PROCESS_EXECUTION':'DYNAMIC_CODE_EXECUTION');
-   if(ts.isPropertyAccessExpression(fn)&&
-     ((unsafe.has(fn.name.text)&&
-       ((ts.isIdentifier(fn.expression)&&namespaces.has(fn.expression.text))||
-        moduleCall(fn.expression)))||
-      (fn.expression.getText(source)==='process'&&fn.name.text==='setuid')))
+   const target=memberObject(fn),name=memberName(fn);
+   if(target&&
+     ((unsafe.has(name)&&
+       ((ts.isIdentifier(target)&&namespaces.has(target.text))||
+        moduleCall(target)))||
+      (target.getText(source)==='process'&&name==='setuid')))
     flag(node,'UNSAFE_PROCESS_EXECUTION');
   }
   if(ts.isNewExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='Function')
@@ -93,6 +107,10 @@ if(process.argv.includes('--self-test')){
   ['namespace.ts',"import * as cp from 'child_process'; cp.execSync('echo unsafe')",1],
   ['require.js',"const {execSync: launch}=require('node:child_process'); launch('echo unsafe')",1],
   ['direct.mjs',"require('child_process').exec('echo unsafe')",1],
+  ['property.js',"const run = require('child_process').exec; run('echo unsafe')",1],
+  ['computed.ts',"import * as cp from 'child_process'; cp['execSync']('echo unsafe')",1],
+  ['chained.js',"const cp=require('child_process'); const fn=cp.exec; fn('echo unsafe')",1],
+  ['aliased.ts',"const cp=require('node:child_process'); const alias=cp; const fn=alias['exec']; fn('echo unsafe')",1],
   ['safe.ts',"import {randomBytes} from 'node:crypto'; randomBytes(32);",0],
  ];
  for(const [file,code,count] of cases){
