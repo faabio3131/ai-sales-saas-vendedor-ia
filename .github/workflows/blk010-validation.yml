@@ -18,8 +18,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+      - name: T13 dependency remediation lock snapshot (temporary)
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          echo 'AV_T13_UPGRADED_LOCK_BEGIN'
+          base64 -w0 package-lock.json
+          echo
+          echo 'AV_T13_UPGRADED_LOCK_END'
       - name: T13 auditable dependencies and SBOM
         run: |
           set -euo pipefail
