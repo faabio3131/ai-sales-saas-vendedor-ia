@@ -13,6 +13,38 @@ const policies=()=>db().collection('governanceUnitPolicies');
 const approvals=()=>db().collection('governanceApprovals');
 const receipts=()=>db().collection('governanceToolReceipts');
 export class FirestoreGovernanceRepository implements GovernanceRepository {
+ /** Fail-closed sweeper: a stale reservation requires human review; never replay tools. */
+ async reconcileStaleReservations(now:string,timeoutMs=15*60_000,limit=100){
+  const nowMs=Date.parse(now);
+  if(!Number.isFinite(nowMs)||!Number.isSafeInteger(timeoutMs)||timeoutMs<60_000||
+     !Number.isSafeInteger(limit)||limit<1||limit>500)
+    throw Error('GOVERNANCE_RECONCILIATION_INPUT_INVALID');
+  const page=await receipts().where('status','==','RESERVED')
+    .limit(limit).get();
+  const summary={scanned:0,reviewRequired:0,skipped:0};
+  for(const doc of page.docs){
+   summary.scanned++;
+   const candidate=doc.data() as ToolReceipt;
+   const updated=Date.parse(candidate.updatedAt);
+   if(candidate.id!==doc.id||!Number.isFinite(updated)||updated>nowMs-timeoutMs){
+    summary.skipped++;continue;
+   }
+   const changed=await db().runTransaction(async tx=>{
+    const latest=(await tx.get(doc.ref)).data() as ToolReceipt|undefined;
+    if(!latest||latest.status!=='RESERVED'||latest.id!==doc.id||
+       latest.tenantId!==candidate.tenantId||latest.unitId!==candidate.unitId||
+       latest.requestHash!==candidate.requestHash)return false;
+    const lastUpdated=Date.parse(latest.updatedAt);
+    if(!Number.isFinite(lastUpdated)||lastUpdated>nowMs-timeoutMs)return false;
+    tx.set(doc.ref,{...latest,status:'REVIEW_REQUIRED',updatedAt:now,
+      failureCode:'STALE_RESERVATION_REQUIRES_HUMAN_REVIEW'});
+    return true;
+   });
+   if(changed)summary.reviewRequired++;
+   else summary.skipped++;
+  }
+  return summary;
+ }
  async getReceipt(t:string,u:string,idempotencyKey:string){
   const doc=await receipts().doc(receiptId({tenantId:t,unitId:u},idempotencyKey)).get();
   const v=doc.data() as ToolReceipt|undefined;

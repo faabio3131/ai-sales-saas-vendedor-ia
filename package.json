@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild scripts/paymentReconciliationWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/payment-reconciler.cjs && esbuild scripts/purgeExpiredBusinessMemories.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/purge-business-memories.cjs && esbuild scripts/orderPaymentWorkers.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/order-payment-workers.cjs && esbuild scripts/fulfillmentWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/fulfillment-worker.cjs && esbuild scripts/schedulingWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/scheduling-worker.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild scripts/paymentReconciliationWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/payment-reconciler.cjs && esbuild scripts/purgeExpiredBusinessMemories.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/purge-business-memories.cjs && esbuild scripts/orderPaymentWorkers.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/order-payment-workers.cjs && esbuild scripts/fulfillmentWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/fulfillment-worker.cjs && esbuild scripts/schedulingWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/scheduling-worker.cjs && esbuild scripts/governanceReceiptReconciliationWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/governance-reconciler.cjs",
     "start": "node dist/server.cjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -14,7 +14,8 @@
     "reconcile:order-payments": "node dist/order-payment-workers.cjs",
     "run:fulfillment-cycle": "node dist/fulfillment-worker.cjs",
     "run:scheduling-cycle": "node dist/scheduling-worker.cjs",
-    "security:static": "node scripts/t13SecurityScan.mjs"
+    "security:static": "node scripts/t13SecurityScan.mjs",
+    "reconcile:governance": "node dist/governance-reconciler.cjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

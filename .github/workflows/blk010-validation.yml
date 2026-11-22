@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, feat/t13-final-hardening]
   workflow_dispatch:
 permissions:
   contents: read
@@ -93,7 +93,7 @@ jobs:
         env:
           NODE_ENV: test
         run: npm test -- tests/t12Multisector.test.ts
-      - name: T10 T11 T12 isolated Firestore transactional acceptance
+      - name: T10 T11 T12 T13 isolated Firestore transactional acceptance
         env:
           NODE_ENV: test
           T10_FIRESTORE_EMULATOR: 'true'
@@ -111,7 +111,7 @@ jobs:
             sleep 1
           done
           test "$READY" = 1
-          npm test -- tests/t10FirestoreEmulator.test.ts tests/t11FirestoreEmulator.test.ts tests/t12FirestoreEmulator.test.ts
+          npm test -- tests/t10FirestoreEmulator.test.ts tests/t11FirestoreEmulator.test.ts tests/t12FirestoreEmulator.test.ts tests/t13FinancialFirestoreEmulator.test.ts
       - name: T10 scheduling worker compose config gate
         env:
           ATENDEVENDE_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
