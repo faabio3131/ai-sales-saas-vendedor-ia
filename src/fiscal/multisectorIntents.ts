@@ -71,7 +71,7 @@ export function bookingFiscalIntent(booking:Booking):MultisectorFiscalIntent {
   id:canonicalId('SERVICE_BOOKING',booking.tenantId,booking.unitId,booking.id),
   tenantId:booking.tenantId,unitId:booking.unitId,sourceDomain:'SERVICE_BOOKING',
   sourceId:booking.id,sourceVersion:booking.version,
-  sourceFingerprint:hash([booking.serviceId,booking.pack,booking.deposit,booking.completedAt,
+  sourceFingerprint:hash([booking.serviceId,booking.pack,booking.deposit,booking.updatedAt,
     booking.checkedInAt]),
   customerId:booking.customerId,currency:'BRL',grossAmountMinor:amount??null,
   settlementEvidence:confirmedDeposit?'DEPOSIT_ONLY':'UNVERIFIED',
