@@ -19,21 +19,19 @@ jobs:
         with:
           node-version: '22'
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      # Temporary evidence capture to produce and pin the exact tested lock and
-      # base image digests. Remove this step in the final T13 certification.
-      - name: T13 supply chain snapshot (temporary)
+        run: npm ci --no-audit --no-fund
+      - name: T13 auditable dependencies and SBOM
         run: |
           set -euo pipefail
-          test -s package-lock.json
-          echo 'AV_T13_LOCK_BEGIN'
-          base64 -w0 package-lock.json
-          echo
-          echo 'AV_T13_LOCK_END'
-          docker pull node:22-alpine >/dev/null
-          docker pull python:3.12-alpine >/dev/null
-          echo "AV_T13_NODE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' node:22-alpine)"
-          echo "AV_T13_PYTHON_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' python:3.12-alpine)"
+          npm audit --audit-level=high
+          npm sbom --sbom-format=cyclonedx > t13-sbom.cdx.json
+          node -e "const b=require('./t13-sbom.cdx.json');if(!b.components?.length)process.exit(1)"
+      - name: T13 upload software bill of materials
+        uses: actions/upload-artifact@v4
+        with:
+          name: t13-sbom-cyclonedx
+          path: t13-sbom.cdx.json
+          retention-days: 30
       - name: Build
         run: npm run build
       - name: Typecheck
