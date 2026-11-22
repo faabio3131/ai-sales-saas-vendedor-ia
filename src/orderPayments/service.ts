@@ -1,4 +1,5 @@
 import { createHash,randomUUID } from 'node:crypto';
+import {requirePilotLiveFeature} from '../operations/pilotFlags';
 import type { TenantContext } from '../types/contracts';
 import type { OrderRepository } from '../orders/model';
 import { requireBusinessScope } from '../business/service';
@@ -113,6 +114,7 @@ export class OrderPaymentService {
     }
     // Resolve and verify the merchant's actual PSP account BEFORE reserving
     // a charge. No client-supplied recipient, credentials or provider URL.
+    if(ONLINE.has(input.method))requirePilotLiveFeature('ONLINE_PAYMENT_CREATE',scope.tenantId,unitId);
     const provider=ONLINE.has(input.method)?
       await this.resolver.forNewPayment(scope.tenantId,input.providerId):undefined;
     if(provider&&input.method!=='PIX'&&
@@ -278,6 +280,8 @@ export class OrderPaymentService {
       denyPayment('ORDER_PAYMENT_REFUND_NOT_ALLOWED');
     if(typeof input.reason!=='string'||!input.reason.trim()||input.reason.length>240)
       denyPayment('ORDER_PAYMENT_REFUND_REASON_INVALID','VALIDATION');
+    if(record.providerPaymentId)
+      requirePilotLiveFeature('PSP_REFUND',record.tenantId,record.unitId);
     const now=this.clock().toISOString();
     const pending=await this.store.transition({
       ...record,status:'REFUND_PENDING',version:record.version+1,updatedAt:now,

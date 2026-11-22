@@ -100,7 +100,29 @@ jobs:
             assert.match(JSON.stringify(service.healthcheck),/payment-reconciler\.last-success/);
             assert.match(JSON.stringify(service.command),/payment_reconciliation_cycle_failed/);
             assert.equal(service.read_only,true);
+            assert.ok(JSON.stringify(service.command).includes('$legacy_failed'));
+            assert.ok(JSON.stringify(service.command).includes('$order_failed'));
           }
+          NODE
+      - name: T08.3 staging ops guards and recovery drills
+        run: python3 -m unittest discover -s scripts -p 'test_t08_3_ops.py' -v
+      - name: T08.3 staging compose isolation gate
+        env:
+          ATENDEVENDE_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          SESSION_SECRET: ci-only-staging-secret-0123456789abcdef
+          FIREBASE_PROJECT_ID: av-staging-isolated
+        run: |
+          docker compose -f deploy/t08-3-staging.compose.yaml config --format json > /tmp/atendevende-staging-compose.json
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const c = require('/tmp/atendevende-staging-compose.json');
+          const s = c.services['atendevende-staging'];
+          assert.equal(s.environment.ATENDEVENDE_PILOT_LIVE_ENABLED,'false');
+          assert.equal(s.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');
+          assert.equal(s.environment.ATENDEVENDE_PILOT_ALLOWED_UNITS,'{}');
+          assert.equal(s.read_only,true);
+          assert.deepEqual(s.cap_drop,['ALL']);
+          assert.equal(s.ports[0].host_ip,'127.0.0.1');
           NODE
       - name: Production Docker smoke test
         run: |
@@ -129,6 +151,28 @@ jobs:
           docker logs vendedor-ia-ci || true
           exit 1
 
+      - name: T08.3 actual isolated staging Docker smoke
+        env:
+          ATENDEVENDE_IMAGE: vendedor-ia-ci
+          SESSION_SECRET: ci-staging-session-secret-0123456789abcdef
+          FIREBASE_PROJECT_ID: av-staging-isolated
+          ATENDEVENDE_STAGING_PORT: "18181"
+        run: |
+          set -euo pipefail
+          docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml up -d --no-build
+          cleanup() {
+            docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml logs || true
+            docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml down --remove-orphans || true
+          }
+          trap cleanup EXIT
+          READY=0
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18181/api/health > /tmp/atendevende-t083-health.json; then READY=1; break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          node -e "const h=require('/tmp/atendevende-t083-health.json');if(h.status!=='ok'||h.governance?.tenantIsolationEnforced!==true)process.exit(1)"
+          docker compose -p av-t083-ci -f deploy/t08-3-staging.compose.yaml ps
       - name: Private Python cognitive Docker smoke
         env:
           COGNITIVE_S2S_SECRET: ci-cognitive-service-secret-0123456789abc
