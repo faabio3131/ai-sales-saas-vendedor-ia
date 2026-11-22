@@ -177,7 +177,7 @@ export class FulfillmentService {
     updatedAt:this.clock().toISOString()};
   return this.dep.operations.advance(next,before.version,
     event(next,'OrderReleasedToProduction',before.connectorId),
-    undefined,'ack:'+ack.externalOrderId);
+    'CUSTOMER_NOTICE','ack:'+ack.externalOrderId);
  }
  /** The caller is a verified adapter, NEVER an internet-facing JSON route. */
  async verifiedExternalStatus(status:VerifiedProductionStatus):Promise<OperationRecord>{

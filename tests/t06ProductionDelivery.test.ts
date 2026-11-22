@@ -61,9 +61,9 @@ describe('T06 — deterministic delivery, native KDS, payment gates and isolatio
      productionState:'COMPLETED',deliveryState:'COMPLETED'});
   const worker=new FulfillmentWorker(e.operations,e.operations,e.service,e.adapters,e.sender,
    ()=>anchor);
-  expect(await worker.runOnce()).toMatchObject({claimed:4,delivered:4,retried:0});
+  expect(await worker.runOnce()).toMatchObject({claimed:5,delivered:5,retried:0});
   expect(e.notices.map(x=>x.name)).toEqual([
-    'OrderReleasedToProduction','OrderReady','DeliveryDispatched','DeliveryCompleted',
+    'OrderReleasedToProduction','ProductionStarted','OrderReady','DeliveryDispatched','DeliveryCompleted',
   ]);
   expect(e.pdv.kitchen.size).toBe(0); // Native mode NEVER calls PDV
  });

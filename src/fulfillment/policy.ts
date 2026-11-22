@@ -142,7 +142,7 @@ export function eventFor(state:OperationState,kind:'PICKUP'|'DELIVERY'):{
 }{
   switch(state){
     case 'QUEUED':return {name:'OrderReleasedToProduction',notify:false};
-    case 'IN_PREPARATION':return {name:'ProductionStarted',notify:false};
+    case 'IN_PREPARATION':return {name:'ProductionStarted',notify:true};
     case 'READY':return {name:'OrderReady',notify:true};
     case 'OUT_FOR_DELIVERY':return {name:'DeliveryDispatched',notify:true};
     case 'COMPLETED':return {name:kind==='PICKUP'?'OrderPickupCompleted':'DeliveryCompleted',notify:true};
