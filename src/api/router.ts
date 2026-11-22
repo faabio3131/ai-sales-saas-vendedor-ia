@@ -6,6 +6,8 @@ import { createCommerceRouter } from '../commerce/routes';
 import { createOrdersRouter } from '../orders/routes';
 import { createBusinessRouter } from '../business/routes';
 import {createCapabilitiesRouter} from '../capabilities/routes';
+import {createRetailRouter} from '../retail/routes';
+import {createMultiSectorOnboardingRouter} from '../onboarding/routes';
 import {createSchedulingRouter} from '../scheduling/routes';
 import {capabilityHttpGate} from '../capabilities/httpGuard';
 import { createChannelsRouter } from '../channels/routes';
@@ -61,6 +63,8 @@ export function createApiRouter(): Router {
   router.use('/orders', authenticationMiddleware, tenantAuthorizationMiddleware, capabilityHttpGate('FOOD_ORDERING'),createOrdersRouter());
   router.use('/business', authenticationMiddleware, tenantAuthorizationMiddleware, createBusinessRouter());
   router.use('/capabilities', authenticationMiddleware, tenantAuthorizationMiddleware, createCapabilitiesRouter());
+  router.use('/retail',authenticationMiddleware,tenantAuthorizationMiddleware,createRetailRouter());
+  router.use('/onboarding',authenticationMiddleware,tenantAuthorizationMiddleware,createMultiSectorOnboardingRouter());
   router.use('/scheduling',authenticationMiddleware,tenantAuthorizationMiddleware,createSchedulingRouter());
   router.use('/customers', authenticationMiddleware, tenantAuthorizationMiddleware, createCustomersRouter());
   router.use('/conversations', authenticationMiddleware, tenantAuthorizationMiddleware, createConversationRouter());
