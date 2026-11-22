@@ -159,6 +159,26 @@ jobs:
           # Keep new T13 recovery emulator tests isolated from T10's 8-way
           # transaction contention, so CI cannot manufacture emulator lock timeouts.
           npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
+          npm test -- tests/t13FinancialEmulator.test.ts
+      - name: T13 direct Firestore client access denied by candidate rules
+        env:
+          NODE_ENV: test
+          T13_FIRESTORE_RULES_EMULATOR: 'true'
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8090
+          FIREBASE_PROJECT_ID: demo-atendevende-t13
+        run: |
+          set -euo pipefail
+          java -jar /tmp/firestore-emulator.jar --host 127.0.0.1 --port 8090 --project_id demo-atendevende-t13 --rules deploy/t13-server-only.firestore.rules > /tmp/t13-rules-emulator.log 2>&1 &
+          PID=$!
+          trap 'cat /tmp/t13-rules-emulator.log; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          READY=0
+          for i in {1..60}; do
+            if curl --silent --fail http://127.0.0.1:8090/ >/dev/null; then READY=1; break; fi
+            if ! kill -0 "$PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          npm test -- tests/t13FirestoreRulesEmulator.test.ts
       - name: T10 scheduling worker compose config gate
         env:
           ATENDEVENDE_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
