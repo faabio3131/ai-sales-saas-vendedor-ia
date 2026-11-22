@@ -20,7 +20,8 @@ function files(dir){
 }
 function scanSource(filename,contents){
  const source=ts.createSourceFile(filename,contents,ts.ScriptTarget.Latest,true,
-  filename.endsWith('tsx')?ts.ScriptKind.TSX:\n  /\\.(?:ts|mts|cts)$/.test(filename)?ts.ScriptKind.TS:ts.ScriptKind.JS);
+  filename.endsWith('tsx')?ts.ScriptKind.TSX:
+  /\.(?:ts|mts|cts)$/.test(filename)?ts.ScriptKind.TS:ts.ScriptKind.JS);
  const findings=[];
  const unsafe=new Set(['exec','execSync']);
  const imported=new Set();
