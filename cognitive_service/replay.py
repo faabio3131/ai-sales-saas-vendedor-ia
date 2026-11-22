@@ -31,7 +31,9 @@ class RedisReplayStore:
         if parsed.scheme == "redis" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
             raise ValueError("Remote cognitive replay storage requires rediss TLS.")
         self.host = parsed.hostname
-        self.port = parsed.port or (6380 if parsed.scheme == "rediss" else 6379)
+        if parsed.scheme == "rediss" and parsed.port is None:
+            raise ValueError("Explicit TLS replay port is required.")
+        self.port = parsed.port or 6379
         self.tls = parsed.scheme == "rediss"
         self.username = unquote(parsed.username) if parsed.username else ""
         self.password = unquote(parsed.password) if parsed.password else ""

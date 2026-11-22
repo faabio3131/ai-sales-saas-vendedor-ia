@@ -115,6 +115,13 @@ class CognitiveServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RedisReplayStore("redis://untrusted.internal:6379")
 
+    def test_tls_replay_backend_requires_explicit_port(self):
+        with self.assertRaisesRegex(ValueError, "Explicit TLS replay port"):
+            RedisReplayStore("rediss://:fixturepassword@redis.example.com")
+        store = RedisReplayStore("rediss://:fixturepassword@redis.example.com:6380")
+        self.assertTrue(store.tls)
+        self.assertEqual(store.port, 6380)
+
     def test_http_worker_limit(self):
         server = BoundedCognitiveServer(("127.0.0.1", 0), CognitiveHandler, max_workers=2)
         try:

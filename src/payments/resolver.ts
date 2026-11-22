@@ -4,7 +4,20 @@ import type {PaymentProviderInterface} from './contracts';
 import type {Payment} from './model';
 import {providerDescriptor,PaymentProviderId} from './providerCatalog';
 import type {MerchantProviderConnectionRepository,MerchantProviderConnection} from './connections';
-import type {MercadoPagoPixProvider} from './mercadoPago';
+/** Narrow runtime proof of a merchant-bound PSP, regardless of adapter class.
+ * Does not exploit TypeScript's method or subclass variance.
+ */
+type MerchantBoundProvider=PaymentProviderInterface&{tenantId:string;recipientId:string};
+function requireMerchantBoundAdapter(adapter:PaymentProviderInterface,tenantId:string,recipientId:string):
+ MerchantBoundProvider{
+ const candidate=adapter as PaymentProviderInterface&{tenantId?:unknown;recipientId?:unknown};
+ if(typeof candidate.tenantId!=='string'||typeof candidate.recipientId!=='string'||
+    candidate.tenantId!==tenantId||candidate.recipientId!==recipientId){
+  throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_RECIPIENT_MISMATCH',
+    message:'Merchant identity is not independently verified.'});
+ }
+ return candidate as MerchantBoundProvider;
+}
 
 /** Persist only a digest, never the secret or Secret Manager path itself. */
 export function merchantConnectionBindingHash(connection:MerchantProviderConnection):string {
@@ -52,10 +65,7 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
     const adapter=this.adapters.get(id)??(this.createAdapter?await this.createAdapter(connection):undefined);
     if(!adapter||adapter.id!==id) throw new ApplicationError({category:'PROVIDER',code:'PAYMENT_PROVIDER_NOT_CONFIGURED',message:'Provider credentials are not available.'});
     // Each merchant adapter must prove the tenant and recipient match the trusted binding.
-    const bound=adapter as MercadoPagoPixProvider;
-    if(bound.tenantId!==tenantId||bound.recipientId!==connection.recipientId) {
-      throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_RECIPIENT_MISMATCH',message:'Merchant identity is not verified.'});
-    }
+    requireMerchantBoundAdapter(adapter,tenantId,connection.recipientId);
     return {provider:adapter,bindingHash:merchantConnectionBindingHash(connection)};
   }
   async forRecordedPayment(payment:Payment):Promise<PaymentProviderInterface> {
@@ -82,11 +92,9 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
         message:'Mutable historical vault references cannot authorize payment reconciliation.'});
     // NEVER use a cached adapter keyed only by provider for historic charges.
     const adapter=await this.createAdapter(original);
-    const bound=adapter as MercadoPagoPixProvider;
-    if(adapter.id!==provider||bound.tenantId!==payment.tenantId||
-      bound.recipientId!==original.recipientId)
+    if(adapter.id!==provider)
       throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_RECIPIENT_MISMATCH',
-        message:'Archived merchant recipient is not independently verifiable.'});
-    return adapter;
+        message:'Archived provider is not independently verifiable.'});
+    return requireMerchantBoundAdapter(adapter,payment.tenantId,original.recipientId);
   }
 }
