@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
+import {requirePilotLiveFeature} from '../operations/pilotFlags';
 import type { PaymentConfirmationObserver } from '../fiscal/contracts';
 import { ApplicationError } from '../infrastructure/errors';
 import { QuoteRepository } from '../quotes/contracts';
@@ -76,6 +77,8 @@ export class PaymentService {
       });
     }
 
+    // Legacy quotes have no authenticated unit scope; live PSP creation remains denied.
+    requirePilotLiveFeature('ONLINE_PAYMENT_CREATE',tenantId,undefined);
     const request = {
       payerEmail:input.payerEmail,
       tenantId,

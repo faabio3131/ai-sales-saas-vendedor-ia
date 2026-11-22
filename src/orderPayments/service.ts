@@ -1,4 +1,5 @@
 import { createHash,randomUUID } from 'node:crypto';
+import {requirePilotLiveFeature} from '../operations/pilotFlags';
 import type { TenantContext } from '../types/contracts';
 import type { OrderRepository } from '../orders/model';
 import { requireBusinessScope } from '../business/service';
@@ -113,6 +114,7 @@ export class OrderPaymentService {
     }
     // Resolve and verify the merchant's actual PSP account BEFORE reserving
     // a charge. No client-supplied recipient, credentials or provider URL.
+    if(ONLINE.has(input.method))requirePilotLiveFeature('ONLINE_PAYMENT_CREATE',scope.tenantId,unitId);
     const provider=ONLINE.has(input.method)?
       await this.resolver.forNewPayment(scope.tenantId,input.providerId):undefined;
     if(provider&&input.method!=='PIX'&&

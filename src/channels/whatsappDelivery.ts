@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {requirePilotLiveFeature} from '../operations/pilotFlags';
 import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {channelError,CHANNEL_TENANT,CHANNEL_UNIT,type WhatsAppConnectionStore,
@@ -111,6 +112,7 @@ export class WhatsAppDeliveryService{
   private readonly policy:WhatsAppCustomerServicePolicy,
   private readonly clock:()=>Date=()=>new Date()){}
  async send(input:WhatsAppSendInput):Promise<{externalMessageId:string;duplicate:boolean}>{
+  requirePilotLiveFeature('WHATSAPP_OUTBOUND',input.tenantId,input.unitId);
   if(!CHANNEL_TENANT.test(input.tenantId)||!CHANNEL_UNIT.test(input.unitId)||
    !E164.test(input.recipient)||!DEDUPE.test(input.idempotencyKey)||
    typeof input.text!=='string'||!input.text.trim()||input.text.length>4096)
