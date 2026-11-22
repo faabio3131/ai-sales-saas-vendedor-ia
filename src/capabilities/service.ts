@@ -1,4 +1,5 @@
 import {ApplicationError} from '../infrastructure/errors';
+import {FirestoreCapabilityOperationalState,type CapabilityOperationalState} from './operationalState';
 import type {TenantContext} from '../types/contracts';
 import type {BusinessProfileRepository} from '../business/contracts';
 import type {BusinessProfileRevision,BusinessCapability} from '../business/model';
@@ -55,7 +56,8 @@ function legacyCompatible(id:CapabilityId,profile:BusinessProfileRevision){
 export class CapabilityRegistryService {
  constructor(private readonly store:CapabilityRepository,
   private readonly profiles:BusinessProfileRepository,
-  private readonly clock:()=>Date=()=>new Date()){}
+  private readonly clock:()=>Date=()=>new Date(),
+  private readonly active:CapabilityOperationalState=new FirestoreCapabilityOperationalState()){}
  catalog(ctx:TenantContext,unitId:string){
   reader(ctx,unitId);
   return {schemaVersion:1,manifests:listCapabilityManifests(),
@@ -120,6 +122,16 @@ export class CapabilityRegistryService {
   ]);
   if((previous?.version??0)!==expected)conflict('CAPABILITY_VERSION_CONFLICT');
   const selected=this.validateSelection(input,profile);
+  // Migration, rollback and deactivation must not hide an in-flight kitchen.
+  // Storage repeats this check inside its transaction to avoid stale reads.
+  const beforeSelection=previous?.enabledCapabilities??[];
+  const changed=!previous||previous.templateId!==selected.template.id||
+    previous.operationMode!==profile.capabilityRegistry.operationMode||
+    beforeSelection.length!==selected.enabled.length||
+    beforeSelection.some(x=>!selected.enabled.includes(x));
+  if(changed&&profile.capabilityRegistry.vertical==='FOOD_SERVICE'&&
+     await this.active.hasOpenOrders(s.tenantId,s.unitId))
+    conflict('CAPABILITY_ACTIVE_ORDERS_BLOCK_CHANGE');
   const next:CapabilityAssignment={
    schemaVersion:1,...s,version:expected+1,
    templateId:selected.template.id,templateVersion:1,vertical:selected.template.vertical,

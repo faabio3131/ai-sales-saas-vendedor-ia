@@ -3,6 +3,7 @@ import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {ApplicationError} from '../infrastructure/errors';
 import type {CapabilityRepository,CapabilityAssignment} from './model';
+import {blocksActiveFoodOperations} from './operationalState';
 
 const db=()=>getFirestore(ensureFirebaseAdminApp());
 function key(t:string,u:string){
@@ -49,6 +50,21 @@ export class FirestoreCapabilityRepository implements CapabilityRepository {
       profile.get('unitId')!==next.unitId||
       profile.get('latestVersion')!==next.profileVersion)
      failure('CAPABILITY_PROFILE_VERSION_CHANGED');
+   const previousVersion=pointer.exists?pointer.get('latestVersion'):0;
+   const priorDoc=previousVersion>0?
+    await tx.get(ref.collection('versions').doc(String(previousVersion))):null;
+   const previous=priorDoc?.data() as CapabilityAssignment|undefined;
+   if(previous&&(previous.tenantId!==next.tenantId||previous.unitId!==next.unitId))
+    failure('CAPABILITY_SCOPE_CONFLICT');
+   // A profile/assignment migration must serialize with the canonical
+   // order database; without this read an old KDS can disappear mid-service.
+   if(blocksActiveFoodOperations(previous,next)){
+    const open=await tx.get(db().collection('orders')
+     .where('tenantId','==',next.tenantId).where('unitId','==',next.unitId)
+     .where('status','==','CONFIRMED').limit(201));
+    if(open.size>200||open.docs.some(d=>d.get('productionState')!=='COMPLETED'))
+     failure('CAPABILITY_ACTIVE_ORDERS_BLOCK_CHANGE');
+   }
    const item=ref.collection('versions').doc(String(next.version));
    tx.create(item,next);
    tx.set(ref,{tenantId:next.tenantId,unitId:next.unitId,

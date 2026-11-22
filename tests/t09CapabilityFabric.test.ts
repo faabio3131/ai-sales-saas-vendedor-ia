@@ -71,9 +71,10 @@ function environment(){
   effective:async(t,u,_)=>mapping.get(k(t,u))??null,
   createRevision:async()=>{},
  };
- const store=new MemoryAssignments();
- const service=new CapabilityRegistryService(store,profiles,()=>new Date(NOW));
- return {service,store,profiles,mapping};
+ const store=new MemoryAssignments(),open=new Set<string>();
+ const active={hasOpenOrders:async(t:string,u:string)=>open.has(k(t,u))};
+ const service=new CapabilityRegistryService(store,profiles,()=>new Date(NOW),active);
+ return {service,store,profiles,mapping,open};
 }
 const prov=(expectedVersion:number,reason='Configuração inicial aprovada pela administração')=>({
  expectedVersion,reason,
@@ -224,7 +225,30 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
   await expect(f.service.resolve(ctx('tenant-food'),'kitchen','__proto__'))
    .rejects.toMatchObject({code:'CAPABILITY_UNKNOWN'});
  });
- it('concorrência de atualização CAS: apenas uma revisão 2, sem perda silenciosa de estado',async()=>{
+ it('migração food, rollback e desativação são bloqueados com pedidos ativos; outros setores seguem isolados',async()=>{
+  const f=environment(),t=ctx('tenant-food');
+  f.open.add(k('tenant-food','kitchen'));
+  await expect(f.service.provisionDefaults(t,'kitchen',prov(0)))
+   .rejects.toMatchObject({code:'CAPABILITY_ACTIVE_ORDERS_BLOCK_CHANGE'});
+  // Uma ordem de alimentação nunca impede um tenant de varejo independente.
+  await expect(f.service.provisionDefaults(ctx('tenant-retail'),'shop',prov(0)))
+   .resolves.toMatchObject({version:1,templateId:'RETAIL_STD'});
+  f.open.delete(k('tenant-food','kitchen'));
+  await f.service.provisionDefaults(t,'kitchen',prov(0));
+  await f.service.publish(t,'kitchen',install(1,'FOOD_SERVICE_STD',
+    ['CORE_KNOWLEDGE','FOOD_ORDERING','FOOD_PRODUCTION']));
+  f.open.add(k('tenant-food','kitchen'));
+  await expect(f.service.publish(t,'kitchen',install(2,'FOOD_SERVICE_STD',
+    ['CORE_KNOWLEDGE']))).rejects.toMatchObject({code:'CAPABILITY_ACTIVE_ORDERS_BLOCK_CHANGE'});
+  await expect(f.service.rollback(t,'kitchen',{expectedVersion:2,
+    restoreVersion:1,reason:'Rollback supervisionado com pedidos ainda abertos'}))
+   .rejects.toMatchObject({code:'CAPABILITY_ACTIVE_ORDERS_BLOCK_CHANGE'});
+  expect((await f.service.latest(t,'kitchen'))?.version).toBe(2);
+  f.open.clear();
+  expect((await f.service.rollback(t,'kitchen',{expectedVersion:2,
+    restoreVersion:1,reason:'Rollback supervisionado após encerrar pedidos'})).version).toBe(3);
+ });
+  it('concorrência de atualização CAS: apenas uma revisão 2, sem perda silenciosa de estado',async()=>{
   const f=environment();
   await f.service.provisionDefaults(ctx('tenant-food'),'kitchen',prov(0));
   const submissions=await Promise.allSettled(Array.from({length:20},(_,i)=>
