@@ -57,7 +57,8 @@ export class FirestoreWhatsAppInbox implements WhatsAppInbox{
   const ref=db().collection('whatsappInboundInbox').doc(whatsappMessageKey(conn,message));
   try{
    await ref.create({tenantId:conn.tenantId,unitId:conn.unitId,channel:'WHATSAPP',
-    phoneNumberId:conn.phoneNumberId,event:message,state:'RECEIVED',
+    phoneNumberId:conn.phoneNumberId,
+    event:Object.fromEntries(Object.entries(message).filter(([,value])=>value!==undefined)),state:'RECEIVED',
     receivedAt:new Date().toISOString()});
    return true;
   }catch(error){

@@ -79,7 +79,7 @@ export class MerchantPaymentConnectionsService {
     if(context.role!=='OWNER') throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_OWNER_REQUIRED',message:'Owner authorization required.'});
     if(!payload||typeof payload!=='object'||Array.isArray(payload)||
       Object.keys(payload).length!==1 || !('providerId' in payload) ||
-      typeof payload.providerId!=='string' || !providerDescriptor(payload.providerId)) {
+      typeof payload.providerId!=='string' || providerDescriptor(payload.providerId)?.status!=='ADAPTER_IMPLEMENTED') {
       throw new ApplicationError({category:'VALIDATION',code:'PAYMENT_PROVIDER_INVALID',message:'Invalid provider selection.'});
     }
     const tenantId=this.tenant(context);

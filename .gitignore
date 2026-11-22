@@ -35,3 +35,12 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Never commit per-customer banking, private keys or Meta app credentials
+secrets/
+credentials/
+*.p12
+*.pfx
+*.pem
+*.key
+*.secret.json
