@@ -220,3 +220,15 @@ live('T01 real Python HTTP S2S smoke with tenant and structured response',async(
     action:'CREATE_QUOTE',source:'DETERMINISTIC',requiresHumanApproval:true,
   }});
 });
+
+describe('T13 metering isolation',()=>{
+ it('bounds nonsettling metering and prevents accumulating abandoned writes',async()=>{
+  const provider:AIProviderInterface={id:'test-model',supports:()=>true,
+   generate:async()=>({ok:true,data:{provider:'test-model',model:'fixture',content:'ok'}}),healthCheck:vi.fn()};
+  const meter=vi.fn(()=>new Promise<void>(()=>{}));
+  const router=new ResilientAIRouter([provider],{meter:{record:meter},meterTimeoutMs:10,maxMeterInflight:1});
+  expect(await router.execute(req())).toMatchObject({ok:true});
+  expect(await router.execute(req())).toMatchObject({ok:true});
+  expect(meter).toHaveBeenCalledTimes(1);
+ });
+});

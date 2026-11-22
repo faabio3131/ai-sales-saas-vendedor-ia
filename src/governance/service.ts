@@ -141,6 +141,11 @@ export class GovernedAutonomyService{
    return reservation.receipt;
   }
   try{
+   // Revocation committed before dispatch blocks the operation. Once a side
+   // effect starts, revocation cannot undo it; reconciliation remains mandatory.
+   const current=await this.policy(ctx,unitId);
+   if(current.version!==policy.version||!current.allowedTools.includes(command.tool))
+    deny('AUTONOMY_POLICY_VERSION_CONFLICT','CONFLICT');
    const result=await this.dispatch(ctx,unitId,command,canonical,policy);
    return await this.store.finish(receipt,'COMPLETED',this.clock().toISOString(),result);
   }catch{

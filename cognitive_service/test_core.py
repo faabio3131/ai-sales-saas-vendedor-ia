@@ -8,7 +8,7 @@ import time
 import unittest
 
 from .core import CONTRACT, CognitiveValidationError, decide
-from .server import SEEN_NONCES, validate_signature
+from .server import SEEN_NONCES, validate_signature, BoundedCognitiveServer, CognitiveHandler
 
 SECRET = b"test-only-cognitive-secret-0123456789abcd"
 
@@ -79,6 +79,19 @@ class CognitiveServiceTests(unittest.TestCase):
         self.assertFalse(validate_signature(header, raw + b"!", SECRET))
         self.assertFalse(validate_signature(header, raw, b"wrong-password"))
         self.assertFalse(validate_signature(header.replace(ts, str(int(ts)-360)), raw, SECRET))
+
+    def test_http_worker_limit(self):
+        server = BoundedCognitiveServer(("127.0.0.1", 0), CognitiveHandler, max_workers=2)
+        try:
+            self.assertTrue(server.slots.acquire(blocking=False))
+            self.assertTrue(server.slots.acquire(blocking=False))
+            self.assertFalse(server.slots.acquire(blocking=False))
+            server.slots.release()
+            self.assertTrue(server.slots.acquire(blocking=False))
+            self.assertEqual(CognitiveHandler.timeout, 5)
+        finally:
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()

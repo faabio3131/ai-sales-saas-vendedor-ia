@@ -13,6 +13,7 @@ import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socket import timeout as SocketTimeout
 
 from .core import CognitiveValidationError, decide
 
@@ -20,6 +21,7 @@ MAX_BODY = 65536
 SIGNATURE = re.compile(r"^t=(\d{10}),nonce=([0-9a-f]{32}),v1=([0-9a-f]{64})$")
 REPLAY_LOCK = threading.Lock()
 SEEN_NONCES: dict[str, int] = {}
+MAX_NONCES = 100_000
 
 def validate_signature(header: str, raw: bytes, secret: bytes, now: int | None = None) -> bool:
     match = SIGNATURE.fullmatch(header)
@@ -37,12 +39,39 @@ def validate_signature(header: str, raw: bytes, secret: bytes, now: int | None =
         expired = [k for k, until in SEEN_NONCES.items() if until <= current]
         for k in expired:
             SEEN_NONCES.pop(k, None)
-        if nonce in SEEN_NONCES:
+        if nonce in SEEN_NONCES or len(SEEN_NONCES) >= MAX_NONCES:
             return False
         SEEN_NONCES[nonce] = current + 330
     return True
 
+class BoundedCognitiveServer(ThreadingHTTPServer):
+    """Bound active HTTP requests; private network remains mandatory."""
+    request_queue_size = 32
+    daemon_threads = True
+
+    def __init__(self, address, handler, max_workers=16):
+        self.slots = threading.BoundedSemaphore(max_workers)
+        super().__init__(address, handler)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+
 class CognitiveHandler(BaseHTTPRequestHandler):
+    timeout = 5
     secret: bytes = b""
 
     def log_message(self, format: str, *args: object) -> None:
@@ -76,7 +105,14 @@ class CognitiveHandler(BaseHTTPRequestHandler):
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
             self._send(415, {"error": "unsupported_media_type"})
             return
-        raw = self.rfile.read(int(length))
+        try:
+            raw = self.rfile.read(int(length))
+        except (SocketTimeout, OSError):
+            self.close_connection = True
+            return
+        if len(raw) != int(length):
+            self._send(400, {"error": "incomplete_body"})
+            return
         if not validate_signature(self.headers.get("X-AV-Signature", ""), raw, self.secret):
             self._send(401, {"error": "invalid_signature"})
             return
@@ -100,7 +136,7 @@ def run() -> None:
         raise RuntimeError("Non-loopback binding requires explicitly authorized private networking.")
     port = int(os.environ.get("COGNITIVE_SERVICE_PORT", "8185"))
     CognitiveHandler.secret = secret.encode("utf-8")
-    server = ThreadingHTTPServer((host, port), CognitiveHandler)
+    server = BoundedCognitiveServer((host, port), CognitiveHandler)
     server.serve_forever(poll_interval=0.2)
 
 if __name__ == "__main__":

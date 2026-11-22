@@ -57,6 +57,12 @@ export class FirestoreGovernanceRepository implements GovernanceRepository {
       deny('AUTONOMY_IDEMPOTENCY_CONFLICT','CONFLICT');
     return {receipt:prior,created:false};
    }
+   // The reservation is the authorization linearization point. Read the
+   // canonical policy in the same transaction as the receipt and grant.
+   const policy=(await tx.get(policies().doc(key(next.tenantId,next.unitId)))).data() as AutonomyPolicy|undefined;
+   if(!policy||policy.tenantId!==next.tenantId||policy.unitId!==next.unitId||
+      policy.version!==next.policyVersion||!policy.allowedTools.includes(next.tool))
+     deny('AUTONOMY_POLICY_VERSION_CONFLICT','CONFLICT');
    let grant:HumanApproval|undefined;
    if(approvalRef){
     grant=(await tx.get(approvalRef)).data() as HumanApproval|undefined;

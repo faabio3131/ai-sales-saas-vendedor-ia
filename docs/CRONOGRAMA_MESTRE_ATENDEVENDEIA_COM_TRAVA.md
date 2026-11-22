@@ -302,3 +302,16 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - **Limites explícitos:** cobertura apenas T03/T04 com unitId verificável; cotações legadas sem unitId não atribuídas; taxas PSP ausentes permanecem null; nenhum dado bancário real ou deploy Contabo/Cloud Run homologado; índices Firestore versionados, não aplicados externamente.
 - **Evidências:** `docs/T05_CLOSURE_CERTIFICATION.md`, `docs/ADR-006_T05_FINANCE_LEDGER_COGNITIVE_ADMIN.md` e `docs/T05_FINANCIAL_ADMIN_RUNBOOK.md`.
 - **T06 permanece BLOQUEADA** até autorização humana explícita pós-certificação T05.
+
+## 12. T13 — Hardening e certificação final (22/11/2026)
+Diretor autorizou a execução integral. Baseline T12: main 79dc72d9d7da801a00acc75e3a9b475d4a6d7f6d, PR #28, CI pós-merge #44982380264 SUCCESS (491 TS + 15 Python). Trava de promoção: T13 não é ENTREGUE até todos os achados aplicáveis serem resolvidos, testes de regressão e CI integral do HEAD aprovados, revisão e certificação pós-merge. Proibido ativar PSP/WhatsApp reais ou alterar infraestrutura sem gates operacionais; homologações externas não bloqueiam engenharia.
+| Etapa | Achados | Estado inicial |
+|---|---|---|
+| T13.1 Governança | AT-001 | Implementação candidata, CI pendente |
+| T13.2 Financeiro multissetorial | AT-002/003 | Pendente |
+| T13.3 Supply chain e runtime | AT-004 | Pendente |
+| T13.4 Resiliência cognitiva | AT-005/006/007 | Parcial: metering, concorrência HTTP; replay distribuído pendente |
+| T13.5 Fiscal | AT-008 | Pendente |
+| T13.6 Gates de qualidade | AT-009 | Pendente |
+| T13.7 Release | Merge, CI pós-merge e deploy | BLOQUEADO |
+A autorização de deploy anteriormente registrada não substitui a certificação do novo HEAD nem o aceite T08.5. Nenhum status externo é inferido.

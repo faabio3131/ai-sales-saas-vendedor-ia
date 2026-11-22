@@ -1,4 +1,7 @@
 import {describe,it,expect} from 'vitest';
+import {FirestoreGovernanceRepository} from '../src/governance/repository';
+import type {AutonomyPolicy,ToolReceipt} from '../src/governance/model';
+import {governanceReceiptKey} from '../src/governance/repository';
 import {createHash,randomUUID} from 'node:crypto';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../src/infrastructure/firebaseAdmin';
@@ -93,5 +96,22 @@ describe.skipIf(!enabled)('T12 isolated Firestore onboarding, inventory and mult
   await a.subs.upsert({...a.sub,status:'EXPIRED'});
   await expect(a.scheduling.availability(a.ctx,a.u,{serviceId:'service-a',professionalId:'pro-a',date:day})).rejects.toMatchObject({code:'SCHEDULE_CAPABILITY_REQUIRED'});
   expect((await a.scheduling.cancel(a.ctx,a.u,c.id,{expectedVersion:c.version,idempotencyKey:'cancel',reason:'Solicitação do cliente'})).status).toBe('CANCELLED');
+ },60000);
+});
+
+describe.skipIf(!enabled)('T13 production repository policy fencing',()=>{
+ it('rejects outdated reservation atomically and preserves a valid completed receipt',async()=>{
+  const t='t13_'+randomUUID().replace(/-/g,''),u='main',repo=new FirestoreGovernanceRepository(),now=new Date().toISOString();
+  const p:AutonomyPolicy={tenantId:t,unitId:u,version:1,mode:'AUTONOMOUS_GOVERNED',allowedTools:['ORDER_STATUS'],maxOrderMinor:0,maxPaymentMinor:0,updatedAt:now,updatedBy:'owner'};
+  await repo.publishPolicy(p,0);
+  const make=(k:string):ToolReceipt=>({id:governanceReceiptKey(t,u,k),tenantId:t,unitId:u,actorId:'owner',tool:'ORDER_STATUS',requestHash:'hash-'+k,idempotencyKey:k,policyVersion:1,status:'RESERVED',createdAt:now,updatedAt:now});
+  const committed=make('committed');
+  await repo.reserve(committed,undefined,0,now);
+  await repo.finish(committed,'COMPLETED',now,{ok:true});
+  await repo.publishPolicy({...p,version:2,allowedTools:[]},1);
+  const stale=make('stale');
+  await expect(repo.reserve(stale,undefined,0,now)).rejects.toMatchObject({code:'AUTONOMY_POLICY_VERSION_CONFLICT'});
+  expect(await repo.getReceipt(t,u,'stale')).toBeNull();
+  expect(await repo.reserve(committed,undefined,0,now)).toMatchObject({created:false,receipt:{status:'COMPLETED'}});
  },60000);
 });
