@@ -315,3 +315,10 @@ Diretor autorizou a execução integral. Baseline T12: main 79dc72d9d7da801a00ac
 | T13.6 Gates de qualidade | AT-009 | Pendente |
 | T13.7 Release | Merge, CI pós-merge e deploy | BLOQUEADO |
 A autorização de deploy anteriormente registrada não substitui a certificação do novo HEAD nem o aceite T08.5. Nenhum status externo é inferido.
+
+
+### T13 — Evidência parcial de hardening, sem certificação
+- Corrida de reserva no double de governança corrigida: critical section síncrona para preservar a semântica transacional e testar concorrência real.
+- Pagamentos legados, T04 e T12: as novas operações com o resolver canônico registram hash de vínculo de tenant, provedor, destinatário, referência de cofre e versão. Operações antigas sem vínculo ou com conexão rotacionada passam a exigir investigação humana, jamais PSP GET/refund contra outra conta. A criação com adaptadores mock não substitui homologação.
+- Handoff fiscal: conflito de idempotência detectado e criação transacional em Firestore. Nenhuma emissão fiscal real foi habilitada.
+- **Não entregue:** AT-002 cobertura de consolidação multissetorial, AT-004 supply chain, AT-005 replay distribuído, AT-008 integração fiscal total, AT-009 testes e release; os gates completos e a revisão independente permanecem obrigatórios. Nenhum merge ou deploy autorizado por esta evidência.

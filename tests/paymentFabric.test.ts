@@ -30,6 +30,20 @@ describe('Tenant-bound multi-PSP payment fabric',()=>{
    expect(JSON.stringify(overview)).not.toContain('secret/pizza/mp');
    expect((await resolver.forNewPayment('pizza')).id).toBe('MERCADOPAGO');
  });
+ it('pins the recorded provider and recipient/credential version without persisting a vault path',async()=>{
+   const selection=await resolver.forNewPaymentWithBinding('pizza','MERCADOPAGO');
+   expect(selection.bindingHash).toMatch(/^[a-f0-9]{64}$/);
+   const recorded={tenantId:'pizza',provider:'MERCADOPAGO',merchantBindingHash:selection.bindingHash} as never;
+   expect(await resolver.forRecordedPayment(recorded)).toBe(adapter);
+   await expect(resolver.forRecordedPayment({tenantId:'pizza',provider:'MERCADOPAGO'} as never))
+     .rejects.toMatchObject({code:'PAYMENT_HISTORICAL_BINDING_MISMATCH'});
+   const old=repo.connections[0];
+   try{
+    repo.connections[0]={...old,credentialRef:'secret/pizza/replaced'};
+    await expect(resolver.forRecordedPayment(recorded))
+      .rejects.toMatchObject({code:'PAYMENT_HISTORICAL_BINDING_MISMATCH'});
+   }finally{repo.connections[0]=old;}
+ });
  it('never switches a recorded payment to another provider',async()=>{
    await expect(resolver.forRecordedPayment({tenantId:'pizza',provider:'BANCO_INTER'} as never)).rejects.toMatchObject({code:'PAYMENT_CONNECTION_NOT_ACTIVE'});
  });

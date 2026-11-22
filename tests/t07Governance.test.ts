@@ -57,12 +57,14 @@ class Store implements GovernanceRepository {
     deny('AUTONOMY_IDEMPOTENCY_CONFLICT','CONFLICT');
    return {receipt:old,created:false};
   }
-  const policy=await this.getPolicy(r.tenantId,r.unitId);
+  // Keep the in-memory reservation critical section synchronous, like Firestore's
+  // transaction. Awaiting here allowed two concurrent calls to reserve one key.
+  const policy=this.policies.get(this.k(r.tenantId,r.unitId));
   if(!policy||policy.version!==r.policyVersion||!policy.allowedTools.includes(r.tool))
    deny('AUTONOMY_POLICY_VERSION_CONFLICT','CONFLICT');
   if(approvalId){
-   const a=await this.getApproval(r.tenantId,r.unitId,approvalId);
-   if(!a||a.status!=='APPROVED'||a.tool!==r.tool||a.policyVersion!==r.policyVersion||
+   const a=this.grants.get(approvalId);
+   if(!a||a.tenantId!==r.tenantId||a.unitId!==r.unitId||a.status!=='APPROVED'||a.tool!==r.tool||a.policyVersion!==r.policyVersion||
      a.requestHash!==r.requestHash||a.granteeUserId!==r.actorId||
      a.maxAmountMinor<amount||a.expiresAt<=stamp)deny('AUTONOMY_APPROVAL_SCOPE_DENIED');
    this.grants.set(a.id,{...a,status:'CONSUMED',consumedAt:stamp});

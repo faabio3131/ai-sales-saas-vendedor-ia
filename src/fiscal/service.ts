@@ -28,7 +28,18 @@ export class SalesFiscalHandoffService implements PaymentConfirmationObserver {
 
     const idempotencyKey = `vendedor-ia:payment:${payment.id}:sale:v1`;
     const existing = await this.handoffs.findByIdempotencyKey(payment.tenantId, idempotencyKey);
-    if (existing) return;
+    if (existing) {
+      if (existing.tenantId !== payment.tenantId ||
+          existing.paymentId !== payment.id || existing.quoteId !== payment.quoteId ||
+          existing.customerId !== payment.customerId ||
+          existing.amountMinor !== payment.amountMinor ||
+          existing.currency !== payment.currency ||
+          existing.paymentConfirmedAt !== payment.confirmedAt) {
+        throw new ApplicationError({category:'CONFLICT',code:'FISCAL_HANDOFF_IDEMPOTENCY_CONFLICT',
+          message:'Persisted fiscal event differs from the settled payment.'});
+      }
+      return;
+    }
 
     const quote = await this.quotes.findById(payment.tenantId, payment.quoteId);
     if (!quote) {

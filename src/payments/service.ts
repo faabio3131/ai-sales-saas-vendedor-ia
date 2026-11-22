@@ -90,8 +90,13 @@ export class PaymentService {
     } as const;
 
     let providerResult;
+    let merchantBindingHash:string|undefined;
     try {
-      const provider=this.providerResolver ? await this.providerResolver.forNewPayment(tenantId,input.providerId) : this.provider;
+      const selection=this.providerResolver?.forNewPaymentWithBinding
+        ? await this.providerResolver.forNewPaymentWithBinding(tenantId,input.providerId):undefined;
+      const provider=selection?.provider??(this.providerResolver
+        ? await this.providerResolver.forNewPayment(tenantId,input.providerId):this.provider);
+      merchantBindingHash=selection?.bindingHash;
       // Claim before non-atomic external I/O: unknown outcomes must be reconciled, not retried blindly.
       if(this.creationIntents)await this.creationIntents.reserve({
         tenantId,paymentId,quoteId:quote.id,method:input.method,providerId:provider.id,
@@ -113,6 +118,7 @@ export class PaymentService {
       quoteId: quote.id,
       provider: providerResult.provider,
       providerPaymentId: providerResult.providerPaymentId,
+      ...(merchantBindingHash?{merchantBindingHash}:{}),
       method: input.method,
       status: providerResult.status,
       amountMinor: quote.totalMinor,
