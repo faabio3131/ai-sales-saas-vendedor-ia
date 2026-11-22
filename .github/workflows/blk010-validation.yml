@@ -49,7 +49,7 @@ jobs:
       - name: T09 multi-sector capability registry, migration and rollback acceptance
         env:
           NODE_ENV: test
-        run: npm test -- tests/t09CapabilityFabric.test.ts tests/t09BusinessProfileIsolation.test.ts
+        run: npm test -- tests/t09CapabilityFabric.test.ts tests/t09BusinessProfileIsolation.test.ts tests/t09CapabilityHttpGuard.test.ts
       - name: Runtime security boundaries
         env:
           NODE_ENV: production

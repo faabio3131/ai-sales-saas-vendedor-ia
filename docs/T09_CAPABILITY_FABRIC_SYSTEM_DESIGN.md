@@ -52,3 +52,8 @@ O núcleo atende empresas de diferentes verticais com uma única camada de autor
 5. Aprovação externa e ativação das aplicações são gates independentes. T09 não substitui pagamentos reais, homologação da proprietária, T08.5 nem as tarefas T10–T12.
 
 **Próxima tarefa:** T10 — Scheduling Engine horizontal, somente após CI cumulativa pós-merge T09. A T08.5 real segue NO_GO e não deve bloquear a engenharia.
+## 5. Enforcement funcional T09 no runtime
+
+A configuração efetivamente governa o acesso operacional. O middleware `src/capabilities/httpGuard.ts` foi adicionado aos roteadores reais de `/orders` (FOOD_ORDERING), `/order-payments` (FOOD_ORDERING), `/fulfillment` (FOOD_PRODUCTION) e `/finance` (FOOD_FINANCE), sempre depois de autenticação e membership de tenant. Ausência de assignment, configuração desabilitada ou unidade errada falham fechadas, sem execução do domínio. As ferramentas de autonomia governada `ORDER_DRAFT`, `ORDER_CONFIRM`, `PAYMENT_CREATE` e `PRODUCTION_RELEASE` também verificam capabilities na origem do runtime, evitando contorno pelo gateway de agentes. Reconciliadores assíncronos de pagamentos existentes continuam autorizados a reconciliar operações previamente persistidas; a segurança financeira não é interrompida por mudanças de seleção.
+
+`tests/t09CapabilityHttpGuard.test.ts` verifica o bloqueio de pedidos sem provisionamento, liberação após seleção da capability, isolamento de tenant/unidade, impedimento de paths maliciosos, guardas de produção/financeiro e não exibição de KDS sem configuração. Nenhum teste utiliza contas ou dados reais.
