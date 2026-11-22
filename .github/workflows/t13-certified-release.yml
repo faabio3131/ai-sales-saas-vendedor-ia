@@ -1,0 +1,109 @@
+name: T13 Signed OCI Release — Approval Gated
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact post-merge main commit SHA, matching successful CI
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  packages: write
+  id-token: write
+  attestations: write
+concurrency:
+  group: t13-signed-oci-release
+  cancel-in-progress: false
+jobs:
+  seal:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: t13-release-signing
+    steps:
+      - name: Checkout exact main commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify independent review, protected environment, and post-merge CI
+        env:
+          GITHUB_TOKEN: "${{ github.token }}"
+          T13_EXPECTED_SHA: "${{ inputs.expected_sha }}"
+        run: |
+          node scripts/t13ReleaseGate.mjs --verify
+      - name: Verify deployed client-side Firestore rules are the reviewed candidate
+        env:
+          FIREBASE_RULES_PROJECT_ID: "${{ vars.FIREBASE_RULES_PROJECT_ID }}"
+          FIREBASE_RULES_ACCESS_TOKEN: "${{ secrets.FIREBASE_RULES_ACCESS_TOKEN }}"
+        run: node scripts/t13FirestoreRulesGate.mjs --verify-active
+      - name: Reproduce locked dependencies and audit
+        run: |
+          npm ci --no-audit --no-fund
+          npm audit --audit-level=high
+          npm sbom --sbom-format=cyclonedx > t13-sbom.cdx.json
+          npm run typecheck
+          npm run security:static
+          python3 scripts/t13PythonSecurityGate.py
+      - name: Build image and publish exact SHA to GHCR
+        id: push
+        env:
+          GH_TOKEN: "${{ github.token }}"
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          TAG="$IMAGE:t13-$GITHUB_SHA"
+          docker build --pull -t "$TAG" .
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$TAG"
+          DIGEST=$(docker image inspect --format='{{index .RepoDigests 0}}' "$TAG" | awk -F '@' '{print $2}')
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Install verified pinned Cosign
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22
+        with:
+          cosign-release: v3.1.4
+      - name: Sign OCI digest with GitHub OIDC and verify certificate identity
+        env:
+          IMAGE_REF: "${{ steps.push.outputs.image_ref }}"
+        run: |
+          set -euo pipefail
+          cosign sign --yes "$IMAGE_REF"
+          cosign verify --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/t13-certified-release.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF"
+      - name: Attest SLSA build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-name: "${{ steps.push.outputs.image }}"
+          subject-digest: "${{ steps.push.outputs.digest }}"
+          push-to-registry: true
+      - name: Attest CycloneDX SBOM to signed image digest
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34
+        with:
+          subject-name: "${{ steps.push.outputs.image }}"
+          subject-digest: "${{ steps.push.outputs.digest }}"
+          sbom-path: t13-sbom.cdx.json
+          push-to-registry: true
+      - name: Verify provenance and produce sealed-not-deployed manifest
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          IMAGE_REF: "${{ steps.push.outputs.image_ref }}"
+          IMAGE_DIGEST: "${{ steps.push.outputs.digest }}"
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://$IMAGE_REF" --repo "$GITHUB_REPOSITORY"
+          node scripts/t13SealedReleaseManifest.mjs
+      - name: Upload immutable release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: t13-oci-sealed-release
+          path: |
+            t13-sealed-release.json
+            t13-sbom.cdx.json
+          retention-days: 90
