@@ -206,6 +206,27 @@ export class SchedulingService{
    return {expired,ready,more:expired+ready===100};
   });
  }
+ /** Internal worker entrypoint; no HTTP client can supply the system identity.
+  * Due query covers every future booking, including long-horizon expired holds.
+  */
+ async maintainDue(scope:ScheduleScope){
+  const ctx:TenantContext={tenantId:scope.tenantId,userId:'SCHEDULING_WORKER',role:'OWNER',requestId:'scheduling-maintenance'};
+  this.scope(ctx,scope.unitId,true);
+  return this.store.transact(scope,async tx=>{
+   const now=this.now(),records=await tx.due(now);
+   let expired=0,ready=0,missed=0;
+   for(const b of records){
+    if(b.status==='HELD'&&b.holdUntilMs<=now){
+     tx.saveBooking(this.terminate(b,ctx,now,'EXPIRED','Prazo de reserva expirado'));expired++;
+    }else if(b.status==='CONFIRMED'&&b.reminder?.state==='PENDING'&&b.reminder.dueMs<=now){
+     const state=b.startMs<=now?'CANCELLED':'READY';
+     tx.saveBooking(this.next(b,ctx,now,{reminder:{...b.reminder,state}}));
+     if(state==='READY')ready++;else missed++;
+    }
+   }
+   return {expired,ready,missed,more:records.length===100};
+  });
+ }
  async acknowledgeReminder(ctx:TenantContext,u:string,bookingId:string,raw:unknown){
   const a=object(raw,['expectedVersion','idempotencyKey','reminderKey']),key=id(a.idempotencyKey),
    v=integer(a.expectedVersion,1,100000),reminderKey=id(a.reminderKey);

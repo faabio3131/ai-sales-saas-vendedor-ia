@@ -105,6 +105,7 @@ export class BookingDepositService{
    const deposit:Booking['deposit']={...prior,providerPaymentId:r.providerPaymentId,status,
     ...(status==='PENDING'&&pix?{pixCode:pix}:{}),
     ...(fromGet?{verifiedAt:new Date(now).toISOString()}:{} )};
+   if(JSON.stringify(deposit)===JSON.stringify(b.deposit))return b;
    const next=this.update(b,ctx,deposit);tx.saveBooking(next);return next;
   });
  }

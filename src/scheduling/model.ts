@@ -25,6 +25,7 @@ export interface Booking extends ScheduleScope {
  id:string;version:number;configVersion:number;customerId:string;serviceId:string;
  professionalId:string;resourceIds:string[];startMs:number;endMs:number;timezone:string;
  status:BookingStatus;holdUntilMs:number;deposit:BookingDeposit;reminder?:BookingReminder;
+ maintenanceDueMs?:number;
  createdAt:string;updatedAt:string;createdBy:string;transitionBy:string;cancelReason?:string;
 }
 export interface Occupancy extends ScheduleScope {
@@ -40,6 +41,7 @@ export interface ScheduleTransaction {
  window(startMs:number,endMs:number):Promise<Occupancy[]>;
  records(startMs:number,endMs:number):Promise<Booking[]>;
  future(nowMs:number):Promise<Booking[]>;
+ due(nowMs:number):Promise<Booking[]>;
  receipt(key:string):Promise<RequestReceipt|null>;
  saveConfig(config:ScheduleConfig):void;
  saveBooking(booking:Booking):void;

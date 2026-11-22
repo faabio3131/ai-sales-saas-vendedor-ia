@@ -79,6 +79,11 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
      return bounded(snap.docs.map(d=>{const x=d.data() as Booking;checkRow(x);
        if(x.unitId!==scope.unitId)return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');return x;}));
     },
+    due:async(now)=>{
+     const snap=await trx.get(bookings.where('maintenanceDueMs','<=',now).orderBy('maintenanceDueMs').limit(100));
+     return snap.docs.map(d=>{const x=d.data() as Booking;checkRow(x);
+       if(x.unitId!==scope.unitId)return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');return x;});
+    },
     receipt:async(k)=>{
      const snap=await trx.get(receipts.doc(hash(k)));
      if(!snap.exists)return null;
@@ -100,8 +105,13 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
     for(const b of staged.values()){
      checkRow(b);
      if(b.unitId!==scope.unitId)return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');
-     trx.set(bookings.doc(b.id),b);
-     trx.create(bookings.doc(b.id).collection('versions').doc(String(b.version)),b);
+     // Persist only one next due timestamp, enabling a bounded indexed worker.
+     const {maintenanceDueMs:_old,...rest}=b;
+     const due=b.status==='HELD'?b.holdUntilMs:
+      b.status==='CONFIRMED'&&b.reminder?.state==='PENDING'?b.reminder.dueMs:undefined;
+     const persisted:Booking=due===undefined?rest:{...rest,maintenanceDueMs:due};
+     trx.set(bookings.doc(b.id),persisted);
+     trx.create(bookings.doc(b.id).collection('versions').doc(String(b.version)),persisted);
      const lock=asOccupancy(b);
      if(lock)trx.set(occupancy.doc(b.id),lock);else trx.delete(occupancy.doc(b.id));
     }
