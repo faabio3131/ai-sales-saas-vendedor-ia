@@ -178,7 +178,10 @@ export class PaymentWebhookProcessor {
    const leaseToken=typeof claim==='string'?claim:undefined;
    try{
     const status=await this.reconcileVerified(delivery);
-    await recovery.finish(id,Date.now(),true,'PSP_GET_VERIFIED',leaseToken);
+    const finished=await recovery.finish(id,Date.now(),true,'PSP_GET_VERIFIED',leaseToken);
+    if(finished===false)
+     throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_LEASE_LOST',
+      message:'Lease changed while verifying provider status.'});
     statuses.push(status);
    }catch(error){
     await recovery.finish(id,Date.now(),false,'PSP_RECONCILIATION_FAILED',leaseToken);

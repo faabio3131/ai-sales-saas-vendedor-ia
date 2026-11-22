@@ -13,7 +13,7 @@ export interface VerifiedWebhookRecoveryRepository {
  enqueue(event:VerifiedWebhookKey,now:number):Promise<void>;
  due(limit:number,now:number):Promise<VerifiedWebhookDelivery[]>;
  claim(id:string,now:number):Promise<boolean|string>;
- finish(id:string,now:number,success:boolean,reason:string,leaseToken?:string):Promise<void>;
+ finish(id:string,now:number,success:boolean,reason:string,leaseToken?:string):Promise<boolean|void>;
  state?(id:string):Promise<VerifiedWebhookDelivery['state']|null>;
 }
 export function verifiedWebhookDeliveryId(e:VerifiedWebhookKey):string{
@@ -54,13 +54,13 @@ export class FirestoreVerifiedWebhookRecoveryRepository implements VerifiedWebho
    return leaseToken;
   });
  }
- async finish(id:string,now:number,success:boolean,reason:string,leaseToken?:string):Promise<void>{
+ async finish(id:string,now:number,success:boolean,reason:string,leaseToken?:string):Promise<boolean>{
   const ref=table().doc(id);
-  await getFirestore(ensureFirebaseAdminApp()).runTransaction(async tx=>{
+  return getFirestore(ensureFirebaseAdminApp()).runTransaction(async tx=>{
    const old=(await tx.get(ref)).data() as VerifiedWebhookDelivery|undefined;
    // A timed-out worker must never finalize a newer worker's lease.
    if(!old||old.id!==id||old.state!=='PENDING'||!leaseToken||
-     old.leaseToken!==leaseToken)return;
+     old.leaseToken!==leaseToken)return false;
    const attempts=old.attempts+1,dlq=!success&&attempts>=8;
    const next:VerifiedWebhookDelivery={...old,attempts,leaseUntil:0,leaseToken:'',updatedAt:now,
     state:success?'COMPLETED':dlq?'DLQ':'PENDING',
@@ -71,6 +71,7 @@ export class FirestoreVerifiedWebhookRecoveryRepository implements VerifiedWebho
    if(dlq)tx.set(getFirestore(ensureFirebaseAdminApp()).collection('verifiedWebhookDeliveryDlq').doc(id),{
     ...evidenceOnly(next),reasonCode:next.lastErrorCode,requiresHumanReview:true,
    });
+   return true;
   });
  }
 }
@@ -95,7 +96,8 @@ export class VerifiedWebhookRecoveryWorker {
    try{
     const verified=await this.refresh(row);
     if(!verified)throw Error('Missing verified status');
-    await this.store.finish(row.id,this.now(),true,'PSP_GET_VERIFIED',leaseToken);
+    const finished=await this.store.finish(row.id,this.now(),true,'PSP_GET_VERIFIED',leaseToken);
+    if(finished===false){summary.failed++;continue;}
     summary.reconciled++;
    }catch{
     await this.store.finish(row.id,this.now(),false,'PSP_RECONCILIATION_FAILED',leaseToken);
