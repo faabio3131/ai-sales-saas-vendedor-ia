@@ -183,7 +183,8 @@ describe('T08.2 — official WhatsApp account, verification, inbound and deliver
    settle:async record=>{records.set(record.idempotencyKey,record);},
   };
   const sender=vi.fn(async()=> 'wamid.sent.001');
-  const delivery=new WhatsAppDeliveryService(store,{load:async()=>secret},outbox,{send:sender});
+  const policy={hasRecentVerifiedInbound:vi.fn(async()=>true)};
+  const delivery=new WhatsAppDeliveryService(store,{load:async()=>secret},outbox,{send:sender},policy);
   const input={tenantId:tenant,unitId:unit,recipient:'5511999887766',text:'Pedido confirmado',
    idempotencyKey:'message-first-0001',authorizedCustomerServiceWindow:true};
   await expect(delivery.send({...input,authorizedCustomerServiceWindow:false}))
@@ -191,9 +192,14 @@ describe('T08.2 — official WhatsApp account, verification, inbound and deliver
   expect(await delivery.send(input)).toEqual({externalMessageId:'wamid.sent.001',duplicate:false});
   expect(await delivery.send(input)).toEqual({externalMessageId:'wamid.sent.001',duplicate:true});
   expect(sender).toHaveBeenCalledTimes(1);
+  const cold=new WhatsAppDeliveryService(store,{load:async()=>secret},outbox,{send:sender},
+   {hasRecentVerifiedInbound:async()=>false});
+  await expect(cold.send({...input,idempotencyKey:'no-window-0003'}))
+   .rejects.toMatchObject({code:'WHATSAPP_CUSTOMER_CONSENT_REQUIRED'});
+  expect(sender).toHaveBeenCalledTimes(1);
   await expect(delivery.send({...input,text:'Outro texto'})).rejects.toBeTruthy();
   const failed=new WhatsAppDeliveryService(store,{load:async()=>secret},outbox,
-   {send:async()=>{throw Error('timeout token secret');}});
+   {send:async()=>{throw Error('timeout token secret');}},policy);
   await expect(failed.send({...input,idempotencyKey:'message-second-0002'}))
    .rejects.toMatchObject({code:'WHATSAPP_DELIVERY_UNCERTAIN'});
   await expect(failed.send({...input,idempotencyKey:'message-second-0002'}))
