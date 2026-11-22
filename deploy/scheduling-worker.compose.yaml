@@ -1,0 +1,38 @@
+# Run only with the certified image and an authorized Firestore service account.
+# Internal reminders and expiry only: no contact messaging or charge.
+services:
+  scheduling-worker:
+    image: "${ATENDEVENDE_IMAGE:?Set certified application image digest}"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    environment:
+      NODE_ENV: production
+      FIREBASE_PROJECT_ID: "${FIREBASE_PROJECT_ID:?Set project ID}"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase/service-account.json
+    volumes:
+      - "${SCHEDULING_FIREBASE_CREDENTIAL_FILE:?Mount service account}:/run/secrets/firebase/service-account.json:ro"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'test -s /tmp/scheduling.last-success && last=$(cat /tmp/scheduling.last-success) && now=$(date +%s) && test "$((now - last))" -ge 0 && test "$((now - last))" -le 600'
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        while true; do
+          if node dist/scheduling-worker.cjs; then
+            date +%s > /tmp/scheduling.last-success
+          else
+            echo 'scheduling_cycle_failed' >&2
+          fi
+          sleep 60
+        done

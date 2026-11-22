@@ -120,7 +120,8 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
    version:1});
   expect(food.pendingCapabilities).toHaveLength(0);
   expect(retail.enabledCapabilities).toEqual(['CORE_CUSTOMERS','CORE_KNOWLEDGE']);
-  expect(beauty.pendingCapabilities).toContain('SCHEDULING');
+  expect(beauty.pendingCapabilities).toContain('BEAUTY_BOOKING');
+  expect(beauty.pendingCapabilities).not.toContain('SCHEDULING');
   const f2=await f.service.publish(ctx('tenant-food'),'kitchen',install(1,
    'FOOD_SERVICE_STD',['CORE_KNOWLEDGE','FOOD_ORDERING','FOOD_PRODUCTION','FOOD_DELIVERY']));
   expect(f2.enabledCapabilities).toEqual(['CORE_KNOWLEDGE','FOOD_DELIVERY','FOOD_ORDERING','FOOD_PRODUCTION']);
@@ -129,7 +130,7 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
   expect((await f.service.resolve(ctx('tenant-retail'),'shop','FOOD_DELIVERY'))).toMatchObject({
    authorized:false,status:'NOT_ENABLED'});
   expect((await f.service.resolve(ctx('tenant-beauty'),'salon','SCHEDULING'))).toMatchObject({
-   authorized:false,status:'FUTURE_IMPLEMENTATION'});
+   authorized:false,status:'NOT_ENABLED'});
   expect((await f.service.latest(ctx('tenant-retail'),'shop'))?.version).toBe(1);
   expect((await f.service.latest(ctx('tenant-beauty'),'salon'))?.version).toBe(1);
   expect((await f.service.latest(ctx('tenant-food'),'shop'))).toBeNull();
@@ -151,13 +152,13 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
   expect((await f.service.resolve(ctx('tenant-health'),'clinic','HEALTH_ADMIN')).status)
    .toBe('FUTURE_IMPLEMENTATION');
  });
- it('não concede SCHEDULING, BEAUTY_BOOKING, HEALTH_ADMIN ou checkout de varejo antes das tarefas futuras',async()=>{
+ it('não concede SERVICE_BOOKING, BEAUTY_BOOKING, HEALTH_ADMIN ou checkout de varejo antes das tarefas futuras',async()=>{
   const f=environment();
   for(const [tenant,unit,template,notReady] of [
    ['tenant-retail','shop','RETAIL_STD','RETAIL_CHECKOUT'],
    ['tenant-beauty','salon','BEAUTY_STD','BEAUTY_BOOKING'],
    ['tenant-health','clinic','HEALTH_ADMIN_STD','HEALTH_ADMIN'],
-   ['tenant-services','office','SERVICES_STD','SCHEDULING']
+   ['tenant-services','office','SERVICES_STD','SERVICE_BOOKING']
   ] as const){
    await expect(f.service.publish(ctx(tenant),unit,install(0,template,
     ['CORE_KNOWLEDGE',notReady]))).rejects.toMatchObject({

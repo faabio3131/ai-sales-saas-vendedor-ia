@@ -107,7 +107,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | ID | Gate / Trava | Entrega Funcional Consolidada | Prazo Est. | Status | Data Entrega | Evidência (PR / SHA / CI Run) |
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
 | **T09** | `✅ T08.4 PR #24 + CI #44972851608 SUCCESS` | Capability Fabric multissetorial, 6 templates versionados, ativação e rollback por tenant/unidade, proteção de rotas | 5d | `[x] IMPLEMENTAÇÃO E TESTES T09 / [ ] GATE FINAL CI, MERGE E PÓS-MERGE` | `21/11/2026 (engenharia)` | `PR #25 / código bd2e1d3e49d84efde02a4bf6360f9fd3c3083ec6 / CI #44975161245 em execução ao registrar; evidência final na PR` |
-| **T10** | `🔒 CI pós-merge T09` | Scheduling Engine horizontal — agenda, disponibilidade, reserva atômica, reagendamento e lembretes | 8d | `[ ] BLOQUEADO ATÉ CERTIFICAÇÃO INTEGRAL T09` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T10** | `✅ T09 PR #25 + CI #44975729301 SUCCESS` | Scheduling Engine horizontal, recursos/profissionais, reserva atômica, agenda, turnos, feriados, sinal opcional e lembretes internos | 8d | `[x] IMPLEMENTAÇÃO / [ ] CERTIFICAÇÃO INTEGRAL E PÓS-MERGE` | `21/11/2026 (engenharia)` | `PR #26 / CI do HEAD e pós-merge exigidas; resultado final na PR` |
 | **T11** | `🔒 Finalize T10` | Service Booking Packs — salão, barbearia e clínica de estética (escopo administrativo) | 7d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 | **T12** | `🔒 Finalize T11` | Templates de comércio/serviços, onboarding por capabilities e certificação multissetorial | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
 
@@ -234,11 +234,14 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - **Evidências de código:** `tests/t09CapabilityFabric.test.ts`, `tests/t09BusinessProfileIsolation.test.ts`, `tests/t09CapabilityHttpGuard.test.ts` e documentação `docs/T09_CAPABILITY_FABRIC_SYSTEM_DESIGN.md`; PR #25 e CI cumulativa registrada na PR. O encerramento formal exige CI do HEAD final e CI da `main` pós-merge verde.
 - **Escopo externo:** nenhum produto futuro habilitado; SCHEDULING e packs retail/beauty/health permanecem PLANNED e travados em T10–T12. Homologação da Pizzaria Americana e go-live T08.5 continuam NO_GO, sem impedir a próxima engenharia.
 
-### T10 — Scheduling Engine horizontal (`🔒 Travado em T09`)
-- Agenda, serviços com duração, profissionais, unidades, recursos, turnos, disponibilidade, reserva atômica, confirmação, reagendamento/cancelamento, lembrete e integração opcional a pagamento de sinal.
-- **DoD:** teste de corrida de horários, timezones, feriados, recursos bloqueados, cancelamento/replay e privacidade. Nenhuma confirmação de horário sem reserva persistida.
+### T10 — Scheduling Engine horizontal (`✅ IMPLEMENTAÇÃO — PR #26; GATE FINAL E PÓS-MERGE EXIGIDOS`)
+- **Escopo:** agenda horizontal versionada por tenant/unidade, serviços com duração e sinal opcional, profissionais, recursos, turnos, feriados e bloqueios, disponibilidade IANA/DST; reserva persistida temporária, confirmação segregada, reagendamento/cancelamento atômicos, expiração, conclusão e lembretes internos persistidos.
+- **Governança:** disponibilidade sem PII, autorização de capabilities T09, vinculação a cliente ativo do tenant, RBAC e CAS; exclusão mútua de profissional e recurso entre unidades do mesmo tenant por transações Firestore, histórico imutável e recibos de idempotência. A agenda nativa não confirma reservas em modo integrado.
+- **Sinal:** contrato Pix opcional com adaptadores verificados por tenant, claim durável antes do PSP, reconciliação por GET com valor e referência exatos, falha incerta para revisão, sem cobrança repetida. Chave de produção dedicada além dos gates T08.3; nenhum PSP real foi operado.
+- **DoD:** `tests/t10SchedulingEngine.test.ts`, `tests/t10FirestoreEmulator.test.ts` (emulador Firestore isolado), configuração Docker do worker, CI cumulativa, documentação `docs/T10_SCHEDULING_ENGINE_SYSTEM_DESIGN.md` e certificação final PR #26. Nenhuma confirmação sem reserva persistida.
+- **Limite:** lembretes internos prontos sem envio externo; T11 implementará os fluxos especializados/entrega de comunicação, política de sinal e faltas. Nenhuma homologação externa, go-live ou integração de agenda de terceiros foi realizada.
 
-### T11 — Salão/barbearia/estética (`🔒 Travado em T10`)
+### T11 — Salão/barbearia/estética (`🔒 Até CI pós-merge T10`)
 - Perfis de serviço/profissional, seleção de horários, comunicação de confirmação, lembretes, política de sinal, reagendamento e faltas; atuação administrativa em estética, nunca triagem médica autônoma.
 - **DoD:** testes E2E dos serviços em 2 segmentos, conflitos de agenda, inadimplência do sinal, sem vazamento entre estabelecimentos, provas de estado e conformidade de canal.
 

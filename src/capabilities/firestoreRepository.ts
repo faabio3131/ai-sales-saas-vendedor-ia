@@ -6,8 +6,8 @@ import type {CapabilityRepository,CapabilityAssignment} from './model';
 import {blocksActiveFoodOperations} from './operationalState';
 
 const db=()=>getFirestore(ensureFirebaseAdminApp());
-function key(t:string,u:string){
- return createHash('sha256').update(JSON.stringify([t,u])).digest('hex');
+function key(...pieces:string[]){
+ return createHash('sha256').update(JSON.stringify(pieces)).digest('hex');
 }
 function failure(code:string):never{
  throw new ApplicationError({category:'CONFLICT',code,message:'Capability assignment changed or has invalid scope.'});
@@ -64,6 +64,18 @@ export class FirestoreCapabilityRepository implements CapabilityRepository {
      .where('status','==','CONFIRMED').limit(201));
     if(open.size>200||open.docs.some(d=>d.get('productionState')!=='COMPLETED'))
      failure('CAPABILITY_ACTIVE_ORDERS_BLOCK_CHANGE');
+   }
+   if(previous?.enabledCapabilities.includes('SCHEDULING')&&
+     (!next.enabledCapabilities.includes('SCHEDULING')||
+      !next.enabledCapabilities.includes('SERVICE_CATALOG')||previous.vertical!==next.vertical||
+      previous.operationMode!==next.operationMode)){
+    const now=Date.now();
+    await tx.get(db().collection('schedulingTenants').doc(key(next.tenantId)));
+    const pending=await tx.get(db().collection('schedulingUnits').doc(key(next.tenantId,next.unitId))
+      .collection('bookings').where('endMs','>',now).limit(1001));
+    if(pending.size>1000||pending.docs.some(d=>d.get('status')==='CONFIRMED'||
+     d.get('status')==='HELD'&&Number(d.get('holdUntilMs'))>now))
+      failure('CAPABILITY_ACTIVE_BOOKINGS_BLOCK_CHANGE');
    }
    const item=ref.collection('versions').doc(String(next.version));
    tx.create(item,next);
