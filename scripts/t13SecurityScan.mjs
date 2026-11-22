@@ -54,7 +54,7 @@ if(process.argv.includes('--self-test')){
  process.exit(0);
 }
 let problems=[];
-for(const file of [...files(path.join(ROOT,'src')),...files(path.join(ROOT,'scripts')),...files(path.join(ROOT,'server.ts'))]){
+for(const file of [...files(path.join(ROOT,'src')),...files(path.join(ROOT,'scripts')),path.join(ROOT,'server.ts')]){
  if(path.basename(file)==='t13SecurityScan.mjs')continue;
  problems.push(...scanSource(file,fs.readFileSync(file,'utf8')));
 }
