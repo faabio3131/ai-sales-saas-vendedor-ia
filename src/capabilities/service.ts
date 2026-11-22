@@ -207,6 +207,8 @@ export class CapabilityRegistryService {
    return {...base,...details,authorized:false,status:'NOT_ENABLED' as const};
   if(!legacyCompatible(capability,profile))
    return {...base,...details,authorized:false,status:'TEMPLATE_MISMATCH' as const};
+  if(this.store.planEligible&&!await this.store.planEligible(s.tenantId,s.unitId,this.clock().valueOf()))
+   return {...base,...details,authorized:false,status:'PLAN_INACTIVE' as const};
   return {...base,...details,authorized:true,status:'ALLOWED_INTERNAL' as const};
  }
  async requireInternal(ctx:TenantContext,unitId:string,capability:CapabilityId){

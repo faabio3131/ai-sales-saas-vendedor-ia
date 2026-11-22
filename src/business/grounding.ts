@@ -5,6 +5,8 @@ import type { CatalogItem } from '../catalog/model';
 import type { UnitCatalogRepository,UnitCatalogItem } from '../commerce/model';
 import type { TenantContext } from '../types/contracts';
 import type { BusinessProfileRepository } from './contracts';
+import type { RetailCatalog } from '../retail/model';
+import type { ScheduleConfig } from '../scheduling/model';
 import type { ApprovedBusinessFact,GroundedBusinessAnswer } from './model';
 import { normalizedQuestion,requireBusinessScope } from './service';
 
@@ -24,6 +26,7 @@ export class BusinessGroundingService {
     private readonly profiles:BusinessProfileRepository,
     private readonly catalog:CatalogRepository,
     private readonly unitCatalog?:UnitCatalogRepository,
+    private readonly sectors?:{retail(ctx:TenantContext,u:string):Promise<RetailCatalog|null>;services(ctx:TenantContext,u:string):Promise<ScheduleConfig|null>},
   ){}
   private async scope(ctx:TenantContext,unitId:string,at:string){
     const scope=requireBusinessScope(ctx,unitId);
@@ -37,10 +40,24 @@ export class BusinessGroundingService {
       this.unitCatalog?Promise.resolve([] as CatalogItem[]):this.catalog.listByTenant(scope.tenantId),
       this.unitCatalog?this.unitCatalog.effective(scope.tenantId,scope.unitId,asOf):Promise.resolve(null),
     ]);
-    const unitItems=revision?.tenantId===scope.tenantId&&revision.unitId===scope.unitId?
+    const unitItems=(!this.sectors||profile?.capabilityRegistry.vertical==='FOOD_SERVICE')&&revision?.tenantId===scope.tenantId&&revision.unitId===scope.unitId?
       revision.items.filter(i=>i.active):[];
     return {...scope,profile,unitItems,unitVersion:revision?.version,
       products:legacyProducts.filter(p=>p.tenantId===scope.tenantId&&p.active)};
+  }
+  private async sectorPrices(ctx:TenantContext,u:string,vertical:string){
+    const out:{name:string;priceMinor:number;evidence:string}[]=[];
+    if(!this.sectors)return out;
+    try{
+      if(vertical==='RETAIL'){
+        const c=await this.sectors.retail(ctx,u);
+        if(c?.tenantId===ctx.tenantId&&c.unitId===u)for(const i of c.items)if(i.active)out.push({name:i.name,priceMinor:i.priceMinor,evidence:'retail:'+u+':'+c.version+':'+i.id});
+      }else if(['SERVICES','BEAUTY','HEALTH_SERVICE'].includes(vertical)){
+        const c=await this.sectors.services(ctx,u);
+        if(c?.tenantId===ctx.tenantId&&c.unitId===u)for(const i of c.services)if(i.active&&i.priceMinor!==undefined)out.push({name:i.name,priceMinor:i.priceMinor,evidence:'service:'+u+':'+c.version+':'+i.id});
+      }
+    }catch{/* unavailable source never authorizes a guessed price */}
+    return out.filter(i=>Number.isSafeInteger(i.priceMinor)&&i.priceMinor>=0);
   }
   async answer(ctx:TenantContext,unitId:string,question:string,at=new Date().toISOString()):Promise<GroundedBusinessAnswer>{
     const unknown:GroundedBusinessAnswer={status:'UNKNOWN',evidenceIds:[],source:'NONE'};
@@ -49,6 +66,12 @@ export class BusinessGroundingService {
     if(!s.profile)return unknown;
     const q=normalizedQuestion(question);
     if(priceIntent.test(q)){
+      if(this.sectors&&s.profile.capabilityRegistry.vertical!=='FOOD_SERVICE'){
+        const items=await this.sectorPrices(ctx,s.unitId,s.profile.capabilityRegistry.vertical);
+        const matches=items.filter(i=>q.includes(normalizedQuestion(i.name)));
+        if(matches.length!==1)return matches.length>1?{status:'CONFLICT',evidenceIds:matches.map(i=>i.evidence),profileVersion:s.profile.version,source:'NONE'}:unknown;
+        return {status:'ANSWERED',answer:matches[0].name+': '+monetary(matches[0].priceMinor),evidenceIds:[matches[0].evidence],profileVersion:s.profile.version,source:'CATALOG'};
+      }
       if(this.unitCatalog){
         // Versioned T03 catalog is the only price authority when enabled for this API.
         const matches=s.unitItems.filter(i=>q.includes(normalizedQuestion(i.name)));
@@ -89,7 +112,12 @@ export class BusinessGroundingService {
       evidence.push({id:factEvidence(s.unitId,s.profile.version,f),tenantId:s.tenantId,unitId:s.unitId,
         origin:'approved:'+f.sourceRef,body:f.question+' => '+f.answer,trusted:true});
     }
-    if(this.unitCatalog){
+    if(this.sectors&&s.profile.capabilityRegistry.vertical!=='FOOD_SERVICE'){
+      for(const i of await this.sectorPrices(ctx,s.unitId,s.profile.capabilityRegistry.vertical)){
+        if(evidence.length>=16)break;
+        evidence.push({id:i.evidence,tenantId:s.tenantId,unitId:s.unitId,origin:'versioned-sector-catalog',body:i.name+' | '+monetary(i.priceMinor)+' | disponibilidade e confirmação dependem do motor operacional',trusted:true});
+      }
+    }else if(this.unitCatalog){
       for(const p of s.unitItems){
         if(evidence.length>=16)break;
         let body=p.name+' ('+p.kind+')';

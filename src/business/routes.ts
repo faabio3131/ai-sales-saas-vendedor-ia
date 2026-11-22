@@ -9,6 +9,10 @@ import type { BusinessProfileRepository,ScopedMemoryRepository } from './contrac
 import { FirestoreBusinessProfileRepository,FirestoreScopedMemoryRepository } from './firestoreRepository';
 import { BusinessProfileService } from './service';
 import { BusinessGroundingService } from './grounding';
+import {RetailService} from '../retail/service';
+import {FirestoreRetailRepository} from '../retail/firestoreRepository';
+import {SchedulingService} from '../scheduling/service';
+import {FirestoreScheduleRepository} from '../scheduling/firestoreRepository';
 import { BusinessMemoryService,type MemorySourceVerifier } from './memoryService';
 import { ConversationMemorySourceVerifier } from './consentVerifier';
 import { CommercialCustomerContextService } from './customerContext';
@@ -40,7 +44,8 @@ export function createBusinessRouter(deps:BusinessRouteDependencies={}):Router{
   const profile=new BusinessProfileService(profiles);
   // Explicit legacy-catalog test adapters remain isolated. Production defaults to unit-scoped T03 catalog.
   const unitCatalog=deps.unitCatalog??(deps.catalog?undefined:new FirestoreUnitCatalogRepository());
-  const grounding=new BusinessGroundingService(profiles,catalog,unitCatalog);
+  const retail=new RetailService(new FirestoreRetailRepository(),customers),scheduling=new SchedulingService(new FirestoreScheduleRepository(),customers);
+  const grounding=new BusinessGroundingService(profiles,catalog,unitCatalog,deps.profiles||deps.catalog||deps.unitCatalog?undefined:{retail:(ctx,u)=>retail.catalog(ctx,u),services:(ctx,u)=>scheduling.getConfig(ctx,u)});
   const memory=new BusinessMemoryService(customers,profiles,memories,verifier);
   const customerContext=new CommercialCustomerContextService(grounding,memory);
 

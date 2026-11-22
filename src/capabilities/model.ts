@@ -41,12 +41,13 @@ export interface CapabilityRepository{
  latest(tenantId:string,unitId:string):Promise<CapabilityAssignment|null>;
  version(tenantId:string,unitId:string,version:number):Promise<CapabilityAssignment|null>;
  publish(next:CapabilityAssignment,expectedVersion:number):Promise<void>;
+ planEligible?(tenantId:string,unitId:string,now:number):Promise<boolean>;
 }
 export interface CapabilityResolution {
  tenantId:string;unitId:string;capability:CapabilityId;
  authorized:boolean;
  status:'ALLOWED_INTERNAL'|'NOT_CONFIGURED'|'DISABLED'|'NOT_ENABLED'|
- 'FUTURE_IMPLEMENTATION'|'TEMPLATE_MISMATCH'|'PROFILE_UNAVAILABLE';
+ 'FUTURE_IMPLEMENTATION'|'TEMPLATE_MISMATCH'|'PROFILE_UNAVAILABLE'|'PLAN_INACTIVE';
  assignmentVersion?:number;templateId?:CapabilityTemplateId;
  commercialGoLiveAuthorized:false;
 }

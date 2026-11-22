@@ -3,6 +3,8 @@ import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {ApplicationError} from '../infrastructure/errors';
 import type {CapabilityRepository,CapabilityAssignment} from './model';
+import {planAllows} from '../retail/plan';
+import type {Subscription} from '../plans/model';
 import {blocksActiveFoodOperations} from './operationalState';
 
 const db=()=>getFirestore(ensureFirebaseAdminApp());
@@ -18,6 +20,13 @@ function failure(code:string):never{
  */
 export class FirestoreCapabilityRepository implements CapabilityRepository {
  private ref(t:string,u:string){return db().collection('unitCapabilityAssignments').doc(key(t,u));}
+ async planEligible(t:string,u:string,now:number){
+  const marker=await db().collection('multisectorOnboarding').doc(key(t,u)).get();
+  if(!marker.exists)return true;
+  if(marker.get('tenantId')!==t||marker.get('unitId')!==u)return false;
+  const sub=(await db().collection('subscriptions').doc(t).get()).data() as Subscription|undefined;
+  return planAllows(sub,t,now);
+ }
  async latest(t:string,u:string):Promise<CapabilityAssignment|null>{
   const pointer=await this.ref(t,u).get();
   if(!pointer.exists)return null;

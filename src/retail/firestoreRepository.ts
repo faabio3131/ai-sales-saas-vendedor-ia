@@ -36,7 +36,7 @@ export class FirestoreRetailRepository implements RetailRepository{
     stock:async(i)=>{const x=check((await trx.get(stocks.doc(i))).data() as (Stock&Scope)|undefined);if(!x)return null;const {tenantId:_t,unitId:_u,...rest}=x;return rest;},
     order:async(i)=>{const x=check((await trx.get(orders.doc(i))).data() as RetailOrder|undefined);if(x&&x.id!==i)return reject('RETAIL_SCOPE_CORRUPT','INTERNAL');return x;},
     receipt:async(k)=>{const x=check((await trx.get(receipts.doc(key(k)))).data() as (Receipt&Scope)|undefined);return x?{fingerprint:x.fingerprint,orderId:x.orderId}:null;},
-    active:async()=>Number(fence.get('activeOrders')??0)>0,
+    active:async()=>{const n=Number(fence.get('activeOrders')??0);if(!Number.isSafeInteger(n)||n<0)return reject('RETAIL_ACTIVE_COUNT_CORRUPT','INTERNAL');return n>0;},
     orders:async(start,end)=>{
      const rows=await trx.get(orders.where('createdAt','>=',start).where('createdAt','<',end).limit(1001));
      if(rows.size>1000)return reject('RETAIL_REPORT_CAPACITY','CONFLICT');

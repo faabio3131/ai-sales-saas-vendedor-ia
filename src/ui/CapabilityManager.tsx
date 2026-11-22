@@ -5,6 +5,7 @@ import type {CapabilityAssignment,CapabilityId,CapabilityManifest,
  CapabilityTemplate,CapabilityTemplateId} from '../capabilities/model';
 import {ProductionBoard} from './ProductionBoard';
 import {SchedulingPanel} from './SchedulingPanel';
+import {MultisectorOnboardingPanel,RetailPanel,MultiSectorReportPanel} from './MultisectorPanel';
 import type {BookingPack} from '../scheduling/model';
 
 interface CatalogResponse {
@@ -16,8 +17,8 @@ const LABELS:Record<CapabilityId,string>={
  CORE_AI_ASSIST:'Assistência cognitiva',
  FOOD_ORDERING:'Pedidos de alimentação',FOOD_PRODUCTION:'Cozinha e produção',
  FOOD_DELIVERY:'Entrega',FOOD_FINANCE:'Financeiro alimentar',
- RETAIL_CATALOG:'Catálogo de varejo (futuro)',RETAIL_CHECKOUT:'Checkout de varejo (futuro)',
- RETAIL_INVENTORY:'Estoque de varejo (futuro)',
+ RETAIL_CATALOG:'Catálogo de varejo',RETAIL_CHECKOUT:'Checkout de varejo',
+ RETAIL_INVENTORY:'Estoque básico de varejo',
  SERVICE_CATALOG:'Catálogo de serviços',SCHEDULING:'Agenda horizontal',
  SERVICE_BOOKING:'Reservas de serviços',
  BEAUTY_SERVICES:'Serviços de estética (T11)',BEAUTY_BOOKING:'Agendamento de estética (T11)',
@@ -43,6 +44,7 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
  const [rollbackVersion,setRollbackVersion]=useState('1');
  const [busy,setBusy]=useState(false);
  const [loading,setLoading]=useState(true);
+ const [reload,setReload]=useState(0);
  const [error,setError]=useState('');
  const [message,setMessage]=useState('');
  const prefix='/api/capabilities/units/'+encodeURIComponent(unitId);
@@ -73,7 +75,7 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
   return ()=>ctrl.abort();
  // Requests are re-created for the currently selected tenant and unit; old responses are ignored.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[tenantId,unitId]);
+ },[tenantId,unitId,reload]);
  const template=catalog?.templates.find(t=>t.id===templateId&&t.vertical===vertical);
  function toggle(capability:CapabilityId){
   if(!catalog)return;
@@ -238,6 +240,9 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
    </div>:null}
   </>}
  </section>
+ {!loading&&admin&&!vertical&&<MultisectorOnboardingPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} onSaved={()=>setReload(x=>x+1)}/>}
+ {!loading&&assignment?.state==='ENABLED_INTERNAL'&&assignment.vertical==='RETAIL'&&vertical==='RETAIL'&&assignment.enabledCapabilities.includes('RETAIL_CATALOG')&&<RetailPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} role={role} native={assignment.operationMode==='NATIVE_OPERATIONS'} inventory={assignment.enabledCapabilities.includes('RETAIL_INVENTORY')} checkout={assignment.enabledCapabilities.includes('RETAIL_CHECKOUT')}/>}
+ {!loading&&admin&&vertical&&<MultiSectorReportPanel key={'report-'+tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId}/>}
  {allowFoodBoard&&<ProductionBoard tenantId={tenantId} role={role}/>}
  {!loading&&assignment?.state==='ENABLED_INTERNAL'&&assignment.operationMode==='NATIVE_OPERATIONS'&&assignment.vertical===vertical&&
   assignment.enabledCapabilities.includes('SCHEDULING')&&assignment.enabledCapabilities.includes('SERVICE_CATALOG')&&
