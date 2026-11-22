@@ -13,6 +13,8 @@ function candidateValid(content){
   /match\s+\/\{document=\*\*\}\s*\{\s*allow\s+read,\s*write:\s*if\s+false;\s*\}/m.test(content)&&
   allow.length===1&&/^allow read,\s*write: if false;$/.test(allow[0]);
 }
+const config=JSON.parse(fs.readFileSync('firebase.json','utf8'));
+if(config.firestore?.rules!==file)throw Error('FIREBASE_CONFIG_RULES_SOURCE_MISMATCH');
 const source=fs.readFileSync(file,'utf8');
 if(!candidateValid(source))throw Error('FIRESTORE_SERVER_ONLY_RULES_INVALID');
 if(process.argv.includes('--self-test')){
