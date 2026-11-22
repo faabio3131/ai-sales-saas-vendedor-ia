@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {getFirestore,FieldPath} from 'firebase-admin/firestore';
+import type {Transaction} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import type {Payment} from '../payments/model';
 import type {PaymentConfirmationObserver} from './contracts';
@@ -15,7 +16,7 @@ const entries=()=>db().collection('paymentFiscalOutbox');
  * The outbox is only an intent; it does not issue a fiscal document.
  */
 export async function ensureFiscalIntentInTransaction(
- tx:FirebaseFirestore.Transaction,payment:Payment
+ tx:Transaction,payment:Payment
 ):Promise<void>{
  if(payment.status!=='CONFIRMED')return;
  const ref=entries().doc(payment.id),prior=await tx.get(ref);
