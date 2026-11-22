@@ -65,6 +65,13 @@ function scanSource(filename,contents){
  }
  bindings(source);
  function walk(node){
+  // The application has no legitimate first-party dependency on process-shell
+  // modules. Deny their module specifier at every import/reexport/require site,
+  // including no-substitution template literals and alias indirections.
+  // This blocks cross-file shim reexports without claiming full dataflow SAST.
+  if((ts.isStringLiteral(node)||ts.isNoSubstitutionTemplateLiteral(node))&&
+     /^(?:node:)?(?:child_process|vm)$/.test(node.text))
+    flag(node,'FORBIDDEN_EXECUTION_MODULE');
   if(ts.isCallExpression(node)){
    const fn=node.expression;
    if(ts.isIdentifier(fn)&&(['eval','Function'].includes(fn.text)||imported.has(fn.text)))
@@ -94,6 +101,12 @@ if(process.argv.includes('--self-test')){
   ['require.js',"const {execSync: launch}=require('node:child_process'); launch('echo unsafe')",1],
   ['direct.mjs',"require('child_process').exec('echo unsafe')",1],
   ['safe.ts',"import {randomBytes} from 'node:crypto'; randomBytes(32);",0],
+  ['shim.ts',"export {exec} from 'node:child_process';",1],
+  ['second.ts',"import {exec} from 'child_process';const run=exec;run('echo')",1],
+  ['object.ts',"import {exec} from 'child_process';const ops={run:exec};ops.run('echo')",1],
+  ['global.ts',"globalThis.require('child_process').exec('echo')",1],
+  ['template.ts',"const r=require; r(\`child_process\`).exec('echo')",1],
+  ['vm.ts',"import {runInThisContext} from 'node:vm';runInThisContext('1+1')",1],
  ];
  for(const [file,code,count] of cases){
   const findings=scanSource(file,code);
@@ -105,7 +118,9 @@ if(process.argv.includes('--self-test')){
 }
 let problems=[];
 for(const file of [...files(path.join(ROOT,'src')),...files(path.join(ROOT,'scripts')),
- ...files(path.join(ROOT,'deploy')),path.join(ROOT,'server.ts')]){
+ ...files(path.join(ROOT,'deploy')),...files(path.join(ROOT,'tests')),
+ path.join(ROOT,'server.ts')]){
+ if(path.basename(file)==='t13SecurityScan.mjs')continue;
  problems.push(...scanSource(file,fs.readFileSync(file,'utf8')));
 }
 for(const finding of problems)process.stderr.write(JSON.stringify(finding)+'\n');

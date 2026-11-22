@@ -108,6 +108,7 @@ describe('Provider-specific payment webhook authentication',()=>{
 });
 class FakeVerifiedInbox implements VerifiedWebhookRecoveryRepository{
  state?: (id:string)=>Promise<VerifiedWebhookDelivery['state']|null>;
+ private nextToken=0;
  readonly rows=new Map<string,VerifiedWebhookDelivery>();
  async enqueue(e:VerifiedWebhookKey,now:number){
   const id=verifiedWebhookDeliveryId(e);
@@ -117,11 +118,14 @@ class FakeVerifiedInbox implements VerifiedWebhookRecoveryRepository{
  async due(_limit:number,now:number){return [...this.rows.values()].filter(r=>r.state==='PENDING'&&r.nextAttemptAt<=now);}
  async claim(id:string,now:number){
   const row=this.rows.get(id);
-  if(!row||row.leaseUntil>now||row.state!=='PENDING')return false;
-  row.leaseUntil=now+120000;return true;
+  if(!row||row.leaseUntil>now||row.state!=='PENDING'||row.nextAttemptAt>now)return false;
+  row.leaseToken='lease-'+(++this.nextToken);
+  row.leaseUntil=now+120000;return row.leaseToken;
  }
- async finish(id:string,now:number,success:boolean,reason:string){
+ async finish(id:string,now:number,success:boolean,reason:string,leaseToken?:string){
   const row=this.rows.get(id)!;
+  if(row.state!=='PENDING'||!leaseToken||row.leaseToken!==leaseToken)return;
+  row.leaseToken='';
   row.attempts++;
   row.lastErrorCode=reason;
   row.state=success?'COMPLETED':row.attempts>=8?'DLQ':'PENDING';
@@ -216,5 +220,24 @@ describe('T13 independent audit PAG-001: synchronous delivery is leased',()=>{
   expect([...inbox.rows.values()][0]?.state).toBe('COMPLETED');
   expect(await processor.process(input)).toEqual([]);
   expect(refresh).toHaveBeenCalledTimes(1);
+ });
+});
+
+describe('T13 independent reauditor fencing regression',()=>{
+ it('rejects stale worker completion after a newer claim owns the lease',async()=>{
+  const inbox=new FakeVerifiedInbox();
+  const entry={tenantId:'tenant-a',provider:'ASAAS',providerPaymentId:'pay_expire',eventId:'evt_expire'};
+  await inbox.enqueue(entry,0);
+  const id=verifiedWebhookDeliveryId(entry);
+  const first=await inbox.claim(id,0);
+  expect(typeof first).toBe('string');
+  expect(await inbox.claim(id,119999)).toBe(false);
+  const second=await inbox.claim(id,120001);
+  expect(typeof second).toBe('string');
+  expect(second).not.toBe(first);
+  await inbox.finish(id,120002,true,'OLD_WORKER',String(first));
+  expect(inbox.rows.get(id)?.state).toBe('PENDING');
+  await inbox.finish(id,120003,true,'NEW_WORKER',String(second));
+  expect(inbox.rows.get(id)?.state).toBe('COMPLETED');
  });
 });

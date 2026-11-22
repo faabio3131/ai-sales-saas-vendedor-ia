@@ -48,6 +48,10 @@ jobs:
         run: npm run typecheck
       - name: T13 AST-based security source gate
         run: npm run security:static
+      - name: T13 Python AST security gate
+        run: |
+          python3 scripts/t13PythonSecurityGate.py --self-test
+          python3 scripts/t13PythonSecurityGate.py
       - name: Python cognitive S2S contract and security tests
         run: python3 -m unittest cognitive_service.test_core -v
       - name: Tests
