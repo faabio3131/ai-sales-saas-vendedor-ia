@@ -21,6 +21,8 @@ jobs:
       - name: T13 dependency remediation lock snapshot (temporary)
         run: |
           set -euo pipefail
+          # Regenerate from the upgraded root manifest, not old incompatible peer edges.
+          rm package-lock.json
           npm install --no-audit --no-fund
           echo 'AV_T13_UPGRADED_LOCK_BEGIN'
           base64 -w0 package-lock.json
