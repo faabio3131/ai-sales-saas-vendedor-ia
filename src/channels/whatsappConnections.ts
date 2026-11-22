@@ -39,12 +39,30 @@ export class FirestoreWhatsAppConnectionStore implements WhatsAppConnectionStore
  async write(next:WhatsAppConnection,expectedVersion:number){
   const ref=db().collection('merchantWhatsAppConnections').doc(channelDocId(next.tenantId,next.unitId));
   await db().runTransaction(async tx=>{
-   const prev=await tx.get(ref),data=prev.data() as WhatsAppConnection|undefined;
+   // A Meta phone_number_id is a globally unique routing identity, NOT just
+   // a tenant preference. Reserve it atomically to prevent cross-tenant reuse.
+   const phoneRef=db().collection('whatsappPhoneReservations').doc(next.phoneNumberId);
+   const prev=await tx.get(ref),reservation=await tx.get(phoneRef);
+   const data=prev.data() as WhatsAppConnection|undefined;
+   const claim=reservation.data() as {tenantId:string;unitId:string}|undefined;
    if((data?.version??0)!==expectedVersion||Boolean(data)!==(expectedVersion>0))
     throw channelError('CHANNEL_VERSION_CONFLICT','CONFLICT');
    if(data&&(data.tenantId!==next.tenantId||data.unitId!==next.unitId))
     throw channelError('CHANNEL_SCOPE_MISMATCH');
+   if(claim&&(claim.tenantId!==next.tenantId||claim.unitId!==next.unitId))
+    throw channelError('CHANNEL_PHONE_ALREADY_BOUND','CONFLICT');
    if(next.version!==expectedVersion+1)throw channelError('CHANNEL_VERSION_CONFLICT','CONFLICT');
+   let previousPhoneRef:FirebaseFirestore.DocumentReference|undefined;
+   if(data&&data.phoneNumberId!==next.phoneNumberId){
+    previousPhoneRef=db().collection('whatsappPhoneReservations').doc(data.phoneNumberId);
+    const oldClaim=await tx.get(previousPhoneRef);
+    const owner=oldClaim.data() as {tenantId:string;unitId:string}|undefined;
+    if(owner&&(owner.tenantId!==next.tenantId||owner.unitId!==next.unitId))
+     throw channelError('CHANNEL_PHONE_RESERVATION_CONFLICT','CONFLICT');
+   }
+   if(previousPhoneRef)tx.delete(previousPhoneRef);
+   tx.set(phoneRef,{tenantId:next.tenantId,unitId:next.unitId,phoneNumberId:next.phoneNumberId,
+    updatedAt:next.updatedAt});
    tx.set(ref,next);
   });
  }
