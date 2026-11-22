@@ -12,7 +12,7 @@ Há referências históricas a backend Google Cloud Run e a workers Contabo. **N
 
 ## Flags de operação real (ponto de enforcement no serviço)
 
-Em ambientes diferentes de `NODE_ENV=test`, criar cobrança online e enviar WhatsApp requerem ao mesmo tempo: `ATENDEVENDE_PILOT_LIVE_ENABLED=true`, `ATENDEVENDE_PILOT_GO_LIVE_APPROVED=true` e uma allowlist JSON com tenant/unidade/funcionalidade EXATOS em `ATENDEVENDE_PILOT_ALLOWED_UNITS`, por exemplo `{"tenant-exemplo":{"unidade-exemplo":["ONLINE_PAYMENT_CREATE","WHATSAPP_OUTBOUND"]}}`. O exemplo não confere autorização. Qualquer ausência, ambiguidade, JSON malformado ou outro tenant/unidade resulta em `PILOT_FEATURE_DISABLED`. Flag em ambiente NÃO é, sozinha, evidência de aprovação humana: operador deve registrar aceite T08.5 antes de alterar variáveis em ambiente real. Controles de RBAC, PSP, janela 24h, assinaturas e isolamento existentes são cumulativos, não substituídos.
+Em ambientes diferentes de `NODE_ENV=test`, criar cobrança online, estornar PSP e enviar WhatsApp requerem ao mesmo tempo: `ATENDEVENDE_PILOT_LIVE_ENABLED=true`, `ATENDEVENDE_PILOT_GO_LIVE_APPROVED=true` e uma allowlist JSON com tenant/unidade/funcionalidade EXATOS em `ATENDEVENDE_PILOT_ALLOWED_UNITS`, por exemplo `{"tenant-exemplo":{"unidade-exemplo":["ONLINE_PAYMENT_CREATE","WHATSAPP_OUTBOUND"]}}`. O exemplo não confere autorização. Qualquer ausência, ambiguidade, JSON malformado ou outro tenant/unidade resulta em `PILOT_FEATURE_DISABLED`. Flag em ambiente NÃO é, sozinha, evidência de aprovação humana: operador deve registrar aceite T08.5 antes de alterar variáveis em ambiente real. Controles de RBAC, PSP, janela 24h, assinaturas e isolamento existentes são cumulativos, não substituídos.
 
 ## CLI de engenharia e recuperação
 
@@ -42,3 +42,5 @@ Backup usa `gcloud firestore export` e espera a conclusão da operação remota 
 ## Reconciliador legado — proteção de expansão do Compose
 
 A revisão de CI detectou interpolação acidental das variáveis locais `legacy_failed` e `order_failed` do shell no `deploy/payment-reconciler.compose.yaml`. A sintaxe correta no arquivo Compose é `$$legacy_failed` e `$$order_failed`, para preservar as variáveis até a execução do script dentro do contêiner. O gate de configuração valida a preservação de ambas; sem isso o supervisor pode interpretar falsamente o resultado dos workers. O ajuste não ativa o reconciliador nem acessa bancos reais.
+
+O estorno real de um PSP exige a permissão independente PSP_REFUND, verificada antes de reservar a mutação do ledger. Estorno manual/offline mantém a política existente. Nenhuma flag de estorno confere autorização externa de produção sem o aceite formal T08.5.

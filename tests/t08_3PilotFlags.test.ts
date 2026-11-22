@@ -23,6 +23,9 @@ describe('T08.3 — pilot global kill switch and exact tenant/unit allowlist',()
     expect(pilotLiveFeatureEnabled('ONLINE_PAYMENT_CREATE','tenant-one','main',prod)).toBe(true);
     expect(pilotLiveFeatureEnabled('WHATSAPP_OUTBOUND','tenant-two','kiosk',prod)).toBe(true);
     expect(pilotLiveFeatureEnabled('ONLINE_PAYMENT_CREATE','tenant-two','kiosk',prod)).toBe(false);
+    expect(pilotLiveFeatureEnabled('PSP_REFUND','tenant-one','main',prod)).toBe(false);
+    expect(pilotLiveFeatureEnabled('PSP_REFUND','tenant-two','kiosk',prod)).toBe(false);
+    expect(pilotLiveFeatureEnabled('PSP_REFUND','tenant-one','main',{...prod,ATENDEVENDE_PILOT_ALLOWED_UNITS:JSON.stringify({'tenant-one':{main:['PSP_REFUND']}})})).toBe(true);
     expect(pilotLiveFeatureEnabled('WHATSAPP_OUTBOUND','tenant-two','main',prod)).toBe(false);
     expect(pilotLiveFeatureEnabled('WHATSAPP_OUTBOUND','tenant-other','main',prod)).toBe(false);
     expect(pilotLiveFeatureEnabled('WHATSAPP_OUTBOUND','tenant-one',undefined,prod)).toBe(false);

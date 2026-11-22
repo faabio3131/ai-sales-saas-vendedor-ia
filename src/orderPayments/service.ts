@@ -280,6 +280,8 @@ export class OrderPaymentService {
       denyPayment('ORDER_PAYMENT_REFUND_NOT_ALLOWED');
     if(typeof input.reason!=='string'||!input.reason.trim()||input.reason.length>240)
       denyPayment('ORDER_PAYMENT_REFUND_REASON_INVALID','VALIDATION');
+    if(record.providerPaymentId)
+      requirePilotLiveFeature('PSP_REFUND',record.tenantId,record.unitId);
     const now=this.clock().toISOString();
     const pending=await this.store.transition({
       ...record,status:'REFUND_PENDING',version:record.version+1,updatedAt:now,

@@ -1,6 +1,6 @@
 import { ApplicationError } from '../infrastructure/errors';
 
-export type PilotLiveFeature = 'ONLINE_PAYMENT_CREATE' | 'WHATSAPP_OUTBOUND';
+export type PilotLiveFeature = 'ONLINE_PAYMENT_CREATE' | 'PSP_REFUND' | 'WHATSAPP_OUTBOUND';
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 /** Test doubles are isolated by NODE_ENV=test. All other environments deny by default. */
@@ -23,7 +23,7 @@ export function pilotLiveFeatureEnabled(
     if (!tenant || typeof tenant !== 'object' || Array.isArray(tenant)) return false;
     const allowed = (tenant as Record<string, unknown>)[unitId];
     return Array.isArray(allowed) && allowed.length <= 8 &&
-      allowed.every((value: unknown) => value === 'ONLINE_PAYMENT_CREATE' || value === 'WHATSAPP_OUTBOUND') &&
+      allowed.every((value: unknown) => value === 'ONLINE_PAYMENT_CREATE' || value === 'PSP_REFUND' || value === 'WHATSAPP_OUTBOUND') &&
       allowed.includes(feature);
   } catch { return false; }
 }
