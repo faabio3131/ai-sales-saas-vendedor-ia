@@ -53,7 +53,7 @@ export interface ScheduleSlot {professionalId:string;resourceIds:string[];startA
 export interface RequestReceipt {fingerprint:string;bookingId:string}
 export interface ScheduleTransaction {
  config():Promise<ScheduleConfig|null>;
- grant(nowMs:number,pack?:BookingPack):Promise<boolean>;
+ grant(nowMs:number,pack?:BookingPack,feature?:'PAYMENTS'):Promise<boolean>;
  booking(id:string):Promise<Booking|null>;
  window(startMs:number,endMs:number):Promise<Occupancy[]>;
  records(startMs:number,endMs:number):Promise<Booking[]>;

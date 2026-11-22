@@ -70,6 +70,14 @@ export class RetailPaymentService{
    const next=this.patch(b,ctx,payment);tx.saveOrder(next);return next;
   });
  }
+ async markUncertain(ctx:TenantContext,u:string,bid:string,raw:unknown){
+  requireBusinessAdmin(ctx);const s=this.retail.scope(ctx,u,true),a=object(raw,['expectedVersion']),v=integer(a.expectedVersion,1,100000000);
+  return this.retail.store.transact(s,async tx=>{
+   const b=await tx.order(id(bid));if(!b)return reject('RETAIL_ORDER_NOT_FOUND','NOT_FOUND');
+   if(b.version!==v||b.payment.state!=='CREATING'||this.retail.now()-Date.parse(b.updatedAt)<120000)return reject('RETAIL_PAYMENT_CLAIM_NOT_EXPIRED','CONFLICT');
+   const next=this.patch(b,ctx,{...b.payment,state:'REVIEW_REQUIRED'});tx.saveOrder(next);return next;
+  });
+ }
  async refresh(ctx:TenantContext,u:string,bid:string,raw:unknown){
   const s=this.retail.scope(ctx,u,true),a=object(raw,['providerPaymentId']);
   if(!['OWNER','ADMIN','MANAGER','CASHIER'].includes(ctx.role??''))return reject('RETAIL_PAYMENT_ROLE_REQUIRED','FORBIDDEN');

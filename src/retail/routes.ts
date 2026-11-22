@@ -17,7 +17,7 @@ export function createRetailRouter(service=new RetailService(new FirestoreRetail
  r.post(base+'/orders',async(req,res,next)=>{try{res.status(201).json({ok:true,data:await service.createCart(ctx(req),req.params.unitId,req.body)});}catch(e){next(e);}});
  r.get(o,async(req,res,next)=>{try{res.json({ok:true,data:await service.get(ctx(req),req.params.unitId,req.params.id)});}catch(e){next(e);}});
  const commands=[['/edit',service.editCart.bind(service)],['/confirm',service.confirm.bind(service)],['/cashier',service.recordManual.bind(service)],
-  ['/complete',service.complete.bind(service)],['/cancel',service.cancel.bind(service)],['/pix',payment.issue.bind(payment)],['/payment/refresh',payment.refresh.bind(payment)]] as const;
+  ['/complete',service.complete.bind(service)],['/cancel',service.cancel.bind(service)],['/pix',payment.issue.bind(payment)],['/payment/refresh',payment.refresh.bind(payment)],['/payment/uncertain',payment.markUncertain.bind(payment)]] as const;
  for(const [path,command] of commands)r.post(o+path,async(req,res,next)=>{try{res.json({ok:true,data:await command(ctx(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}});
  return r;
 }

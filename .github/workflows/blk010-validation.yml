@@ -62,7 +62,7 @@ jobs:
         env:
           NODE_ENV: test
         run: npm test -- tests/t12Multisector.test.ts
-      - name: T10 and T11 isolated Firestore transactional acceptance
+      - name: T10 T11 T12 isolated Firestore transactional acceptance
         env:
           NODE_ENV: test
           T10_FIRESTORE_EMULATOR: 'true'
@@ -80,7 +80,7 @@ jobs:
             sleep 1
           done
           test "$READY" = 1
-          npm test -- tests/t10FirestoreEmulator.test.ts tests/t11FirestoreEmulator.test.ts
+          npm test -- tests/t10FirestoreEmulator.test.ts tests/t11FirestoreEmulator.test.ts tests/t12FirestoreEmulator.test.ts
       - name: T10 scheduling worker compose config gate
         env:
           ATENDEVENDE_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -119,7 +119,7 @@ jobs:
           grep -qi '^x-frame-options: DENY' /tmp/headers.txt
           grep -qi '^x-request-id:' /tmp/headers.txt
           if grep -qi '^x-powered-by:' /tmp/headers.txt; then exit 1; fi
-          for PATHNAME in tenancy/context tenancy/memberships capabilities/units/main/assignment scheduling/units/main/config scheduling/units/main/bookings catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness pilot/units/main/onboarding release/readiness operations/ai-readiness fulfillment/units/main/queue autonomy/units/main/policy; do
+          for PATHNAME in tenancy/context tenancy/memberships capabilities/units/main/assignment scheduling/units/main/config scheduling/units/main/bookings retail/units/main/catalog onboarding/units/main/templates onboarding/units/main/report catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness pilot/units/main/onboarding release/readiness operations/ai-readiness fulfillment/units/main/queue autonomy/units/main/policy; do
             STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
             test "$STATUS" = "401"
           done
