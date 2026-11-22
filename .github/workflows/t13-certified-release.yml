@@ -36,6 +36,7 @@ jobs:
           GITHUB_TOKEN: "${{ github.token }}"
           T13_EXPECTED_SHA: "${{ inputs.expected_sha }}"
         run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node scripts/t13ReleaseGate.mjs --verify
       - name: Verify deployed client-side Firestore rules are the reviewed candidate
         env:
@@ -58,7 +59,7 @@ jobs:
           set -euo pipefail
           IMAGE="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           TAG="$IMAGE:t13-$GITHUB_SHA"
-          docker build --pull -t "$TAG" .
+          docker build --pull --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$TAG" .
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker push "$TAG"
           DIGEST=$(docker image inspect --format='{{index .RepoDigests 0}}' "$TAG" | awk -F '@' '{print $2}')

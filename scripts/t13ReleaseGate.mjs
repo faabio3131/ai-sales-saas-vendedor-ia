@@ -66,11 +66,14 @@ async function github(endpoint){
  if(!response.ok)throw Error('RELEASE_GITHUB_APPROVAL_CHECK_FAILED:'+response.status);
  return response.json();
 }
+const targetEnvironment=process.env.T13_REVIEW_ENVIRONMENT??'t13-release-signing';
+if(!['t13-release-signing','t13-production-approval'].includes(targetEnvironment))
+ throw Error('RELEASE_ENVIRONMENT_NOT_ALLOWLISTED');
 const [pr,reviews,runs,environment]=await Promise.all([
  github('repos/'+repo+'/pulls/29'),
  github('repos/'+repo+'/pulls/29/reviews?per_page=100'),
  github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+sha+'&event=push&per_page=100'),
- github('repos/'+repo+'/environments/t13-release-signing'),
+ github('repos/'+repo+'/environments/'+targetEnvironment),
 ]);
 requireReady({sha,expected,ref,pr,reviews,runs,environment});
 console.log(JSON.stringify({status:'RELEASE_SEAL_APPROVED',sha,

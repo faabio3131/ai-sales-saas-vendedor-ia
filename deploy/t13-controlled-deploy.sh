@@ -2,6 +2,13 @@
 # Manual or protected-environment controlled deployment on an authorized host.
 # Never executed from pull request CI. Requires preprovisioned, private files.
 set -Eeuo pipefail
+RUNTIME_ENV="${T13_RUNTIME_ENV_FILE:-.t13-runtime.env}"
+[[ -f "$RUNTIME_ENV" && ! -L "$RUNTIME_ENV" ]] ||
+ { echo 'HOST_RUNTIME_ENV_NOT_PROVISIONED' >&2; exit 1; }
+set -a
+# Operator-controlled private host file; NEVER transmitted from the repository.
+. "$RUNTIME_ENV"
+set +a
 : "${T13_IMAGE_REF:?Signed OCI image digest required}"
 : "${FIREBASE_PROJECT_ID:?Firestore project required}"
 : "${T13_SESSION_SECRET_FILE:?Private session secret required}"
@@ -34,10 +41,18 @@ verify_image(){
    --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' "$1" >/dev/null
 }
 verify_image "$T13_IMAGE_REF"
+EXPECTED_SHA="${T13_EXPECTED_SHA:?Approved main SHA required}"
+[[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+docker pull "$T13_IMAGE_REF"
+IMAGE_REVISION=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$T13_IMAGE_REF")
+[[ "$IMAGE_REVISION" = "$EXPECTED_SHA" ]] ||
+ { echo 'OCI_SOURCE_SHA_MISMATCH' >&2; exit 1; }
 export ATENDEVENDE_IMAGE="$T13_IMAGE_REF"
-docker compose -f "$COMPOSE" config --quiet
-docker compose -f "$COMPOSE" pull
-docker compose -f "$COMPOSE" up -d --no-build --force-recreate
+WORKER_COMPOSE='deploy/payment-reconciler.compose.yaml'
+[[ -f "$WORKER_COMPOSE" ]] || { echo 'PAYMENT_WORKER_COMPOSE_MISSING' >&2; exit 1; }
+docker compose -f "$COMPOSE" -f "$WORKER_COMPOSE" config --quiet
+docker compose -f "$COMPOSE" -f "$WORKER_COMPOSE" pull
+docker compose -f "$COMPOSE" -f "$WORKER_COMPOSE" up -d --no-build --force-recreate
 PORT="${ATENDEVENDE_PRODUCTION_PORT:-18080}"
 [[ "$PORT" =~ ^[0-9]{2,5}$ ]] || { echo 'INVALID_API_PORT' >&2; exit 1; }
 READY=0
@@ -55,8 +70,8 @@ if [[ "$READY" != 1 ]]; then
  if [[ -n "$PREVIOUS" && "$PREVIOUS" != "$T13_IMAGE_REF" ]]; then
   verify_image "$PREVIOUS"
   export ATENDEVENDE_IMAGE="$PREVIOUS"
-  docker compose -f "$COMPOSE" pull
-  docker compose -f "$COMPOSE" up -d --no-build --force-recreate
+  docker compose -f "$COMPOSE" -f "$WORKER_COMPOSE" pull
+  docker compose -f "$COMPOSE" -f "$WORKER_COMPOSE" up -d --no-build --force-recreate
  else
   echo 'NO_PREVIOUS_CERTIFIED_DIGEST: MANUAL_RECOVERY_REQUIRED' >&2
  fi
