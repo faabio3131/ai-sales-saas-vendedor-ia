@@ -14,7 +14,7 @@ export interface PagBankSettings {
  request:ProviderTransport;
  resolveCustomer:(customerId:string)=>Promise<PagBankCustomer|null>;
 }
-/** PagBank Orders API, Pix charges. Webhook is intentionally disabled pending verification. */
+/** PagBank Orders API, Pix charges; ECDSA-signed webhook notifications are handled separately. */
 export class PagBankPixProvider extends PixOnlyProvider {
  readonly id='PAGBANK';
  readonly tenantId:string;

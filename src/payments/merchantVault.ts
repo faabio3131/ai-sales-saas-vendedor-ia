@@ -7,7 +7,8 @@ export interface MerchantBankSecrets {
  tenantId:string;providerId:PaymentProviderId;recipientId:string;
  pixKey?:string;clientId?:string;clientSecret?:string;
  clientCertificatePem?:string;clientPrivateKeyPem?:string;
- apiKey?:string;applicationKey?:string;webhookSecret?:string;customerMap?:Record<string,string>;
+ apiKey?:string;applicationKey?:string;webhookSecret?:string;
+ webhookPublicKeyBase64?:string;customerMap?:Record<string,string>;
 }
 export interface MerchantCredentialsVault {
  load(connection:MerchantProviderConnection):Promise<MerchantBankSecrets>;
