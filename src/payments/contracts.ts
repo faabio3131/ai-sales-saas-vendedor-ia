@@ -1,4 +1,4 @@
-import { NormalizedPaymentWebhook, Payment, PaymentWebhookEvent, ProviderPaymentRequest, ProviderPaymentResult } from './model';
+import { NormalizedPaymentWebhook, Payment, PaymentStatus, PaymentWebhookEvent, ProviderPaymentRequest, ProviderPaymentResult } from './model';
 
 export interface PaymentRepository {
   listByTenant(tenantId: string): Promise<Payment[]>;
@@ -6,7 +6,7 @@ export interface PaymentRepository {
   findByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<Payment | null>;
   findByProviderPaymentId(tenantId: string, provider: string, providerPaymentId: string): Promise<Payment | null>;
   create(payment: Payment): Promise<Payment>;
-  update(payment: Payment): Promise<Payment>;
+  update(payment: Payment, expectedStatus?: PaymentStatus): Promise<Payment>;
 }
 
 export interface PaymentWebhookEventRepository {

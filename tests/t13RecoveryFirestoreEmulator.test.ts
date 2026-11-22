@@ -4,6 +4,7 @@ import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../src/infrastructure/firebaseAdmin';
 import {FirestoreStaleGovernanceReceiptStore} from '../src/governance/recovery';
 import {FirestoreConfirmedSalesPaymentSource} from '../src/fiscal/recovery';
+import {FirestorePaymentRepository} from '../src/payments/firestoreRepository';
 import type {ToolReceipt} from '../src/governance/model';
 import type {Payment} from '../src/payments/model';
 
@@ -54,5 +55,32 @@ describe.skipIf(!enabled)('T13 governance and fiscal recovery against real Fires
   await source.clearFailure(p);
   expect((await ref.get()).data()).toMatchObject({status:'RESOLVED',
    requiresHumanReview:false});
+ },60000);
+
+ it('atomically records immutable fiscal source events on CONFIRMED and REFUNDED',async()=>{
+  const id='settlement_'+randomUUID().replace(/-/g,'');
+  const now='2026-11-22T12:00:00.000Z';
+  const p:Payment={id,tenantId:'tenant-canonical',customerId:'customer-1',quoteId:'quote-1',
+    provider:'ASAAS',providerPaymentId:'pay_'+id,method:'PIX',status:'PENDING',
+    amountMinor:9000,currency:'BRL',idempotencyKey:id,createdAt:now,updatedAt:now};
+  const repo=new FirestorePaymentRepository();
+  await repo.create(p);
+  let facts=await db().collection('fiscalPaymentEvents').where('paymentId','==',id).get();
+  expect(facts.empty).toBe(true);
+  const confirmed={...p,status:'CONFIRMED' as const,confirmedAt:now};
+  await repo.update(confirmed,'PENDING');
+  await expect(repo.update({...confirmed,status:'FAILED'},'PENDING'))
+    .rejects.toMatchObject({code:'PAYMENT_CONCURRENT_STATUS_CONFLICT'});
+  facts=await db().collection('fiscalPaymentEvents').where('paymentId','==',id).get();
+  expect(facts.size).toBe(1);
+  expect(facts.docs[0].get('status')).toBe('CONFIRMED');
+  const refunded={...confirmed,status:'REFUNDED' as const};
+  await repo.update(refunded,'CONFIRMED');
+  facts=await db().collection('fiscalPaymentEvents').where('paymentId','==',id).get();
+  expect(facts.size).toBe(2);
+  expect(new Set(facts.docs.map(doc=>doc.get('status')))).toEqual(new Set(['CONFIRMED','REFUNDED']));
+  await expect(repo.update(confirmed,'CONFIRMED'))
+    .rejects.toMatchObject({code:'PAYMENT_CONCURRENT_STATUS_CONFLICT'});
+  expect((await repo.findById('tenant-canonical',id))?.status).toBe('REFUNDED');
  },60000);
 });

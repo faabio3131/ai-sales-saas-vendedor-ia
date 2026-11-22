@@ -50,12 +50,30 @@ describe('T13 governance and fiscal recovery remain fail-safe',()=>{
    if(p.id==='verified'&&fail)throw Error('transient firestore failure');
   })};
   const worker=new FiscalHandoffRecoveryWorker(source,observer);
-  expect(await worker.runOnce()).toEqual({scanned:2,confirmed:0,failed:1,skipped:1});
+  expect(await worker.runOnce()).toEqual({scanned:2,confirmed:0,refundReview:0,failed:1,skipped:1});
   expect(failed).toEqual(['verified:FISCAL_RECOVERY_UNEXPECTED']);
   fail=false;
-  expect(await worker.runOnce()).toEqual({scanned:2,confirmed:1,failed:0,skipped:1});
+  expect(await worker.runOnce()).toEqual({scanned:2,confirmed:1,refundReview:0,failed:0,skipped:1});
   expect(cleared).toEqual(['verified']);
   expect(observer.onConfirmed).toHaveBeenCalledTimes(2);
   expect(observer.onConfirmed).not.toHaveBeenCalledWith(sourceRows[1]);
+ });
+
+ it('preserves original confirmed fiscal fact and flags a refund for human review',async()=>{
+  const refund=payment('REFUNDED','refunded');
+  const issues:string[]=[];
+  const source:ConfirmedSalesPaymentSource={
+   listConfirmed:async()=>[refund],
+   recordFailure:async(_payment,reason)=>{issues.push(reason);},
+   clearFailure:async()=>{throw Error('Must never clear reversal issue');},
+  };
+  const observer={onConfirmed:vi.fn(async(p:Payment)=>{
+   expect(p.status).toBe('CONFIRMED');
+   expect(p.confirmedAt).toBe(oldTime);
+  })};
+  const summary=await new FiscalHandoffRecoveryWorker(source,observer).runOnce();
+  expect(summary).toEqual({scanned:1,confirmed:0,refundReview:1,failed:0,skipped:0});
+  expect(observer.onConfirmed).toHaveBeenCalledOnce();
+  expect(issues).toEqual(['FISCAL_REFUND_REVIEW_REQUIRED']);
  });
 });

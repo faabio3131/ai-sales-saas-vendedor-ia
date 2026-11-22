@@ -183,7 +183,7 @@ export class PaymentService {
       confirmedAt: status === 'CONFIRMED' ? (payment.confirmedAt ?? now) : payment.confirmedAt,
       updatedAt: now,
     };
-    const persisted = await this.payments.update(updated);
+    const persisted = await this.payments.update(updated,payment.status);
     await this.notifyConfirmed(persisted);
     return persisted;
   }
