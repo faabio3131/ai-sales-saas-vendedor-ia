@@ -13,7 +13,8 @@
     "purge:business-memory": "node dist/purge-business-memories.cjs",
     "reconcile:order-payments": "node dist/order-payment-workers.cjs",
     "run:fulfillment-cycle": "node dist/fulfillment-worker.cjs",
-    "run:scheduling-cycle": "node dist/scheduling-worker.cjs"
+    "run:scheduling-cycle": "node dist/scheduling-worker.cjs",
+    "security:static": "node scripts/t13SecurityScan.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
