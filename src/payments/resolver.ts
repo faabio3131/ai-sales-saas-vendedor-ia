@@ -15,6 +15,13 @@ export function merchantConnectionBindingHash(connection:MerchantProviderConnect
     connection.version??0,
   ])).digest('hex');
 }
+/** A mutable alias is not a historical credential generation. Secret Manager
+ * numeric versions are immutable; 'latest' and mounted overwritable paths are not.
+ */
+export function isPinnedHistoricalVaultReference(ref:string|undefined):boolean {
+  return typeof ref==='string' &&
+   /^projects\/[a-zA-Z0-9_-]{4,80}\/secrets\/[a-zA-Z0-9_-]{1,200}\/versions\/[1-9][0-9]*$/.test(ref);
+}
 export interface PaymentProviderResolver {
   forNewPayment(tenantId:string,providerId?:string):Promise<PaymentProviderInterface>;
   forNewPaymentWithBinding?(tenantId:string,providerId?:string):Promise<{provider:PaymentProviderInterface;bindingHash:string}>;
@@ -70,6 +77,9 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
       !this.createAdapter)
       throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_HISTORICAL_BINDING_MISMATCH',
         message:'Original payment account cannot be verified; manual reconciliation required.'});
+    if(!isPinnedHistoricalVaultReference(original.credentialRef))
+      throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_HISTORICAL_CREDENTIAL_GENERATION_REQUIRED',
+        message:'Mutable historical vault references cannot authorize payment reconciliation.'});
     // NEVER use a cached adapter keyed only by provider for historic charges.
     const adapter=await this.createAdapter(original);
     const bound=adapter as MercadoPagoPixProvider;

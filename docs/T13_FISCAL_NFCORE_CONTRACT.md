@@ -31,3 +31,15 @@ acknowledged fiscal document response remain **internal** delivery gaps for
 a future full end-to-end issuance claim.
 
 Internal T13.5 contract reconciliation does not certify fiscal issuance.
+
+## Historical PSP credential provenance — T13.2
+The historic PSP resolver can automatically reopen an archived connection **only**
+when it contains an immutable, explicitly numbered Google Secret Manager secret
+version, passes the tenant/provider/recipient binding and matches the stored
+connection fingerprint. Operations can provision that reference using
+`attachVault(tenant, provider, 'GOOGLE', projectId, secretVersion)`.
+
+`/versions/latest`, mutable mounted files and legacy records without a
+verified binding MUST fail closed and enter human financial reconciliation.
+No client API may select an arbitrary vault path or supply raw bank secrets.
+Preservation of old immutable secret versions is an operational requirement.

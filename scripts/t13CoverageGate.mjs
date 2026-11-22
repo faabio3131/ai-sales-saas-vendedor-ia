@@ -2,7 +2,9 @@
 import fs from 'node:fs';
 
 const source = process.argv[2] || 'coverage/coverage-summary.json';
-const thresholds = Object.freeze({lines:20, statements:20, branches:12, functions:15});
+// Calibrated against actual certified baseline CI #45017274525, retaining
+// ~4-5 percentage-point regression headroom per metric.
+const thresholds = Object.freeze({lines:55, statements:50, branches:50, functions:43});
 function inspect(report) {
   if (!report || !report.total || typeof report.total !== 'object')
     throw new Error('COVERAGE_SUMMARY_MISSING');

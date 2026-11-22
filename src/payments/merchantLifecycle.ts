@@ -76,13 +76,19 @@ function provider(value:unknown):PaymentProviderId{
  return value as PaymentProviderId;
 }
 export function paymentVaultReference(tenantId:string,providerId:PaymentProviderId,
- backend:'MOUNTED'|'GOOGLE',projectId?:string):string{
+ backend:'MOUNTED'|'GOOGLE',projectId?:string,secretVersion?:number):string{
  id(tenantId,TENANT);provider(providerId);
- if(backend==='MOUNTED')return mountedSecretReference(tenantId,providerId);
+ if(secretVersion!==undefined&&(!Number.isSafeInteger(secretVersion)||secretVersion<1))
+  throw error('PAYMENT_SECRET_VERSION_INVALID');
+ if(backend==='MOUNTED'){
+  if(secretVersion!==undefined)throw error('PAYMENT_MOUNT_SECRET_VERSION_UNSUPPORTED');
+  return mountedSecretReference(tenantId,providerId);
+ }
  if(!projectId||!/^[a-zA-Z0-9_-]{4,80}$/.test(projectId))
   throw error('PAYMENT_SECRET_PROJECT_INVALID');
  const hash=createHash('sha256').update(tenantId+'\0'+providerId).digest('hex').slice(0,48);
- return 'projects/'+projectId+'/secrets/avpay-'+hash+'/versions/latest';
+ return 'projects/'+projectId+'/secrets/avpay-'+hash+'/versions/'+
+  (secretVersion===undefined?'latest':String(secretVersion));
 }
 export interface ExternalPaymentVerifier{
  /** May perform a harmless provider-side authenticated check. MUST NOT create a payment. */
@@ -111,11 +117,12 @@ export class MerchantProviderOnboardingService{
   * Secrets must have been provisioned out-of-band with restricted IAM/0600 mount.
   * Never accepts raw credentials or arbitrary secret refs from a tenant.
   */
- async attachVault(tenantId:string,providerId:PaymentProviderId,backend:'MOUNTED'|'GOOGLE',projectId?:string){
+ async attachVault(tenantId:string,providerId:PaymentProviderId,backend:'MOUNTED'|'GOOGLE',projectId?:string,
+  secretVersion?:number){
   const t=id(tenantId,TENANT),p=provider(providerId),old=await this.store.get(t,p);
   if(!old||old.status!=='PENDING_VERIFICATION'||!old.recipientId)
    throw error('PAYMENT_CONNECTION_NOT_PENDING','CONFLICT');
-  const credentialRef=paymentVaultReference(t,p,backend,projectId);
+  const credentialRef=paymentVaultReference(t,p,backend,projectId,secretVersion);
   await this.store.write({...old,credentialRef,updatedAt:this.clock().toISOString(),version:old.version+1},old.version);
  }
  /** OPERATIONS-ONLY: requires an independent provider verification, not an owner checkbox. */
