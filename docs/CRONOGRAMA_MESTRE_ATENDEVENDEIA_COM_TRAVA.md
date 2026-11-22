@@ -108,8 +108,8 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 | :--- | :---: | :--- | :---: | :---: | :---: | :--- |
 | **T09** | `✅ T08.4 PR #24 + CI #44972851608 SUCCESS` | Capability Fabric multissetorial, 6 templates versionados, ativação e rollback por tenant/unidade, proteção de rotas | 5d | `[x] IMPLEMENTAÇÃO E TESTES T09 / [ ] GATE FINAL CI, MERGE E PÓS-MERGE` | `21/11/2026 (engenharia)` | `PR #25 / código bd2e1d3e49d84efde02a4bf6360f9fd3c3083ec6 / CI #44975161245 em execução ao registrar; evidência final na PR` |
 | **T10** | `✅ T09` | Scheduling Engine horizontal | 8d | `[x] CERTIFICADA E INTEGRADA` | `22/11/2026` | `PR #26 / 3249c39 / CI #44977618954 SUCCESS` |
-| **T11** | `✅ T10 CI #44977618954 SUCCESS` | Service Booking Packs — salão, barbearia, estética administrativa e serviços | 7d | `[x] IMPLEMENTAÇÃO / [ ] CI INTEGRAL E PÓS-MERGE` | `22/11/2026 (engenharia)` | `PR T11 — evidências no fechamento` |
-| **T12** | `🔒 Finalize T11` | Templates de comércio/serviços, onboarding por capabilities e certificação multissetorial | 6d | `[ ] BLOQUEADO` | `__/__/____` | `PR #___ / SHA ___ / CI ___` |
+| **T11** | `✅ T10` | Service Booking Packs | 7d | `[x] CERTIFICADA E INTEGRADA` | `22/11/2026` | `PR #27 / 98ebcbc / CI #44980958696 SUCCESS` |
+| **T12** | `✅ T11 CI #44980958696 SUCCESS` | Comércio, onboarding e certificação multissetorial | 6d | `[x] IMPLEMENTAÇÃO / [ ] CI E PÓS-MERGE` | `22/11/2026` | `PR T12 / fechamento com evidências` |
 
 > Os prazos são **estimativas de esforço, não datas prometidas**. O desenvolvimento T09–T12 segue a trava de **entregas internas**, sem depender de aceites externos do primeiro restaurante. Nenhum pack é ativado comercialmente antes de homologação própria.
 
@@ -245,7 +245,7 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - Perfis de serviço/profissional, seleção de horários, comunicação de confirmação, lembretes, política de sinal, reagendamento e faltas; atuação administrativa em estética, nunca triagem médica autônoma.
 - **DoD:** testes E2E dos serviços em 2 segmentos, conflitos de agenda, inadimplência do sinal, sem vazamento entre estabelecimentos, provas de estado e conformidade de canal.
 
-### T12 — Comércio/serviços e onboarding multissetorial (`🔒 Travado em T11`)
+### T12 — Comércio/serviços e onboarding multissetorial (`✅ IMPLEMENTAÇÃO — CI E PÓS-MERGE OBRIGATÓRIOS`)
 - Modelos de entrada por segmento, onboarding comercial, catálogo/carrinho/ordens ou reservas conforme capabilities, relatórios e controle de planos; adapters opcionais, sem dependência rígida de qualquer PDV, agenda ou PSP.
 - **DoD:** cobertura cross-pack, configuração sem mudança de código do Core, CI cumulativa integral e aprovação do Diretor.
 

@@ -58,6 +58,10 @@ jobs:
         env:
           NODE_ENV: test
         run: npm test -- tests/t11ServiceBookingPacks.test.ts tests/t11BookingTemplates.test.ts
+      - name: T12 commerce, plan and onboarding acceptance
+        env:
+          NODE_ENV: test
+        run: npm test -- tests/t12Multisector.test.ts
       - name: T10 and T11 isolated Firestore transactional acceptance
         env:
           NODE_ENV: test
