@@ -4,6 +4,8 @@ import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import type {ScheduleRepository,ScheduleScope,ScheduleTransaction,ScheduleConfig,Booking,Occupancy,RequestReceipt,BookingPack} from './model';
 import type {CapabilityAssignment} from '../capabilities/model';
 import {capabilityTemplate} from '../capabilities/catalog';
+import {planAllows} from '../retail/plan';
+import type {Subscription} from '../plans/model';
 import type {BusinessProfileRevision} from '../business/model';
 import {asOccupancy,MAX_DURATION,reject} from './rules';
 
@@ -43,7 +45,10 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
    }
    const port:ScheduleTransaction={
     config:async()=>config,
-    grant:async(nowMs:number,pack?:BookingPack)=>{
+    grant:async(nowMs:number,pack?:BookingPack,feature?:'PAYMENTS')=>{
+     const onboard=await trx.get(db.collection('multisectorOnboarding').doc(key));
+     if(onboard.exists){const sub=(await trx.get(db.collection('subscriptions').doc(scope.tenantId))).data() as Subscription|undefined;
+      if(!planAllows(sub,scope.tenantId,nowMs)||feature&&!planAllows(sub,scope.tenantId,nowMs,feature))return false;}
      const a=await trx.get(db.collection('unitCapabilityAssignments').doc(key));
      if(!a.exists||a.get('tenantId')!==scope.tenantId||a.get('unitId')!==scope.unitId)return false;
      const v=a.get('latestVersion');

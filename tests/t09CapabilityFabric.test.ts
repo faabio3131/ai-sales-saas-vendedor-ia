@@ -115,7 +115,7 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
   expect(food).toMatchObject({templateId:'FOOD_SERVICE_STD',vertical:'FOOD_SERVICE',
    version:1,state:'ENABLED_INTERNAL'});
   expect(retail).toMatchObject({templateId:'RETAIL_STD',vertical:'RETAIL',
-   version:1,pendingCapabilities:['RETAIL_CATALOG','RETAIL_CHECKOUT','RETAIL_INVENTORY']});
+   version:1,pendingCapabilities:[]});
   expect(beauty).toMatchObject({templateId:'BEAUTY_STD',vertical:'BEAUTY',
    version:1});
   expect(food.pendingCapabilities).toHaveLength(0);
@@ -152,18 +152,13 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
   expect((await f.service.resolve(ctx('tenant-health'),'clinic','HEALTH_ADMIN')).status)
    .toBe('NOT_ENABLED');
  });
- it('não concede capabilities de varejo antes da T12',async()=>{
+ it('T12 habilita varejo somente com dependências e seleção explícita',async()=>{
   const f=environment();
-  for(const [tenant,unit,template,notReady] of [
-   ['tenant-retail','shop','RETAIL_STD','RETAIL_CHECKOUT'],
-   ['tenant-retail','shop','RETAIL_STD','RETAIL_CATALOG'],
-   ['tenant-retail','shop','RETAIL_STD','RETAIL_INVENTORY']
-  ] as const){
-   await expect(f.service.publish(ctx(tenant),unit,install(0,template,
-    ['CORE_KNOWLEDGE',notReady]))).rejects.toMatchObject({
-     code:'CAPABILITY_NOT_IMPLEMENTED'});
-   expect(await f.service.latest(ctx(tenant),unit)).toBeNull();
-  }
+  await expect(f.service.publish(ctx('tenant-retail'),'shop',install(0,'RETAIL_STD',['RETAIL_CHECKOUT'])))
+   .rejects.toMatchObject({code:'CAPABILITY_DEPENDENCY_MISSING'});
+  const a=await f.service.publish(ctx('tenant-retail'),'shop',install(0,'RETAIL_STD',['RETAIL_CATALOG','RETAIL_CHECKOUT','RETAIL_INVENTORY']));
+  expect(a.pendingCapabilities).toEqual([]);
+  expect((await f.service.resolve(ctx('tenant-retail'),'shop','RETAIL_CHECKOUT')).authorized).toBe(true);
  });
  it('valida dependências, políticas legadas de restaurante, duplicações e templates incompatíveis',async()=>{
   const f=environment();

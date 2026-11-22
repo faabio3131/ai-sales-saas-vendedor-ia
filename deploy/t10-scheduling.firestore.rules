@@ -9,6 +9,8 @@ service cloud.firestore {
     match /schedulingTenants/{document=**} {
       allow read, write: if false;
     }
+    match /retailUnits/{document=**} { allow read, write: if false; }
+    match /multisectorOnboarding/{document=**} { allow read, write: if false; }
     match /bookingContactConsents/{document=**} { allow read, write: if false; }
     match /bookingTrustedCustomerChannels/{document=**} { allow read, write: if false; }
   }
