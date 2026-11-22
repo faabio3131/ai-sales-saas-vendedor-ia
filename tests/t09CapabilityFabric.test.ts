@@ -374,6 +374,7 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
      '/capabilities/units/kitchen';
    const request=async(resource:string,options:RequestInit={})=>{
     const headers=new Headers(options.headers);
+    if(!headers.has('x-test-tenant'))headers.set('x-test-tenant','tenant-food');
     if(!headers.has('x-tenant-id'))headers.set('x-tenant-id','tenant-food');
     if(!headers.has('content-type'))headers.set('content-type','application/json');
     const res=await fetch(path+resource,{...options,headers,signal:AbortSignal.timeout(4000)});
