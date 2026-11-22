@@ -36,7 +36,7 @@ services:
           order_failed=0
           node dist/payment-reconciler.cjs || legacy_failed=1
           node dist/order-payment-workers.cjs || order_failed=1
-          if [ "$legacy_failed" -eq 0 ] && [ "$order_failed" -eq 0 ]; then
+          if [ "$$legacy_failed" -eq 0 ] && [ "$$order_failed" -eq 0 ]; then
             date +%s > /tmp/payment-reconciler.last-success
           else
             echo 'payment_reconciliation_cycle_failed' >&2
