@@ -54,12 +54,29 @@ export class TenantPaymentProviderResolver implements PaymentProviderResolver {
   async forRecordedPayment(payment:Payment):Promise<PaymentProviderInterface> {
     // Existing payments must never be sent to whichever merchant account is
     // currently configured. Unknown pre-migration bindings require investigation.
-    const current=await this.resolve(payment.tenantId,payment.provider);
-    if(!payment.merchantBindingHash||
-      !/^[a-f0-9]{64}$/.test(payment.merchantBindingHash)||
-      payment.merchantBindingHash!==current.bindingHash)
+    if(!payment.merchantBindingHash||!/^[a-f0-9]{64}$/.test(payment.merchantBindingHash))
       throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_HISTORICAL_BINDING_MISMATCH',
-        message:'Recorded merchant connection has changed; manual reconciliation required.'});
-    return current.provider;
+        message:'Historical payment requires independently verified merchant binding.'});
+    const provider=payment.provider as PaymentProviderId;
+    const active=await this.connections.get(payment.tenantId,provider);
+    if(active?.status!=='ACTIVE')
+      throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_CONNECTION_NOT_ACTIVE',
+        message:'Merchant account is disabled; manual reconciliation required.'});
+    if(merchantConnectionBindingHash(active)===payment.merchantBindingHash)
+      return (await this.resolve(payment.tenantId,provider)).provider;
+    const original=await this.connections.findGenerationByBinding?.(
+      payment.tenantId,provider,payment.merchantBindingHash);
+    if(!original||merchantConnectionBindingHash(original)!==payment.merchantBindingHash||
+      !this.createAdapter)
+      throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_HISTORICAL_BINDING_MISMATCH',
+        message:'Original payment account cannot be verified; manual reconciliation required.'});
+    // NEVER use a cached adapter keyed only by provider for historic charges.
+    const adapter=await this.createAdapter(original);
+    const bound=adapter as MercadoPagoPixProvider;
+    if(adapter.id!==provider||bound.tenantId!==payment.tenantId||
+      bound.recipientId!==original.recipientId)
+      throw new ApplicationError({category:'FORBIDDEN',code:'PAYMENT_RECIPIENT_MISMATCH',
+        message:'Archived merchant recipient is not independently verifiable.'});
+    return adapter;
   }
 }

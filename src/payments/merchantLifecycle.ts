@@ -7,6 +7,7 @@ import type {MerchantProviderConnection} from './connections';
 import type {MerchantCredentialsVault} from './merchantVault';
 import {mountedSecretReference} from './mountedVault';
 import {providerDescriptor,type PaymentProviderId} from './providerCatalog';
+import {merchantConnectionBindingHash} from './resolver';
 
 export interface ManagedMerchantConnection extends MerchantProviderConnection{
  version:number;updatedAt:string;verificationEvidenceRef?:string;verifiedAt?:string;
@@ -37,6 +38,22 @@ export class FirestoreMerchantLifecycleStore implements MerchantLifecycleStore{
    if(prior&&(prior.tenantId!==next.tenantId||prior.providerId!==next.providerId))
     throw error('PAYMENT_SCOPE_MISMATCH','FORBIDDEN');
    if(next.version!==expectedVersion+1)throw error('PAYMENT_CONNECTION_VERSION_CONFLICT','CONFLICT');
+   // Record verified merchant account generations in the same transaction.
+   // Never archive actual secrets; only an independently controlled vault ref.
+   const generations=db().collection('merchantPaymentConnectionGenerations');
+   for(const candidate of [prior,next]){
+    if(candidate?.status!=='ACTIVE'||!candidate.credentialRef||!candidate.recipientId)continue;
+    const hash=merchantConnectionBindingHash(candidate);
+    const evidence=generations.doc(hash);
+    const existing=await tx.get(evidence);
+    if(existing.exists){
+     const found=existing.data() as MerchantProviderConnection;
+     if(found.tenantId!==candidate.tenantId||found.providerId!==candidate.providerId||
+       found.recipientId!==candidate.recipientId||found.credentialRef!==candidate.credentialRef||
+       found.version!==candidate.version)
+      throw error('PAYMENT_HISTORY_INTEGRITY_CONFLICT','CONFLICT');
+    }else tx.create(evidence,candidate);
+   }
    tx.set(ref,next);
   });
  }

@@ -44,6 +44,26 @@ describe('Tenant-bound multi-PSP payment fabric',()=>{
       .rejects.toMatchObject({code:'PAYMENT_HISTORICAL_BINDING_MISMATCH'});
    }finally{repo.connections[0]=old;}
  });
+ it('recovers only an immutable archived merchant generation, never the current recipient',async()=>{
+   const old=repo.connections[0];
+   const originalBinding=(await resolver.forNewPaymentWithBinding('pizza','MERCADOPAGO')).bindingHash;
+   const archivedPayment={tenantId:'pizza',provider:'MERCADOPAGO',merchantBindingHash:originalBinding} as never;
+   repo.generations.set(originalBinding,old);
+   try{
+    repo.connections[0]={...old,recipientId:'holder-new',credentialRef:'secret/new',version:2};
+    const currentAdapter={...adapter,recipientId:'holder-new'} as unknown as PaymentProviderInterface;
+    const historyResolver=new TenantPaymentProviderResolver(repo,new Map([['MERCADOPAGO',currentAdapter]]),
+      async connection=>({id:connection.providerId,tenantId:connection.tenantId,
+        recipientId:connection.recipientId} as unknown as PaymentProviderInterface));
+    const recovered=await historyResolver.forRecordedPayment(archivedPayment);
+    expect((recovered as unknown as {recipientId:string}).recipientId).toBe('holder-a');
+    repo.generations.delete(originalBinding);
+    await expect(historyResolver.forRecordedPayment(archivedPayment))
+      .rejects.toMatchObject({code:'PAYMENT_HISTORICAL_BINDING_MISMATCH'});
+   }finally{
+    repo.connections[0]=old;repo.generations.delete(originalBinding);
+   }
+ });
  it('never switches a recorded payment to another provider',async()=>{
    await expect(resolver.forRecordedPayment({tenantId:'pizza',provider:'BANCO_INTER'} as never)).rejects.toMatchObject({code:'PAYMENT_CONNECTION_NOT_ACTIVE'});
  });
