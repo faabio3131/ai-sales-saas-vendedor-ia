@@ -1,8 +1,8 @@
 # T08.2 — Certificação interna da integração PSP + WhatsApp
 
 **Data:** 21/11/2026.  
-**Status:** implementação sob CI cumulativa da PR #22; **nenhum PSP, número Meta ou empresa real foi ativado**.  
-**Regra de promoção:** CI da PR no SHA final com SUCCESS, revisão de segurança, merge e CI da `main` pós-merge SUCCESS. Só então declarar engenharia T08.2 concluída e liberar construção T08.3. Em nenhum caso isto constitui homologação comercial.
+**Status:** implementação da T08.2 aprovada na CI da branch da PR #22; **nenhum PSP, número Meta ou empresa real foi ativado**. Commit operacional certificado: `845c7364eedfe19b5360659553c73effffa5ec48`. CI #44966258243 — SUCCESS; testes TypeScript 375 PASS, Python 7 PASS, Docker 374 PASS + 1 SKIP por ambiente, zero falhas. As revisões documentais posteriores não alteram código executável.  
+**Regra de promoção:** revisão e CI da PR no SHA final, merge e CI pós-merge da `main` SUCCESS. O histórico da PR #22 e a execução pós-merge constituem a evidência final desses dois últimos gates; o documento não presume que ocorreram antes do merge. T08.3 pode avançar em **engenharia** após a CI pós-merge, sem depender de credenciais reais. Esta certificação não constitui homologação comercial.
 
 ## Matriz de funcionalidades e verificações de engenharia
 
@@ -22,14 +22,13 @@
 | UI OWNER | Cadastro de PSP/WhatsApp por empresa, somente identificadores; painel exibe estados sem mostrar referências de cofre, chaves ou tokens | `src/ui/ProviderConnectionPanel.tsx` + build/typecheck |
 | Infraestrutura | Índice composto para inbox/24h, mount privado e descrição de operação sem informações de cliente embutidas | `deploy/whatsapp.firestore-indexes.json` e `docs/T08_2_SECURE_PROVIDER_ONBOARDING.md` |
 
-## Verificações pós-merge
+## Certificação da branch e critérios de promoção
 
-- [ ] Build + typecheck completos em HEAD final.
-- [ ] Testes TypeScript cumulativos, HTTP de segurança, mock PSP/WhatsApp, PagBank ECDSA e Python cognitivo.
-- [ ] Docker API e worker cognitivo com smoke.
-- [ ] CI da PR SUCCESS e SHA conferido.
-- [ ] PR #22 integrada em `main`.
-- [ ] CI pós-merge SUCCESS no SHA da `main`.
+- [x] Build + typecheck no commit funcional `845c7364eedfe19b5360659553c73effffa5ec48`.
+- [x] Testes cumulativos (375 TS PASS / 7 Python PASS), mocks Pix/WhatsApp, PagBank ECDSA, isolamento e HTTP de segurança.
+- [x] Docker API, worker cognitivo e configuração do reconciliador: 374 PASS / 1 SKIP.
+- [x] CI da branch #44966258243 SUCCESS no SHA funcional.
+- **Gates de promoção:** PR #22 mergeada em `main` e CI integral pós-merge no SHA resultante, com resultados registrados na PR. O aceite comercial permanece externo.
 
 ## Dependências externas, separadas da engenharia
 
