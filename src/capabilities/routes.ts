@@ -5,6 +5,7 @@ import type {BusinessProfileRepository} from '../business/contracts';
 import type {CapabilityRepository} from './model';
 import {FirestoreCapabilityRepository} from './firestoreRepository';
 import {CapabilityRegistryService} from './service';
+import {FirestoreCapabilityOperationalState,type CapabilityOperationalState} from './operationalState';
 
 function context(req:Request){
  if(!req.tenantContext)throw new ApplicationError({category:'FORBIDDEN',
@@ -14,8 +15,9 @@ function context(req:Request){
 export function createCapabilitiesRouter(
  store:CapabilityRepository=new FirestoreCapabilityRepository(),
  profiles:BusinessProfileRepository=new FirestoreBusinessProfileRepository(),
+ active:CapabilityOperationalState=new FirestoreCapabilityOperationalState(),
 ):Router{
- const router=Router(),service=new CapabilityRegistryService(store,profiles);
+ const router=Router(),service=new CapabilityRegistryService(store,profiles,()=>new Date(),active);
  router.get('/units/:unitId/catalog',(req:Request,res:Response,next)=>{
   try{res.json({ok:true,data:service.catalog(context(req),req.params.unitId)});}
   catch(e){next(e);}

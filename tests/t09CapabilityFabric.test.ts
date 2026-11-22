@@ -366,7 +366,7 @@ describe('T09 — catálogo horizontal e fronteiras contratuais de módulos',()=
    if(tenant&&tenant!=='NO_AUTH')req.tenantContext=ctx(tenant,
      req.header('x-test-role')??'OWNER');
    next();
-  },createCapabilitiesRouter(f.store,f.profiles));
+  },createCapabilitiesRouter(f.store,f.profiles,{hasOpenOrders:async()=>false}));
   app.use(errorHandler);
   const server=app.listen(0,'127.0.0.1');await once(server,'listening');
   try{
