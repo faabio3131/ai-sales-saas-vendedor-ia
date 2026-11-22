@@ -84,7 +84,7 @@ export class CapabilityRegistryService {
  }
  private validateSelection(input:CapabilityPublishInput,profile:BusinessProfileRevision){
   const template=capabilityTemplate(input.templateId);
-  if(!template||input.templateVersion!==1)invalid('CAPABILITY_TEMPLATE_UNKNOWN');
+  if(!template||input.templateVersion!==1)return invalid('CAPABILITY_TEMPLATE_UNKNOWN');
   if(template.vertical!==profile.capabilityRegistry.vertical)
    conflict('CAPABILITY_VERTICAL_MISMATCH');
   if(!Array.isArray(input.enabledCapabilities)||input.enabledCapabilities.length>32)
@@ -156,7 +156,7 @@ export class CapabilityRegistryService {
   const s=reader(ctx,unitId);
   const profile=await this.profile(s.tenantId,s.unitId,this.clock().toISOString());
   const template=templateForVertical(profile.capabilityRegistry.vertical);
-  if(!template)invalid('CAPABILITY_TEMPLATE_UNKNOWN');
+  if(!template)return invalid('CAPABILITY_TEMPLATE_UNKNOWN');
   return this.append(ctx,unitId,{
    expectedVersion:version(p.expectedVersion,true),
    templateId:template.id,templateVersion:1,
