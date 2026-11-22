@@ -107,6 +107,7 @@ describe('Provider-specific payment webhook authentication',()=>{
  });
 });
 class FakeVerifiedInbox implements VerifiedWebhookRecoveryRepository{
+ state?: (id:string)=>Promise<VerifiedWebhookDelivery['state']|null>;
  readonly rows=new Map<string,VerifiedWebhookDelivery>();
  async enqueue(e:VerifiedWebhookKey,now:number){
   const id=verifiedWebhookDeliveryId(e);
@@ -143,6 +144,8 @@ describe('T13 durable authenticated webhook inbox and retry',()=>{
   await expect(processor.process(delivery))
    .rejects.toMatchObject({code:'PAYMENT_WEBHOOK_REFERENCE_UNMATCHED'});
   expect(inbox.rows.size).toBe(1);
+  // A failed signed callback is delayed for retry, never processed immediately in a hot loop.
+  [...inbox.rows.values()][0].nextAttemptAt=0;
   const retry=new VerifiedWebhookRecoveryWorker(inbox,event=>processor.reconcileVerified(event),()=>Date.now());
   found=true;
   expect((await retry.runOnce()).reconciled).toBe(1);
@@ -183,5 +186,33 @@ describe('Recurring payment reconciliation worker',()=>{
   expect(result.failed).toBe(1);
   expect(result.confirmed).toBe(0);
   expect(store.completed).toEqual(['record-1:false']);
+ });
+});
+
+describe('T13 independent audit PAG-001: synchronous delivery is leased',()=>{
+ it('never concurrently refreshes the same signed event and acknowledges completed redelivery',async()=>{
+  const inbox=new FakeVerifiedInbox();
+  inbox.state=async id=>inbox.rows.get(id)?.state??null;
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const refresh=vi.fn(async()=>{
+   await gate;
+   return {...payment,status:'CONFIRMED' as const};
+  });
+  const processor=new PaymentWebhookProcessor({connections,vault,payments,
+   service:{refresh},recovery:inbox});
+  const input={provider:'ASAAS',tenantId:tenant,headers:asaasHeaders,
+   rawBody:raw,payload:JSON.parse(raw.toString('utf8'))};
+  const first=processor.process(input);
+  const second=processor.process(input);
+  await new Promise(resolve=>setTimeout(resolve,15));
+  release();
+  const results=await Promise.allSettled([first,second]);
+  expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+  expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect([...inbox.rows.values()][0]?.state).toBe('COMPLETED');
+  expect(await processor.process(input)).toEqual([]);
+  expect(refresh).toHaveBeenCalledTimes(1);
  });
 });

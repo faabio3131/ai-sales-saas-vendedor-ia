@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 
@@ -6,13 +6,15 @@ export interface VerifiedWebhookDelivery {
  id:string;tenantId:string;provider:string;providerPaymentId:string;eventId:string;
  state:'PENDING'|'COMPLETED'|'DLQ';attempts:number;nextAttemptAt:number;
  leaseUntil:number;firstSeenAt:number;updatedAt:number;lastErrorCode?:string;
+ leaseToken?:string;
 }
 export type VerifiedWebhookKey=Pick<VerifiedWebhookDelivery,'tenantId'|'provider'|'providerPaymentId'|'eventId'>;
 export interface VerifiedWebhookRecoveryRepository {
  enqueue(event:VerifiedWebhookKey,now:number):Promise<void>;
  due(limit:number,now:number):Promise<VerifiedWebhookDelivery[]>;
- claim(id:string,now:number):Promise<boolean>;
- finish(id:string,now:number,success:boolean,reason:string):Promise<void>;
+ claim(id:string,now:number):Promise<boolean|string>;
+ finish(id:string,now:number,success:boolean,reason:string,leaseToken?:string):Promise<void>;
+ state?(id:string):Promise<VerifiedWebhookDelivery['state']|null>;
 }
 export function verifiedWebhookDeliveryId(e:VerifiedWebhookKey):string{
  return createHash('sha256').update(JSON.stringify([
@@ -37,23 +39,30 @@ export class FirestoreVerifiedWebhookRecoveryRepository implements VerifiedWebho
    .limit(Math.min(100,Math.max(1,Math.floor(limit)))).get();
   return page.docs.map(d=>d.data() as VerifiedWebhookDelivery);
  }
- async claim(id:string,now:number):Promise<boolean>{
+ async state(id:string):Promise<VerifiedWebhookDelivery['state']|null>{
+  const old=(await table().doc(id).get()).data() as VerifiedWebhookDelivery|undefined;
+  return old?.id===id?old.state:null;
+ }
+ async claim(id:string,now:number):Promise<string|false>{
   const ref=table().doc(id);
   return getFirestore(ensureFirebaseAdminApp()).runTransaction(async tx=>{
    const old=(await tx.get(ref)).data() as VerifiedWebhookDelivery|undefined;
    if(!old||old.id!==id||old.state!=='PENDING'||
      old.nextAttemptAt>now||old.leaseUntil>now)return false;
-   tx.set(ref,{...old,leaseUntil:now+120000,updatedAt:now});
-   return true;
+   const leaseToken=randomUUID();
+   tx.set(ref,{...old,leaseToken,leaseUntil:now+120000,updatedAt:now});
+   return leaseToken;
   });
  }
- async finish(id:string,now:number,success:boolean,reason:string):Promise<void>{
+ async finish(id:string,now:number,success:boolean,reason:string,leaseToken?:string):Promise<void>{
   const ref=table().doc(id);
   await getFirestore(ensureFirebaseAdminApp()).runTransaction(async tx=>{
    const old=(await tx.get(ref)).data() as VerifiedWebhookDelivery|undefined;
-   if(!old||old.id!==id||old.state==='COMPLETED'||old.state==='DLQ')return;
+   // A timed-out worker must never finalize a newer worker's lease.
+   if(!old||old.id!==id||old.state!=='PENDING'||!leaseToken||
+     old.leaseToken!==leaseToken)return;
    const attempts=old.attempts+1,dlq=!success&&attempts>=8;
-   const next:VerifiedWebhookDelivery={...old,attempts,leaseUntil:0,updatedAt:now,
+   const next:VerifiedWebhookDelivery={...old,attempts,leaseUntil:0,leaseToken:'',updatedAt:now,
     state:success?'COMPLETED':dlq?'DLQ':'PENDING',
     nextAttemptAt:success||dlq?Number.MAX_SAFE_INTEGER:
       now+Math.min(3600000,30000*2**Math.min(attempts,7)),
@@ -78,15 +87,18 @@ export class VerifiedWebhookRecoveryWorker {
   const entries=await this.store.due(limit,this.now());
   for(const row of entries){
    summary.scanned++;
-   if(!await this.store.claim(row.id,this.now())){summary.skipped++;continue;}
+   const claim=await this.store.claim(row.id,this.now());
+   if(!claim){summary.skipped++;continue;}
+   // In-memory adapters may return true; Firestore uses fenced lease tokens.
+   const leaseToken=typeof claim==='string'?claim:undefined;
    summary.claimed++;
    try{
     const verified=await this.refresh(row);
     if(!verified)throw Error('Missing verified status');
-    await this.store.finish(row.id,this.now(),true,'PSP_GET_VERIFIED');
+    await this.store.finish(row.id,this.now(),true,'PSP_GET_VERIFIED',leaseToken);
     summary.reconciled++;
    }catch{
-    await this.store.finish(row.id,this.now(),false,'PSP_RECONCILIATION_FAILED');
+    await this.store.finish(row.id,this.now(),false,'PSP_RECONCILIATION_FAILED',leaseToken);
     summary.failed++;
    }
   }

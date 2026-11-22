@@ -10,6 +10,7 @@ import type {MerchantCredentialsVault} from './merchantVault';
 import type {PaymentRepository} from './contracts';
 import type {VerifiedPaymentWebhookLedger} from './webhookLedger';
 import type {MultisectorWebhookResult,MultisectorWebhookService} from './multisectorWebhook';
+import {verifiedWebhookDeliveryId} from './webhookRecovery';
 import type {VerifiedWebhookKey,VerifiedWebhookRecoveryRepository} from './webhookRecovery';
 
 type Headers=Record<string,string|string[]|undefined>;
@@ -155,12 +156,34 @@ export class PaymentWebhookProcessor {
    const delivery={tenantId,provider,eventId:event.eventId,providerPaymentId};
    // Persist only signed notification coordinates before attempting PSP GET.
    // Unknown payment references and temporary PSP errors remain retryable.
-   await this.runtime.recovery?.enqueue(delivery,Date.now());
-   const status=await this.reconcileVerified(delivery);
-   await this.runtime.recovery?.finish(
-    (await import('./webhookRecovery')).verifiedWebhookDeliveryId(delivery),
-    Date.now(),true,'PSP_GET_VERIFIED');
-   statuses.push(status);
+   const recovery=this.runtime.recovery;
+   if(!recovery){
+    // Production must not acknowledge an event that has no durable retry path.
+    if(process.env.NODE_ENV==='production')
+     throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_DURABLE_INBOX_REQUIRED',
+      message:'Verified webhook recovery inbox is required.'});
+    statuses.push(await this.reconcileVerified(delivery));
+    continue;
+   }
+   await recovery.enqueue(delivery,Date.now());
+   const id=verifiedWebhookDeliveryId(delivery);
+   const claim=await recovery.claim(id,Date.now());
+   if(!claim){
+    // Duplicate delivery already reconciled: safe acknowledgement without replay.
+    if(await recovery.state?.(id)==='COMPLETED')continue;
+    // Another worker owns the lease or retry is delayed: keep the PSP retryable.
+    throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_RECONCILIATION_IN_PROGRESS',
+     message:'Verified event is queued or being reconciled.'});
+   }
+   const leaseToken=typeof claim==='string'?claim:undefined;
+   try{
+    const status=await this.reconcileVerified(delivery);
+    await recovery.finish(id,Date.now(),true,'PSP_GET_VERIFIED',leaseToken);
+    statuses.push(status);
+   }catch(error){
+    await recovery.finish(id,Date.now(),false,'PSP_RECONCILIATION_FAILED',leaseToken);
+    throw error;
+   }
   }
   return statuses;
  }
