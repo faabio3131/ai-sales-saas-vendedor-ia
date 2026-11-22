@@ -1,7 +1,7 @@
 import type {Booking,BookingNotice,ScheduleRepository,ScheduleScope} from '../scheduling/model';
 import type {TenantContext} from '../types/contracts';
 import type {CustomerRepository} from '../customers/contracts';
-import type {VerifiedCustomerChannelRepository} from '../fulfillment/trustedChannelIdentity';
+import type {VerifiedCustomerChannel} from '../fulfillment/trustedChannelIdentity';
 import type {ContactConsentRepository} from '../governance/repository';
 import type {WhatsAppCustomerServicePolicy,WhatsAppSendInput} from '../channels/whatsappDelivery';
 import {requirePilotLiveFeature} from '../operations/pilotFlags';
@@ -10,6 +10,7 @@ import {id,integer,object,reject} from '../scheduling/rules';
 import {SchedulingService} from '../scheduling/service';
 import {appointmentParameter,bookingTemplateBody,type PackUtilityTemplatePort} from './templates';
 
+export interface PackIdentityPort{get(t:string,c:string,channel:'WHATSAPP',u:string):Promise<VerifiedCustomerChannel|null>;}
 export interface PackSender{
  send(input:WhatsAppSendInput):Promise<{externalMessageId:string;duplicate:boolean}>;
 }
@@ -30,7 +31,7 @@ export function noticeText(b:Booking,n:BookingNotice){
 export class PackNoticeService{
  constructor(private readonly store:ScheduleRepository,private readonly scheduling:SchedulingService,
   private readonly customers:Pick<CustomerRepository,'findById'>,
-  private readonly identities:VerifiedCustomerChannelRepository,
+  private readonly identities:PackIdentityPort,
   private readonly consent:Pick<ContactConsentRepository,'get'>,
   private readonly window:WhatsAppCustomerServicePolicy,
   private readonly sender:PackSender,
@@ -53,7 +54,7 @@ export class PackNoticeService{
  }
  private async trusted(s:ScheduleScope,b:Booking):Promise<string|null>{
   const [customer,identity,consent]=await Promise.all([
-   this.customers.findById(s.tenantId,b.customerId),this.identities.get(s.tenantId,b.customerId,'WHATSAPP'),
+   this.customers.findById(s.tenantId,b.customerId),this.identities.get(s.tenantId,b.customerId,'WHATSAPP',s.unitId),
    this.consent.get(s.tenantId,s.unitId,b.customerId)]);
   const now=this.scheduling.now();
   if(!customer||customer.tenantId!==s.tenantId||customer.id!==b.customerId||customer.status!=='ACTIVE'||

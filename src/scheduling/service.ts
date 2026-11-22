@@ -194,6 +194,8 @@ export class SchedulingService{
    async(_tx,b,now)=>{
     if(b.checkedInAt||b.status!=='HELD'&&b.status!=='CONFIRMED'||b.startMs<=now)
      return reject('SCHEDULE_CANCEL_INVALID','CONFLICT');
+    if(b.pack?.kind==='AESTHETICS_ADMIN'&&!['Solicitação do cliente','Solicitação do estabelecimento','Imprevisto operacional','Outro motivo administrativo'].includes(why))
+     return reject('PACK_ADMINISTRATIVE_REASON_REQUIRED');
     const next=this.terminate(b,ctx,now,'CANCELLED',why);
     if(!b.pack)return next;
     return this.notice({...next,lateCancellation:b.status==='CONFIRMED'&&b.startMs-now<b.pack.cancelNoticeMinutes*MINUTE},'CANCELLATION',now);

@@ -10,6 +10,7 @@ import type {NormalizedInboundMessage} from './contracts';
 import {FirestoreWhatsAppConnectionStore,channelError,CHANNEL_UNIT,CHANNEL_TENANT,
  type WhatsAppConnectionStore,type WhatsAppConnection} from './whatsappConnections';
 import {createWhatsAppVault,type WhatsAppCredentialsVault} from './whatsappVault';
+import {stageBookingContactProof} from '../bookingPacks/contactTrust';
 
 export function verifyMetaSignature(raw:Buffer,signature:unknown,appSecret:string):boolean{
  if(!raw.length||raw.length>256*1024||typeof signature!=='string'||
@@ -55,17 +56,18 @@ export class FirestoreWhatsAppInbox implements WhatsAppInbox{
   if(message.tenantId!==conn.tenantId||message.externalAccountRef!==conn.phoneNumberId||
    !message.externalMessageId||message.externalMessageId.length>220)
    throw channelError('CHANNEL_INBOX_ACCOUNT_MISMATCH');
-  const ref=db().collection('whatsappInboundInbox').doc(whatsappMessageKey(conn,message));
-  try{
-   await ref.create({tenantId:conn.tenantId,unitId:conn.unitId,channel:'WHATSAPP',
+  const database=db(),ref=database.collection('whatsappInboundInbox').doc(whatsappMessageKey(conn,message));
+  return database.runTransaction(async tx=>{
+   const existing=await tx.get(ref);
+   if(existing.exists)return false;
+   const now=Date.now();
+   const apply=await stageBookingContactProof(database,tx,conn,message,'whatsapp-inbox:'+ref.id,now);
+   tx.create(ref,{tenantId:conn.tenantId,unitId:conn.unitId,channel:'WHATSAPP',
     phoneNumberId:conn.phoneNumberId,
     event:Object.fromEntries(Object.entries(message).filter(([,value])=>value!==undefined)),state:'RECEIVED',
-    receivedAt:new Date().toISOString()});
-   return true;
-  }catch(error){
-   if((error as {code?:unknown}).code===6)return false;
-   throw error;
-  }
+    receivedAt:new Date(now).toISOString()});
+   apply();return true;
+  });
  }
 }
 function forbidden(res:Response){res.status(401).json({ok:false});}

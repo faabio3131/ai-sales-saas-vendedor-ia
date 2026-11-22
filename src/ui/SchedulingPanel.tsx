@@ -269,6 +269,7 @@ export function SchedulingPanel({tenantId,unitId,role,availablePacks=[]}:{tenant
     <p className="text-sm text-slate-400">Sinal: {selected.deposit.status} · R$ {(selected.deposit.amountMinor/100).toFixed(2)} · Lembrete: {selected.reminder?.state??'—'}</p>
     <button disabled={busy} className={btn} onClick={()=>void run(async()=>{const b=await api<Booking>(prefix+'/bookings/'+selected.id);setSelected(b);setBookings(old=>old.map(x=>x.id===b.id?b:x));})}>Atualizar estado</button>
     {selected.pack&&<div className="space-y-1 text-sm text-slate-300"><p>{packNames[selected.pack.kind]} · Total {money(selected.pack.priceMinor)} · Política v{selected.pack.configVersion}</p>
+     {selected.pack.notifyWhatsApp&&(selected.status==='HELD'||selected.status==='CONFIRMED')&&<p className="break-all text-xs text-slate-400">Para consentimento de avisos, o cliente deve enviar ao WhatsApp oficial: <strong>AUTORIZO AVISOS DE AGENDAMENTO {selected.id}</strong>. Para revogar: CANCELAR AVISOS DE AGENDAMENTO.</p>}
      {selected.checkedInAt&&<p>Presença registrada: {new Date(selected.checkedInAt).toLocaleString('pt-BR',{timeZone:selected.timezone})}</p>}
      {selected.lateCancellation&&<p className="text-amber-300">Cancelamento fora da antecedência configurada; revisão humana.</p>}
      {selected.status==='NO_SHOW'&&<p className="text-amber-300">Falta registrada; revisar eventual sinal, sem desconto automático.</p>}
@@ -289,7 +290,7 @@ export function SchedulingPanel({tenantId,unitId,role,availablePacks=[]}:{tenant
     {(selected.status==='HELD'||selected.status==='CONFIRMED')&&<div className="space-y-2">
      <p className="text-xs text-slate-400">Para reagendar, consulte o mesmo serviço e selecione um novo horário disponível acima.</p>
      <button disabled={busy||!startAt||serviceId!==selected.serviceId||!professionalId} className={btn} onClick={()=>void command('/reschedule',{professionalId,startAt})}>Reagendar atomicamente</button>
-     {label('Motivo do cancelamento',<input className={field} value={why} onChange={e=>setWhy(e.target.value)}/>)}
+     {label('Motivo do cancelamento',selected.pack?.kind==='AESTHETICS_ADMIN'?<select className={field} value={why} onChange={e=>setWhy(e.target.value)}>{['Solicitação do cliente','Solicitação do estabelecimento','Imprevisto operacional','Outro motivo administrativo'].map(r=><option key={r}>{r}</option>)}</select>:<input className={field} value={why} onChange={e=>setWhy(e.target.value)}/>)}
      <button disabled={busy||!why} className={btn} onClick={()=>void command('/cancel',{reason:why})}>Cancelar reserva</button>
     </div>}
     {selected.status==='CONFIRMED'&&<>
