@@ -23,6 +23,9 @@ function scanSource(filename,contents){
   filename.endsWith('tsx')?ts.ScriptKind.TSX:
   /\.(?:ts|mts|cts)$/.test(filename)?ts.ScriptKind.TS:ts.ScriptKind.JS);
  const findings=[];
+ // The provenance manifest uses execFileSync with static program and argument
+ // arrays (without a shell). It is the only tightly scoped exception.
+ const provenance=path.relative(ROOT,filename).replaceAll('\\','/')==='scripts/t13EvidenceManifest.mjs';
  const unsafe=new Set(['exec','execSync']);
  const imported=new Set();
  const namespaces=new Set(['child_process']);
@@ -70,10 +73,26 @@ function scanSource(filename,contents){
   // including no-substitution template literals and alias indirections.
   // This blocks cross-file shim reexports without claiming full dataflow SAST.
   if((ts.isStringLiteral(node)||ts.isNoSubstitutionTemplateLiteral(node))&&
-     /^(?:node:)?(?:child_process|vm)$/.test(node.text))
+     /^(?:node:)?(?:child_process|vm)$/.test(node.text)&&
+     !(provenance&&/^(?:node:)?child_process$/.test(node.text)))
     flag(node,'FORBIDDEN_EXECUTION_MODULE');
+  if(provenance&&ts.isImportDeclaration(node)&&isModule(node.moduleSpecifier)){
+    const bindings=node.importClause?.namedBindings;
+    if(!bindings||!ts.isNamedImports(bindings)||
+       bindings.elements.length!==1||
+       (bindings.elements[0].propertyName??bindings.elements[0].name).text!=='execFileSync')
+      flag(node,'PROVENANCE_UNSAFE_PROCESS_BINDING');
+  }
   if(ts.isCallExpression(node)){
    const fn=node.expression;
+   if(provenance&&ts.isIdentifier(fn)&&fn.text==='execFileSync'){
+     const binary=node.arguments[0];
+     if(!binary||!ts.isStringLiteral(binary)||!['git','docker'].includes(binary.text)||
+        !node.arguments[1]||!ts.isArrayLiteralExpression(node.arguments[1])||
+        node.arguments[1].elements.some(a=>!ts.isStringLiteral(a))||
+        node.arguments.slice(2).some(a=>a.getText(source).includes('shell')))
+       flag(node,'PROVENANCE_DYNAMIC_PROCESS_EXECUTION');
+   }
    if(ts.isIdentifier(fn)&&(['eval','Function'].includes(fn.text)||imported.has(fn.text)))
     flag(node,imported.has(fn.text)?'UNSAFE_PROCESS_EXECUTION':'DYNAMIC_CODE_EXECUTION');
    if(ts.isPropertyAccessExpression(fn)&&
