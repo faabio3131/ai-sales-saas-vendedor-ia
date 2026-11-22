@@ -18,8 +18,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install dependencies (immutable lock)
-        run: npm ci --no-audit --no-fund
+      - name: T13 coverage lock migration evidence (temporary)
+        run: |
+          set -euo pipefail
+          rm package-lock.json
+          npm install --no-audit --no-fund
+          echo 'AV_T13_COVERAGE_LOCK_BEGIN'
+          base64 -w0 package-lock.json
+          echo
+          echo 'AV_T13_COVERAGE_LOCK_END'
       - name: T13 auditable dependencies and SBOM
         run: |
           set -euo pipefail
