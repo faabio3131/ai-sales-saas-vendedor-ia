@@ -3,10 +3,12 @@ import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {PaymentStatus} from './model';
 import type {OrderPaymentStatus} from '../orderPayments/model';
+import type {MultisectorWebhookResult} from './multisectorWebhook';
 
 export interface VerifiedPaymentWebhookEvent {
  tenantId:string;provider:string;eventId:string;providerPaymentId:string;
- paymentId:string;verifiedStatus:PaymentStatus|OrderPaymentStatus;
+ paymentId:string;verifiedStatus:PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status'];
+ domain?:'ORDER_PAYMENT'|'RETAIL'|'BOOKING_DEPOSIT';
 }
 export interface VerifiedPaymentWebhookLedger {
  record(event:VerifiedPaymentWebhookEvent):Promise<void>;

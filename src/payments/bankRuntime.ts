@@ -12,6 +12,7 @@ import {SalesFiscalHandoffService} from '../fiscal/service';
 import {StructuralPaymentProvider} from './provider';
 import {PaymentService} from './service';
 import {FirestoreVerifiedWebhookLedger} from './webhookLedger';
+import {FirestoreMultisectorWebhookService} from './multisectorWebhook';
 
 export function createBankPaymentRuntime(){
  const payments=new FirestorePaymentRepository();
@@ -27,5 +28,6 @@ export function createBankPaymentRuntime(){
   quotes,new StructuralPaymentProvider(),fiscal,undefined,resolver);
  const orderRuntime=createOrderPaymentRuntime();
  return {payments,connections,vault,resolver,service,audit:new FirestoreVerifiedWebhookLedger(),
-  orderPayments:orderRuntime.store,orderService:orderRuntime.service};
+  orderPayments:orderRuntime.store,orderService:orderRuntime.service,
+  multisector:new FirestoreMultisectorWebhookService(resolver)};
 }

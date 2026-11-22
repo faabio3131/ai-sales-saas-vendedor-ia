@@ -9,6 +9,7 @@ import type {MerchantProviderConnectionRepository} from './connections';
 import type {MerchantCredentialsVault} from './merchantVault';
 import type {PaymentRepository} from './contracts';
 import type {VerifiedPaymentWebhookLedger} from './webhookLedger';
+import type {MultisectorWebhookResult,MultisectorWebhookService} from './multisectorWebhook';
 
 type Headers=Record<string,string|string[]|undefined>;
 type EventDetails={paymentIds:string[];eventId:string};
@@ -131,12 +132,13 @@ export interface PaymentWebhookRuntime {
  audit?:VerifiedPaymentWebhookLedger;
  orderPayments?:Pick<OrderPaymentRepository,'byProvider'>;
  orderService?:Pick<OrderPaymentService,'refreshFromWebhook'>;
+ multisector?:MultisectorWebhookService;
 }
 export class PaymentWebhookProcessor {
  constructor(private readonly runtime:PaymentWebhookRuntime){}
  async process(input:{
   provider:string;tenantId:string;headers:Headers;rawBody:Buffer;payload:unknown;
- }):Promise<Array<PaymentStatus|OrderPaymentStatus>>{
+ }):Promise<Array<PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status']>>{
   const {provider,tenantId,headers,rawBody,payload}=input;
   if(!ENABLED_WEBHOOK_PROVIDERS.has(provider)||!tenantId||tenantId.length>150)return deny();
   const connection=await this.runtime.connections.get(tenantId,provider as PaymentProviderId);
@@ -146,7 +148,7 @@ export class PaymentWebhookProcessor {
   if(!authorizePaymentWebhook({provider,tenantId,headers,rawBody,secret:secrets.webhookSecret??'',
    publicKeyBase64:secrets.webhookPublicKeyBase64}))return deny();
   const event=parsePaymentWebhook(provider,payload);
-  const statuses:Array<PaymentStatus|OrderPaymentStatus>=[];
+  const statuses:Array<PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status']>=[];
   for(const providerPaymentId of event.paymentIds){
    const persisted=await this.runtime.payments.findByProviderPaymentId(tenantId,provider,providerPaymentId);
    // Webhook payload status is NEVER used. Only tenant-bound PSP GET can
@@ -161,14 +163,27 @@ export class PaymentWebhookProcessor {
     continue;
    }
    const orderPayment=await this.runtime.orderPayments?.byProvider(tenantId,provider,providerPaymentId);
-   if(!orderPayment||!this.runtime.orderService)return deny();
-   const result=await this.runtime.orderService.refreshFromWebhook(tenantId,provider,providerPaymentId);
-   if(!result)return deny();
+   if(orderPayment&&this.runtime.orderService){
+    const result=await this.runtime.orderService.refreshFromWebhook(tenantId,provider,providerPaymentId);
+    if(!result)return deny();
+    await this.runtime.audit?.record({
+     tenantId,provider,eventId:event.eventId,providerPaymentId,
+     paymentId:orderPayment.id,verifiedStatus:result.status,domain:'ORDER_PAYMENT',
+    });
+    statuses.push(result.status);
+    continue;
+   }
+   // The same verified notification can also refer to retail checkout or
+   // scheduled-service deposits. Never trust its claimed settlement state.
+   const multi=await this.runtime.multisector?.refreshVerified(tenantId,provider,providerPaymentId);
+   if(!multi)
+    throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_REFERENCE_UNMATCHED',
+      message:'Authenticated payment notification has no uniquely bound source.'});
    await this.runtime.audit?.record({
     tenantId,provider,eventId:event.eventId,providerPaymentId,
-    paymentId:orderPayment.id,verifiedStatus:result.status,
+    paymentId:multi.paymentId,verifiedStatus:multi.status,domain:multi.domain,
    });
-   statuses.push(result.status);
+   statuses.push(multi.status);
   }
   return statuses;
  }

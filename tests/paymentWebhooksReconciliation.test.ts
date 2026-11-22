@@ -53,6 +53,28 @@ describe('Provider-specific payment webhook authentication',()=>{
   await expect(processor.process({provider:'ASAAS',tenantId:'attacker',headers:asaasHeaders,
    rawBody:raw,payload:JSON.parse(raw.toString('utf8'))})).rejects.toMatchObject({code:'PAYMENT_WEBHOOK_UNAUTHORIZED'});
  });
+ it('routes authenticated notifications for retail and bookings using PSP GET, never payload state',async()=>{
+  const noLegacy:PaymentRepository={...payments,findByProviderPaymentId:async()=>null};
+  for(const domain of ['RETAIL','BOOKING_DEPOSIT'] as const){
+   const refreshVerified=vi.fn(async()=>({domain,paymentId:'sector-record',status:'VERIFIED' as const}));
+   const audit=new InMemoryVerifiedWebhookLedger();
+   const processor=new PaymentWebhookProcessor({connections,vault,payments:noLegacy,
+    service:{refresh:vi.fn()},multisector:{refreshVerified},audit});
+   const result=await processor.process({provider:'ASAAS',tenantId:tenant,headers:asaasHeaders,
+    rawBody:raw,payload:JSON.parse(raw.toString('utf8'))});
+   expect(result).toEqual(['VERIFIED']);
+   expect(refreshVerified).toHaveBeenCalledWith(tenant,'ASAAS','pay_123');
+   expect([...audit.events.values()][0]).toMatchObject({domain,paymentId:'sector-record',verifiedStatus:'VERIFIED'});
+  }
+ });
+ it('returns retryable conflict for an unmatched but authenticated PSP notification',async()=>{
+  const noLegacy:PaymentRepository={...payments,findByProviderPaymentId:async()=>null};
+  const processor=new PaymentWebhookProcessor({connections,vault,payments:noLegacy,
+   service:{refresh:vi.fn()},multisector:{refreshVerified:async()=>null}});
+  await expect(processor.process({provider:'ASAAS',tenantId:tenant,headers:asaasHeaders,
+   rawBody:raw,payload:JSON.parse(raw.toString('utf8'))}))
+   .rejects.toMatchObject({code:'PAYMENT_WEBHOOK_REFERENCE_UNMATCHED'});
+ });
  it('verifies Pagarme HMAC-SHA256 of exact raw bytes (not parsed JSON)',()=>{
   const body=Buffer.from('{"id":"evt-88","data":{"order":{"id":"or_456"}}}');
   const signature=createHmac('sha256',secret).update(body).digest('hex');
