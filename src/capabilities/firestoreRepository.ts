@@ -6,8 +6,8 @@ import type {CapabilityRepository,CapabilityAssignment} from './model';
 import {blocksActiveFoodOperations} from './operationalState';
 
 const db=()=>getFirestore(ensureFirebaseAdminApp());
-function key(t:string,u:string){
- return createHash('sha256').update(JSON.stringify([t,u])).digest('hex');
+function key(...pieces:string[]){
+ return createHash('sha256').update(JSON.stringify(pieces)).digest('hex');
 }
 function failure(code:string):never{
  throw new ApplicationError({category:'CONFLICT',code,message:'Capability assignment changed or has invalid scope.'});
