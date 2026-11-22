@@ -51,6 +51,15 @@ describe.skipIf(!enabled)('T10 Firestore emulator transaction and ledger accepta
   expect(versions.size).toBe(2);
   expect((await db.collection('schedulingTenants').doc(scopedKey(t)).collection('occupancy').doc(b.id).get()).get('status')).toBe('CONFIRMED');
  },60000);
+ it('unauthed browser clients cannot read or alter scheduling ledgers directly',async()=>{
+  const t=tenant(),{s,ctx}=await provision(t,'main');
+  const b=await s.reserve(ctx,'main',input(t));
+  const url='http://127.0.0.1:8089/v1/projects/demo-atendevende-t10/databases/(default)/documents/schedulingUnits/'+scopedKey(t,'main')+'/bookings/'+b.id;
+  expect((await fetch(url)).status).toBe(403);
+  const write=await fetch(url,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({fields:{status:{stringValue:'CONFIRMED'}}})});
+  expect(write.status).toBe(403);
+  expect((await s.get(ctx,'main',b.id)).status).toBe('HELD');
+ },60000);
  it('real storage locks shared resources across units, strips customer data from occupancy, and isolates other tenants',async()=>{
   const t=tenant(),other=tenant(),a=await provision(t,'main'),b=await provision(t,'second'),c=await provision(other,'main');
   const held=await a.s.reserve(a.ctx,'main',input(t));

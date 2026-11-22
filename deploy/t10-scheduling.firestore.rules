@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Scheduling API uses a server-only Admin SDK. No Firebase client is
+    // allowed to read raw reservations, occupancy, receipts, or revisions.
+    match /schedulingUnits/{document=**} {
+      allow read, write: if false;
+    }
+    match /schedulingTenants/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

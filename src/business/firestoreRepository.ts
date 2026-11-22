@@ -56,6 +56,7 @@ export class FirestoreBusinessProfileRepository implements BusinessProfileReposi
           currentRevision.capabilityRegistry.operationMode!==next.capabilityRegistry.operationMode||
           currentRevision.policy.timezone!==next.policy.timezone)){
           const now=Date.now();
+          await tx.get(db().collection('schedulingTenants').doc(key(next.tenantId)));
           const activeBookings=await tx.get(db().collection('schedulingUnits')
             .doc(key(next.tenantId,next.unitId)).collection('bookings')
             .where('endMs','>',now).limit(1001));

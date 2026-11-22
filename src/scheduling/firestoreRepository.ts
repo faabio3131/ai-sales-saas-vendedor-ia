@@ -3,6 +3,7 @@ import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import type {ScheduleRepository,ScheduleScope,ScheduleTransaction,ScheduleConfig,Booking,Occupancy,RequestReceipt} from './model';
 import type {CapabilityAssignment} from '../capabilities/model';
+import {capabilityTemplate} from '../capabilities/catalog';
 import type {BusinessProfileRevision} from '../business/model';
 import {asOccupancy,MAX_DURATION,reject} from './rules';
 
@@ -50,7 +51,8 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
      const ar=await trx.get(a.ref.collection('versions').doc(String(v)));
      const assignment=ar.data() as CapabilityAssignment|undefined;
      if(!assignment||assignment.tenantId!==scope.tenantId||assignment.unitId!==scope.unitId||
-       assignment.version!==v||assignment.state!=='ENABLED_INTERNAL'||
+       assignment.schemaVersion!==1||assignment.templateVersion!==1||assignment.version!==v||assignment.state!=='ENABLED_INTERNAL'||
+       capabilityTemplate(assignment.templateId)?.vertical!==assignment.vertical||
        assignment.operationMode!=='NATIVE_OPERATIONS'||
        !assignment.enabledCapabilities.includes('SCHEDULING')||
        !assignment.enabledCapabilities.includes('SERVICE_CATALOG'))return false;

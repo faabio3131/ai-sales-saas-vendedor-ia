@@ -70,6 +70,7 @@ export class FirestoreCapabilityRepository implements CapabilityRepository {
       !next.enabledCapabilities.includes('SERVICE_CATALOG')||previous.vertical!==next.vertical||
       previous.operationMode!==next.operationMode)){
     const now=Date.now();
+    await tx.get(db().collection('schedulingTenants').doc(key(next.tenantId)));
     const pending=await tx.get(db().collection('schedulingUnits').doc(key(next.tenantId,next.unitId))
       .collection('bookings').where('endMs','>',now).limit(1001));
     if(pending.size>1000||pending.docs.some(d=>d.get('status')==='CONFIRMED'||
