@@ -66,7 +66,7 @@ describe('Tenant-bound multi-PSP payment fabric',()=>{
     const mutable={...pinned,credentialRef:'projects/merchant-prod/secrets/avpay-account/versions/latest'};
     const mutableHash=merchantConnectionBindingHash(mutable);
     repo.generations.set(mutableHash,mutable);
-    await expect(historyResolver.forRecordedPayment({...archivedPayment,merchantBindingHash:mutableHash}))
+    await expect(historyResolver.forRecordedPayment({tenantId:'pizza',provider:'MERCADOPAGO',merchantBindingHash:mutableHash} as never))
       .rejects.toMatchObject({code:'PAYMENT_HISTORICAL_CREDENTIAL_GENERATION_REQUIRED'});
     repo.generations.delete(mutableHash);
    }finally{
