@@ -18,15 +18,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: T13 coverage lock migration evidence (temporary)
-        run: |
-          set -euo pipefail
-          rm package-lock.json
-          npm install --no-audit --no-fund
-          echo 'AV_T13_COVERAGE_LOCK_BEGIN'
-          base64 -w0 package-lock.json
-          echo
-          echo 'AV_T13_COVERAGE_LOCK_END'
+      - name: Install dependencies (immutable lock)
+        run: npm ci --no-audit --no-fund
       - name: T13 auditable dependencies and SBOM
         run: |
           set -euo pipefail
@@ -62,7 +55,14 @@ jobs:
           done
           test "$READY" = 1
           node -e "const h=require('/tmp/cognitive-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
-          npm test
+          npm test -- --coverage --coverage.provider=v8 --coverage.include='src/**/*.{ts,tsx}' --coverage.reporter=json-summary
+          node scripts/t13CoverageGate.mjs coverage/coverage-summary.json
+      - name: T13 upload quantitative source coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: t13-source-coverage-json
+          path: coverage/coverage-summary.json
+          retention-days: 30
       - name: T08.4 10-journey and dual-operation-mode acceptance matrix
         env:
           NODE_ENV: test
@@ -329,3 +329,12 @@ jobs:
           except urllib.error.HTTPError as e:
             assert e.code==401,('Replay must be denied after restart',e.code)
           PY
+
+      - name: T13 candidate provenance (non-deployed, non-promoted)
+        run: node scripts/t13EvidenceManifest.mjs
+      - name: T13 upload immutable-input candidate manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: t13-candidate-evidence
+          path: t13-evidence-manifest.json
+          retention-days: 30
