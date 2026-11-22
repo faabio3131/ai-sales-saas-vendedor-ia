@@ -8,6 +8,7 @@ import {requirePilotLiveFeature} from '../operations/pilotFlags';
 import {requireBusinessAdmin} from '../business/service';
 import {id,integer,object,reject} from '../scheduling/rules';
 import {SchedulingService} from '../scheduling/service';
+import {appointmentParameter,bookingTemplateBody,type PackUtilityTemplatePort} from './templates';
 
 export interface PackSender{
  send(input:WhatsAppSendInput):Promise<{externalMessageId:string;duplicate:boolean}>;
@@ -24,15 +25,7 @@ export function packNoticeEligible(b:Booking,n:BookingNotice,now:number){
  * the claimed persisted booking, never the HTTP body or LLM.
  */
 export function noticeText(b:Booking,n:BookingNotice){
- const time=new Intl.DateTimeFormat('pt-BR',{timeZone:b.timezone,dateStyle:'short',timeStyle:'short'}).format(b.startMs);
- const labels:Record<BookingNotice['kind'],string>={
-  CONFIRMATION:'Seu agendamento foi confirmado para ',
-  RESCHEDULE:'Seu agendamento foi alterado para ',
-  CANCELLATION:'Seu agendamento de ',
-  REMINDER:'Lembrete: seu agendamento está marcado para ',
- };
- return labels[n.kind]+time+(n.kind==='CANCELLATION'?' foi cancelado.':'.')+
-  ' ('+b.timezone+'). Para informações, fale com o estabelecimento.';
+ return bookingTemplateBody(n.kind).replace('{{1}}',appointmentParameter(b));
 }
 export class PackNoticeService{
  constructor(private readonly store:ScheduleRepository,private readonly scheduling:SchedulingService,
@@ -45,7 +38,7 @@ export class PackNoticeService{
    if(process.env.NODE_ENV!=='test'&&process.env.ATENDEVENDE_BOOKING_WHATSAPP_LIVE_ENABLED!=='true')
     return reject('PACK_WHATSAPP_LIVE_DISABLED','FORBIDDEN');
    requirePilotLiveFeature('WHATSAPP_OUTBOUND',s.tenantId,s.unitId);
-  }){}
+  },private readonly templates?:PackUtilityTemplatePort){}
  private update(b:Booking,notices:BookingNotice[],now:number,actor='BOOKING_NOTICE_WORKER'):Booking{
   return {...b,notices,version:b.version+1,updatedAt:new Date(now).toISOString(),transitionBy:actor};
  }
@@ -104,7 +97,7 @@ export class PackNoticeService{
   });
   if(!claim)return 'NO_ACTION' as const;
   const {booking:b,notice:n}=claim;
-  let recipient:string;
+  let recipient:string,prepared:(()=>Promise<{externalMessageId:string;duplicate:boolean}>)|undefined;
   try{
    this.live(s);
    const verified=await this.trusted(s,b);
@@ -113,8 +106,13 @@ export class PackNoticeService{
     return 'BLOCKED' as const;
    }
    if(!await this.window.hasRecentVerifiedInbound(s.tenantId,s.unitId,verified)){
-    await this.settle(s,b.id,n.key,{state:'BLOCKED',failureCode:'WHATSAPP_WINDOW_CLOSED'});
-    return 'BLOCKED' as const;
+    const name=b.pack?.utilityTemplates?.[n.kind];
+    if(!name||!this.templates){
+     await this.settle(s,b.id,n.key,{state:'BLOCKED',failureCode:'WHATSAPP_WINDOW_CLOSED'});
+     return 'BLOCKED' as const;
+    }
+    prepared=await this.templates.prepare({...s,recipient:verified,name,kind:n.kind,
+     parameter:appointmentParameter(b),idempotencyKey:n.key});
    }
    recipient=verified;
    // Recheck persisted state and unit authorization immediately before send.
@@ -122,6 +120,7 @@ export class PackNoticeService{
     const current=await tx.booking(b.id),cfg=await tx.config(),now=this.scheduling.now();
     return !!current&&current.version===b.version&&packNoticeEligible(current,n,now)&&
      (n.claimUntilMs??0)>now&&!!cfg?.pack?.notifyWhatsApp&&cfg.pack.kind===b.pack?.kind&&
+     (!prepared||cfg.pack.utilityTemplates?.[n.kind]===b.pack?.utilityTemplates?.[n.kind])&&
      await tx.grant(now,b.pack!.kind);
    });
    if(!allowed){
@@ -138,7 +137,7 @@ export class PackNoticeService{
    return 'BLOCKED' as const;
   }
   try{
-   const sent=await this.sender.send({...s,recipient,text:noticeText(b,n),idempotencyKey:n.key,
+   const sent=prepared?await prepared():await this.sender.send({...s,recipient,text:noticeText(b,n),idempotencyKey:n.key,
     authorizedCustomerServiceWindow:true});
    if(!/^wamid\.[A-Za-z0-9._=-]{4,220}$/.test(sent.externalMessageId))throw Error('missing provider proof');
    const ok=await this.settle(s,b.id,n.key,{state:'ACCEPTED_BY_PROVIDER',externalMessageId:sent.externalMessageId});

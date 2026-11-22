@@ -1,13 +1,14 @@
 export type BookingPack='SALON'|'BARBERSHOP'|'AESTHETICS_ADMIN'|'PROFESSIONAL_SERVICES';
+export type NoticeKind='CONFIRMATION'|'RESCHEDULE'|'CANCELLATION'|'REMINDER';
 export interface PackPolicy {
  kind:BookingPack;cancelNoticeMinutes:number;noShowGraceMinutes:number;
- notifyWhatsApp:boolean;
+ notifyWhatsApp:boolean;utilityTemplates?:Partial<Record<NoticeKind,string>>;
 }
 export interface PackSnapshot extends PackPolicy {
  configVersion:number;priceMinor:number;acceptedBy:string;acceptedAt:string;
 }
 export interface BookingNotice {
- key:string;kind:'CONFIRMATION'|'RESCHEDULE'|'CANCELLATION'|'REMINDER';
+ key:string;kind:NoticeKind;
  state:'PENDING'|'CLAIMED'|'ACCEPTED_BY_PROVIDER'|'BLOCKED'|'REVIEW_REQUIRED'|'SUPERSEDED';
  dueMs:number;claimUntilMs?:number;externalMessageId?:string;failureCode?:string;
 }

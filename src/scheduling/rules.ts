@@ -1,7 +1,7 @@
 import {ApplicationError} from '../infrastructure/errors';
 import type {AppErrorCategory} from '../types/contracts';
 import type {ScheduleConfig,ScheduleServiceDefinition,ScheduleProfessional,
- ScheduleResource,ScheduleSlot,Shift,ScheduleBlock,Occupancy,Booking,PackPolicy,BookingPack} from './model';
+ ScheduleResource,ScheduleSlot,Shift,ScheduleBlock,Occupancy,Booking,PackPolicy,BookingPack,NoticeKind} from './model';
 
 export const MINUTE=60_000,DAY=86_400_000,MAX_DURATION=480*MINUTE;
 export function reject(code:string,category:AppErrorCategory='VALIDATION'):never{
@@ -103,10 +103,19 @@ function block(v:unknown):ScheduleBlock{
  return {id:id(a.id),target:a.target,...(a.target==='UNIT'?{}:{targetId:id(a.targetId)}),startMs,endMs};
 }
 function parsePack(raw:unknown):PackPolicy{
- const a=object(raw,['kind','cancelNoticeMinutes','noShowGraceMinutes','notifyWhatsApp']);
+ const a=object(raw,['kind','cancelNoticeMinutes','noShowGraceMinutes','notifyWhatsApp','utilityTemplates']);
  if(typeof a.kind!=='string'||!['SALON','BARBERSHOP','AESTHETICS_ADMIN','PROFESSIONAL_SERVICES'].includes(a.kind))return reject('PACK_KIND_INVALID');
+ const utilityTemplates:Partial<Record<NoticeKind,string>>={};
+ if(a.utilityTemplates!==undefined){
+  const templates=object(a.utilityTemplates,['CONFIRMATION','RESCHEDULE','CANCELLATION','REMINDER']);
+  for(const [kind,name] of Object.entries(templates)){
+   if(typeof name!=='string'||!/^[a-z0-9_]{1,128}$/.test(name))return reject('PACK_TEMPLATE_NAME_INVALID');
+   utilityTemplates[kind as NoticeKind]=name;
+  }
+ }
  return {kind:a.kind as BookingPack,cancelNoticeMinutes:integer(a.cancelNoticeMinutes,0,10080),
-  noShowGraceMinutes:integer(a.noShowGraceMinutes,0,120),notifyWhatsApp:bool(a.notifyWhatsApp)};
+  noShowGraceMinutes:integer(a.noShowGraceMinutes,0,120),notifyWhatsApp:bool(a.notifyWhatsApp),
+  ...(Object.keys(utilityTemplates).length?{utilityTemplates}:{})};
 }
 export function parseConfig(raw:unknown):Omit<ScheduleConfig,'tenantId'|'unitId'|'version'|'updatedAt'|'updatedBy'> & {expectedVersion:number}{
  const a=object(raw,['expectedVersion','timezone','holdMinutes','reminderMinutes','shifts','holidays',

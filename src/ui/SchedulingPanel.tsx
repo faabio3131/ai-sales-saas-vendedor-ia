@@ -176,6 +176,14 @@ export function SchedulingPanel({tenantId,unitId,role,availablePacks=[]}:{tenant
     {label('Antecedência para cancelamento (min)',<input type="number" min={0} max={10080} className={field} value={draft.pack.cancelNoticeMinutes} onChange={e=>changePack({cancelNoticeMinutes:Number(e.target.value)})}/>)}
     {label('Tolerância de falta (min)',<input type="number" min={0} max={120} className={field} value={draft.pack.noShowGraceMinutes} onChange={e=>changePack({noShowGraceMinutes:Number(e.target.value)})}/>)}
     <label className="text-sm text-slate-300"><input type="checkbox" checked={draft.pack.notifyWhatsApp} onChange={e=>changePack({notifyWhatsApp:e.target.checked})}/> Solicitar comunicações transacionais via WhatsApp (consentimento verificado e gates de operação obrigatórios)</label>
+    {draft.pack.notifyWhatsApp&&<div className="space-y-2">
+     <p className="text-xs text-slate-400">Templates UTILITY opcionais para fora da janela de 24 h (pt_BR). O runtime verifica aprovação e texto exato no WABA; sem template aprovado, o envio fica bloqueado.</p>
+     {(['CONFIRMATION','RESCHEDULE','CANCELLATION','REMINDER'] as const).map(kind=><label key={kind} className="block text-xs text-slate-400">{kind}<input className={field} value={draft.pack?.utilityTemplates?.[kind]??''} placeholder="nome_template_meta" onChange={e=>{
+      const next={...draft.pack?.utilityTemplates};
+      if(e.target.value)next[kind]=e.target.value;else delete next[kind];
+      changePack({utilityTemplates:next});
+     }}/></label>)}
+    </div>}
     <p className="text-xs text-slate-400">Sinal sujeito a revisão humana em cancelamento/falta; nenhum confisco automático. Estética: somente atos administrativos, sem diagnóstico, indicação clínica ou avaliação automatizada.</p>
    </div>}
    <h3 className="font-semibold text-white">Turnos da unidade</h3><ShiftEditor value={draft.shifts} onChange={s=>set('shifts',s)}/>
