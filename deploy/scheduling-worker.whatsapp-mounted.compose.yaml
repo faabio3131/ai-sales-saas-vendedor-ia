@@ -1,0 +1,7 @@
+services:
+  scheduling-worker:
+    environment:
+      WHATSAPP_VAULT_BACKEND: MOUNTED
+      WHATSAPP_SECRET_MOUNT_DIR: /run/secrets/atendevende-whatsapp
+    volumes:
+      - "${WHATSAPP_SECRET_DIR:?Mount restricted per-tenant WhatsApp secrets}:/run/secrets/atendevende-whatsapp:ro"

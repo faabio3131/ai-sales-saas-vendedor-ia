@@ -104,7 +104,7 @@ function block(v:unknown):ScheduleBlock{
 }
 function parsePack(raw:unknown):PackPolicy{
  const a=object(raw,['kind','cancelNoticeMinutes','noShowGraceMinutes','notifyWhatsApp']);
- if(!['SALON','BARBERSHOP','AESTHETICS_ADMIN','PROFESSIONAL_SERVICES'].includes(String(a.kind)))return reject('PACK_KIND_INVALID');
+ if(typeof a.kind!=='string'||!['SALON','BARBERSHOP','AESTHETICS_ADMIN','PROFESSIONAL_SERVICES'].includes(a.kind))return reject('PACK_KIND_INVALID');
  return {kind:a.kind as BookingPack,cancelNoticeMinutes:integer(a.cancelNoticeMinutes,0,10080),
   noShowGraceMinutes:integer(a.noShowGraceMinutes,0,120),notifyWhatsApp:bool(a.notifyWhatsApp)};
 }
