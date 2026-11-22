@@ -6,7 +6,7 @@ import type {CapabilityAssignment,CapabilityId} from '../capabilities/model';
 import {capabilityManifest,capabilityTemplate} from '../capabilities/catalog';
 import type {TenantContext} from '../types/contracts';
 import {object,id,integer,reject,reason,zone} from '../scheduling/rules';
-import type {OnboardingStore,OnboardingRecord,OnboardingTemplate} from './model';
+import type {OnboardingStore,OnboardingTemplate} from './model';
 const core:CapabilityId[]=['CORE_KNOWLEDGE','CORE_CUSTOMERS'];
 const templates:OnboardingTemplate[]=[
  {id:'restaurant',label:'Restaurante / alimentação',vertical:'FOOD_SERVICE',templateId:'FOOD_SERVICE_STD',native:[...core,'FOOD_ORDERING','FOOD_PRODUCTION','FOOD_DELIVERY','FOOD_FINANCE'],integrated:core},
