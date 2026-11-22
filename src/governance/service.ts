@@ -147,12 +147,16 @@ export class GovernedAutonomyService{
    if(current.version!==policy.version||!current.allowedTools.includes(command.tool))
     deny('AUTONOMY_POLICY_VERSION_CONFLICT','CONFLICT');
    const result=await this.dispatch(ctx,unitId,command,canonical,policy);
-   return await this.store.finish(receipt,'COMPLETED',this.clock().toISOString(),result);
+   const finalized=await this.store.finish(receipt,'COMPLETED',this.clock().toISOString(),result);
+   if(finalized.status!=='COMPLETED')deny('AUTONOMY_EXECUTION_UNCERTAIN','CONFLICT');
+   return finalized;
   }catch{
-   // Ambiguous provider I/O or persistence may already have happened:
-   // NEVER reissue side effects. The reservation is a durable human-review gate.
-   await this.store.finish(receipt,'REVIEW_REQUIRED',this.clock().toISOString(),
+   // Never reissue an uncertain side effect. A secondary persistence outage
+   // leaves RESERVED for the dedicated quarantine worker, not for retry.
+   try{
+    await this.store.finish(receipt,'REVIEW_REQUIRED',this.clock().toISOString(),
      undefined,'AUTONOMY_EXECUTION_UNCERTAIN');
+   }catch{ /* Durable RESERVED is quarantined by the scheduled recovery worker. */ }
    deny('AUTONOMY_EXECUTION_UNCERTAIN','CONFLICT');
   }
  }
