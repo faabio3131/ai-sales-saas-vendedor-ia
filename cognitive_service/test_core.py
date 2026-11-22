@@ -6,9 +6,12 @@ import hmac
 import json
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 from .core import CONTRACT, CognitiveValidationError, decide
 from .server import SEEN_NONCES, validate_signature, BoundedCognitiveServer, CognitiveHandler
+from .replay import create_replay_store, RedisReplayStore
 
 SECRET = b"test-only-cognitive-secret-0123456789abcd"
 
@@ -79,6 +82,38 @@ class CognitiveServiceTests(unittest.TestCase):
         self.assertFalse(validate_signature(header, raw + b"!", SECRET))
         self.assertFalse(validate_signature(header, raw, b"wrong-password"))
         self.assertFalse(validate_signature(header.replace(ts, str(int(ts)-360)), raw, SECRET))
+
+    def test_shared_nonce_store_blocks_replay_across_restarts_and_replicas(self):
+        ts = str(int(time.time()))
+        raw = b'{"test":"signed"}'
+        nonce = "b" * 32
+        mac = hmac.new(SECRET, (ts + "." + nonce + ".").encode() + raw, hashlib.sha256).hexdigest()
+        header = f"t={ts},nonce={nonce},v1={mac}"
+        shared = set()
+        class Replica:
+            def claim(self, value):
+                if value in shared:
+                    return False
+                shared.add(value)
+                return True
+        replicas = [Replica() for _ in range(32)]
+        with ThreadPoolExecutor(max_workers=16) as workers:
+            answers = list(workers.map(
+                lambda store: validate_signature(header, raw, SECRET, store=store), replicas))
+        self.assertEqual(sum(answers), 1)
+        self.assertFalse(validate_signature(header, raw, SECRET, store=Replica()))
+        class Down:
+            def claim(self, _):
+                raise OSError("backend unavailable")
+        self.assertFalse(validate_signature(header, raw, SECRET, store=Down()))
+
+    def test_public_binding_without_shared_store_refused(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(RuntimeError):
+                create_replay_store("0.0.0.0")
+            self.assertIsNone(create_replay_store("127.0.0.1"))
+        with self.assertRaises(ValueError):
+            RedisReplayStore("redis://untrusted.internal:6379")
 
     def test_http_worker_limit(self):
         server = BoundedCognitiveServer(("127.0.0.1", 0), CognitiveHandler, max_workers=2)
