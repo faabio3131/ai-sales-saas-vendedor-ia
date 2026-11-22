@@ -1,4 +1,4 @@
-import {timingSafeEqual,createHmac} from 'node:crypto';
+import {timingSafeEqual,createHmac,createHash,createPublicKey,verify as verifySignature} from 'node:crypto';
 import type {Request,Response} from 'express';
 import {ApplicationError} from '../infrastructure/errors';
 import type {PaymentProviderId} from './providerCatalog';
@@ -13,7 +13,7 @@ import type {VerifiedPaymentWebhookLedger} from './webhookLedger';
 type Headers=Record<string,string|string[]|undefined>;
 type EventDetails={paymentIds:string[];eventId:string};
 const PIX_BANKS=new Set<string>(['EFI','BANCO_INTER','BANCO_DO_BRASIL']);
-const DIRECT=new Set<string>(['ASAAS','PAGARME']);
+const DIRECT=new Set<string>(['ASAAS','PAGARME','PAGBANK']);
 export const ENABLED_WEBHOOK_PROVIDERS=new Set<string>([...PIX_BANKS,...DIRECT]);
 
 function deny():never {
@@ -41,11 +41,34 @@ function verifyDigest(headerValue:string,expected:Buffer):boolean{
  const provided=Buffer.from(encoded,'hex');
  return provided.length===expected.length&&timingSafeEqual(provided,expected);
 }
+/**
+ * PagBank new Notification API: SHA256withECDSA over the original bytes.
+ * Key is pinned per merchant from out-of-band provider verification. NEVER
+ * derive the digest from the API token or trust an unsigned callback.
+ */
+export function verifyPagBankEcdsa(value:string|string[]|undefined,raw:Buffer,keyBase64?:string){
+ if(!keyBase64||!/^[A-Za-z0-9+/=]{80,3000}$/.test(keyBase64)||raw.length===0||raw.length>256*1024)return false;
+ const candidates=(Array.isArray(value)?value:[value??'']).flatMap(x=>x.split(','))
+  .map(s=>s.trim()).filter(Boolean).slice(0,6);
+ if(!candidates.length)return false;
+ try{
+  const publicKey=createPublicKey({key:Buffer.from(keyBase64,'base64'),format:'der',type:'spki'});
+  if(publicKey.asymmetricKeyType!=='ec')return false;
+  return candidates.some(candidate=>{
+   if(!/^[A-Za-z0-9+/=]{60,300}$/.test(candidate))return false;
+   try{return verifySignature('sha256',raw,publicKey,Buffer.from(candidate,'base64'));}
+   catch{return false;}
+  });
+ }catch{return false;}
+}
 export function authorizePaymentWebhook(args:{
- provider:string;tenantId:string;headers:Headers;rawBody:Buffer;secret:string;now?:number;
+ provider:string;tenantId:string;headers:Headers;rawBody:Buffer;secret:string;
+ publicKeyBase64?:string;now?:number;
 }):boolean {
  const {provider,tenantId,headers,rawBody,secret}=args;
- if(!secret||secret.length<16||rawBody.length===0||rawBody.length>256*1024)return false;
+ if(rawBody.length===0||rawBody.length>256*1024)return false;
+ if(provider==='PAGBANK')return verifyPagBankEcdsa(headers['x-payload-signature'],rawBody,args.publicKeyBase64);
+ if(!secret||secret.length<16)return false;
  if(provider==='ASAAS')return equals(header(headers,'asaas-access-token'),secret);
  if(provider==='PAGARME')return verifyDigest(header(headers,'x-hub-signature'),hmac(secret,rawBody));
  if(PIX_BANKS.has(provider)){
@@ -75,6 +98,16 @@ export function parsePaymentWebhook(provider:string,payload:unknown):EventDetail
   const id=string(order.id);
   if(!/^or_[a-zA-Z0-9]+$/.test(id)||!eventId||eventId.length>160)return deny();
   return {paymentIds:[id],eventId};
+ }
+ if(provider==='PAGBANK'){
+  const orderId=string(body.id);
+  if(!/^ORDE_[A-Za-z0-9-]{8,80}$/.test(orderId)||!Array.isArray(body.charges)||body.charges.length!==1)
+   return deny();
+  const charge=bodyRecord(body.charges[0]);
+  if(!/^CHAR_[A-Za-z0-9-]{8,80}$/.test(string(charge.id))||
+   !['PAID','WAITING','DECLINED','CANCELED','CANCELLED'].includes(string(charge.status)))return deny();
+  const eventId='pagbank:'+createHash('sha256').update(JSON.stringify(body)).digest('hex');
+  return {paymentIds:[orderId],eventId};
  }
  if(PIX_BANKS.has(provider)){
   if(!Array.isArray(body.pix)||body.pix.length===0||body.pix.length>50)return deny();
@@ -110,7 +143,8 @@ export class PaymentWebhookProcessor {
   if(!connection||connection.status!=='ACTIVE'||!connection.credentialRef||!connection.recipientId)return deny();
   const secrets=await this.runtime.vault.load(connection);
   if(secrets.tenantId!==tenantId||secrets.providerId!==provider||secrets.recipientId!==connection.recipientId)return deny();
-  if(!authorizePaymentWebhook({provider,tenantId,headers,rawBody,secret:secrets.webhookSecret??''}))return deny();
+  if(!authorizePaymentWebhook({provider,tenantId,headers,rawBody,secret:secrets.webhookSecret??'',
+   publicKeyBase64:secrets.webhookPublicKeyBase64}))return deny();
   const event=parsePaymentWebhook(provider,payload);
   const statuses:Array<PaymentStatus|OrderPaymentStatus>=[];
   for(const providerPaymentId of event.paymentIds){

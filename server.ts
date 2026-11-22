@@ -16,6 +16,9 @@ export async function createApp() {
     if((req as typeof req&{originalUrl?:string}).originalUrl?.startsWith('/api/payments/webhooks/')){
       (req as typeof req&{paymentRawBody?:Buffer}).paymentRawBody=Buffer.from(buffer);
     }
+    if((req as typeof req&{originalUrl?:string}).originalUrl?.startsWith('/api/channels/webhooks/whatsapp/')){
+      (req as typeof req&{whatsappRawBody?:Buffer}).whatsappRawBody=Buffer.from(buffer);
+    }
   }}));
   app.use('/api', createApiRouter());
   app.use(errorHandler);

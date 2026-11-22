@@ -16,6 +16,7 @@ import {MountedMerchantCredentialsVault} from './mountedVault';
 import {MerchantPaymentAdapterFactory} from './adapterFactory';
 import {FirestoreMerchantCustomerMap} from './customerMap';
 import {FirestorePaymentCreationIntentRepository} from './creationIntent';
+import {FirestoreMerchantLifecycleStore,MerchantProviderOnboardingService} from './merchantLifecycle';
 
 function requireContext(req: Request) {
   if (!req.tenantContext) throw new ApplicationError({ category:'FORBIDDEN', code:'TENANT_CONTEXT_REQUIRED', message:'Tenant context is required.' });
@@ -40,6 +41,9 @@ export function createPaymentsRouter(): Router {
   const vault=process.env.PAYMENT_VAULT_BACKEND==='MOUNTED'
     ? new MountedMerchantCredentialsVault()
     : new GoogleSecretManagerMerchantVault();
+  const enrollment=new MerchantProviderOnboardingService(new FirestoreMerchantLifecycleStore(),vault,
+    // Unverified provider access MUST NOT be certified by an authenticated owner API.
+    {verify:async()=>({verified:false,evidenceRef:''})});
   const factory=new MerchantPaymentAdapterFactory(vault,new FirestoreMerchantCustomerMap());
   const resolver=new TenantPaymentProviderResolver(connectionRepo,adapterMap,connection=>factory.build(connection));
   const service = new PaymentService(
@@ -59,6 +63,10 @@ export function createPaymentsRouter(): Router {
   router.get('/providers', (_req,res) => res.status(200).json({ok:true,data:PAYMENT_PROVIDER_CATALOG}));
   router.get('/connections', async (req,res,next) => {
     try {res.status(200).json({ok:true,data:await connectionService.overview(requireContext(req))});}
+    catch(error){next(error);}
+  });
+  router.post('/connections/enroll',async(req,res,next)=>{
+    try {res.status(200).json({ok:true,data:await enrollment.enroll(requireContext(req),req.body)});}
     catch(error){next(error);}
   });
   router.put('/connections/preference', async (req,res,next) => {

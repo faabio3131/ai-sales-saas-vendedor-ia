@@ -6,6 +6,7 @@ import { createCommerceRouter } from '../commerce/routes';
 import { createOrdersRouter } from '../orders/routes';
 import { createBusinessRouter } from '../business/routes';
 import { createChannelsRouter } from '../channels/routes';
+import {createWhatsAppWebhookRouter} from '../channels/whatsappWebhooks';
 import { createConversationRouter } from '../conversations/routes';
 import { createCustomersRouter } from '../customers/routes';
 import { createDashboardRouter } from '../dashboard/routes';
@@ -63,6 +64,7 @@ export function createApiRouter(): Router {
   router.use('/autonomy', authenticationMiddleware, tenantAuthorizationMiddleware, createGovernanceRouter());
   router.use('/followups', authenticationMiddleware, tenantAuthorizationMiddleware, createFollowUpsRouter());
   router.use('/recovery', authenticationMiddleware, tenantAuthorizationMiddleware, createRecoveryRouter());
+  router.use('/channels/webhooks/whatsapp', createWhatsAppWebhookRouter());
   router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());
   router.use('/dashboard', authenticationMiddleware, tenantAuthorizationMiddleware, createDashboardRouter());
   router.use('/finance',authenticationMiddleware,tenantAuthorizationMiddleware,createFinanceRouter());

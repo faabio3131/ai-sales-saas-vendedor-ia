@@ -4,6 +4,7 @@ import { resolveWorkspaceMemberships, WorkspaceMembership } from './workspaceAcc
 import { FinancialPanel } from './FinancialPanel';
 import { ProductionBoard } from './ProductionBoard';
 import { PilotOnboardingPanel } from './PilotOnboardingPanel';
+import {ProviderConnectionPanel} from './ProviderConnectionPanel';
 
 interface AttentionItem {
   kind: string;
@@ -221,6 +222,9 @@ export function ProductWorkspaceView() {
       )}
       {selectedMembership.role === 'OWNER' && (
         <PilotOnboardingPanel key={'onboarding-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+      )}
+      {selectedMembership.role === 'OWNER' && (
+        <ProviderConnectionPanel key={'providers-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
       )}
       <ProductionBoard key={'production-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
         </>
