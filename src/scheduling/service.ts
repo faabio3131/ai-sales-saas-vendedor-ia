@@ -88,7 +88,7 @@ export class SchedulingService{
   if(!b.pack?.notifyWhatsApp)return b;
   // Supersede unsent events, retain immutable previous versions for audit.
   // At most one lifecycle notification plus a reminder is actionable.
-  const prior=(b.notices??[]).map(n=>n.state==='PENDING'?{...n,state:'SUPERSEDED' as const}:
+  const prior=(b.notices??[]).map(n=>n.state==='PENDING'||n.state==='BLOCKED'?{...n,state:'SUPERSEDED' as const}:
    n.state==='CLAIMED'?{...n,state:'REVIEW_REQUIRED' as const,failureCode:'CLAIM_EXPIRED'}:n);
   const next:BookingNotice={key:'notice_'+fingerprint([b.id,b.version,kind]).slice(0,48),
    kind,state:'PENDING',dueMs:now};
@@ -221,7 +221,8 @@ export class SchedulingService{
    async(_tx,b,now)=>{
     if(!b.pack||b.status!=='CONFIRMED'||b.checkedInAt||now<b.startMs-30*MINUTE||now>=b.endMs)
      return reject('PACK_CHECK_IN_INVALID','CONFLICT');
-    return this.next(b,ctx,now,{checkedInAt:new Date(now).toISOString()});
+    return this.next(b,ctx,now,{checkedInAt:new Date(now).toISOString(),
+     ...(b.notices?{notices:b.notices.map(n=>n.state==='PENDING'||n.state==='BLOCKED'?{...n,state:'SUPERSEDED' as const}:n)}:{})});
    });
  }
  async noShow(ctx:TenantContext,u:string,bookingId:string,raw:unknown){

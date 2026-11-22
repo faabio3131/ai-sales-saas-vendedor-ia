@@ -21,7 +21,7 @@ const manifests:readonly CapabilityManifest[]=[
  {id:'SERVICE_BOOKING',domain:'SERVICES',version:1,maturity:'READY_INTERNAL',dependsOn:['SCHEDULING'],certification:'INTERNAL_ONLY'},
  {id:'BEAUTY_SERVICES',domain:'BEAUTY',version:1,maturity:'READY_INTERNAL',dependsOn:['SERVICE_CATALOG'],certification:'INTERNAL_ONLY'},
  {id:'BEAUTY_BOOKING',domain:'BEAUTY',version:1,maturity:'READY_INTERNAL',dependsOn:['SCHEDULING','BEAUTY_SERVICES'],certification:'INTERNAL_ONLY'},
- {id:'HEALTH_ADMIN',domain:'HEALTH_SERVICE',version:1,maturity:'READY_INTERNAL',dependsOn:['SERVICE_CATALOG'],certification:'INTERNAL_ONLY'},
+ {id:'HEALTH_ADMIN',domain:'HEALTH_SERVICE',version:1,maturity:'READY_INTERNAL',dependsOn:['SERVICE_CATALOG','SCHEDULING'],certification:'INTERNAL_ONLY'},
 ];
 const templates:readonly CapabilityTemplate[]=[
  {id:'FOOD_SERVICE_STD',version:1,vertical:'FOOD_SERVICE',
