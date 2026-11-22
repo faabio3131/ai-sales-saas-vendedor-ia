@@ -1,6 +1,6 @@
 import {useEffect,useState,type ReactNode} from 'react';
 import type {Booking,ScheduleConfig,ScheduleSlot,ScheduleServiceDefinition,Shift,
- ScheduleProfessional,ScheduleResource,ScheduleBlock} from '../scheduling/model';
+ ScheduleProfessional,ScheduleResource,ScheduleBlock,BookingPack,PackPolicy} from '../scheduling/model';
 type BlockInput=Omit<ScheduleBlock,'startMs'|'endMs'>&{startAt:string;endAt:string};
 type Draft=Omit<ScheduleConfig,'tenantId'|'unitId'|'version'|'updatedAt'|'updatedBy'|'blocks'>&{
  expectedVersion:number;blocks:BlockInput[];
@@ -9,7 +9,9 @@ const field='w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 te
 const btn='rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 disabled:opacity-50';
 const labels=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const status:Record<Booking['status'],string>={HELD:'Reservado temporariamente',CONFIRMED:'Confirmado',
- CANCELLED:'Cancelado',EXPIRED:'Expirado',COMPLETED:'Concluído'};
+ CANCELLED:'Cancelado',EXPIRED:'Expirado',COMPLETED:'Concluído',NO_SHOW:'Falta registrada'};
+const packNames:Record<BookingPack,string>={SALON:'Salão de beleza',BARBERSHOP:'Barbearia',AESTHETICS_ADMIN:'Estética — administrativo',PROFESSIONAL_SERVICES:'Serviços profissionais'};
+const money=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n/100);
 function fresh():Draft{
  return {expectedVersion:0,timezone:'America/Sao_Paulo',holdMinutes:15,reminderMinutes:60,
   shifts:[],holidays:[],professionals:[],resources:[],services:[],blocks:[]};
@@ -52,6 +54,7 @@ function PeopleEditor({title,items,onChange,unitShifts}:{title:string;items:Sche
     {label('Nome de exibição',<input className={field} value={p.name}
      onChange={e=>onChange(items.map((x,j)=>j===i?{...x,name:e.target.value}:x))}/>)}
    </div>
+   {title==='Profissionais'&&label('Função profissional (opcional)',<input className={field} value={p.title??''} onChange={e=>onChange(items.map((x,j)=>{if(j!==i)return x;const {title:_title,...rest}=x;return e.target.value?{...rest,title:e.target.value}:rest;}))}/>)}
    <label className="text-sm text-slate-300"><input type="checkbox" checked={p.active}
     onChange={e=>onChange(items.map((x,j)=>j===i?{...x,active:e.target.checked}:x))}/> Ativo</label>
    <ShiftEditor value={p.shifts} onChange={shifts=>onChange(items.map((x,j)=>j===i?{...x,shifts}:x))}/>
@@ -61,7 +64,7 @@ function PeopleEditor({title,items,onChange,unitShifts}:{title:string;items:Sche
   <button className={btn} onClick={()=>onChange([...items,{id:key(),name:'',active:true,shifts:structuredClone(unitShifts)}])}>Adicionar</button>
  </div>;
 }
-export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:string;role:string}){
+export function SchedulingPanel({tenantId,unitId,role,availablePacks=[]}:{tenantId:string;unitId:string;role:string;availablePacks?:BookingPack[]}){
  const admin=role==='OWNER'||role==='ADMIN',operator=['OWNER','ADMIN','MANAGER','ATTENDANT','OPERATOR','STAFF'].includes(role);
  const [config,setConfig]=useState<ScheduleConfig|null>(null),[draft,setDraft]=useState<Draft>(fresh);
  const [editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -72,6 +75,8 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
  const [startAt,setStartAt]=useState(''),[why,setWhy]=useState('Solicitação do cliente');
  const [providerId,setProviderId]=useState(''),[providerPaymentId,setProviderPaymentId]=useState('');
  const [rangeDate,setRangeDate]=useState('');
+ const [acceptedVersion,setAcceptedVersion]=useState<number|null>(null);
+ const canMarkNoShow=admin||role==='MANAGER';
  const prefix='/api/scheduling/units/'+encodeURIComponent(unitId);
  async function api<T>(path:string,method='GET',body?:unknown,signal?:AbortSignal):Promise<T>{
   const res=await fetch(path,{method,credentials:'same-origin',signal,
@@ -103,7 +108,7 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
  const set=<K extends keyof Draft>(k:K,v:Draft[K])=>setDraft(d=>({...d,[k]:v}));
  const save=()=>run(async()=>{
   const c=await api<ScheduleConfig>(prefix+'/config','PUT',draft);
-  setConfig(c);setDraft(toDraft(c));setEditing(false);setAvailable([]);setSelected(null);setNotice('Agenda configurada na versão '+c.version+'.');
+  setConfig(c);setDraft(toDraft(c));setEditing(false);setAvailable([]);setSelected(null);setAcceptedVersion(null);setNotice('Agenda configurada na versão '+c.version+'.');
  });
  const services=config?.services.filter(s=>s.active)??[];
  const selectedService=services.find(x=>x.id===serviceId),pros=config?.professionals.filter(p=>p.active&&selectedService?.professionalIds.includes(p.id))??[];
@@ -120,9 +125,10 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
   setBookings(await api<Booking[]>(prefix+'/bookings?'+new URLSearchParams(range())));
  });
  const reserve=()=>run(async()=>{
-  if(!config)return;
+  if(!config||config.pack&&acceptedVersion!==config.version)return;
   const b=await api<Booking>(prefix+'/bookings','POST',{serviceId,professionalId,customerId,startAt,
-   expectedConfigVersion:config.version,idempotencyKey:key()});
+   expectedConfigVersion:config.version,idempotencyKey:key(),...(config.pack?{acceptedPolicyVersion:acceptedVersion}:{})});
+  setAcceptedVersion(null);
   setSelected(b);setAvailable([]);setNotice('Reserva temporária persistida; ainda não confirmada.');
  });
  const command=(path:string,extra:Record<string,unknown>={})=>run(async()=>{
@@ -137,6 +143,12 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
   const b=await api<Booking>(prefix+'/bookings/'+selected.id+'/deposit/refresh','POST',
     providerPaymentId?{providerPaymentId}:{});
   setSelected(b);setNotice('Status verificado do sinal: '+b.deposit.status);
+ });
+ function changePack(patch:Partial<PackPolicy>){setDraft(d=>d.pack?{...d,pack:{...d.pack,...patch}}:d);}
+ const retryNotice=(noticeKey:string)=>run(async()=>{
+  if(!selected)return;
+  const b=await api<Booking>(prefix+'/bookings/'+selected.id+'/notice/retry','POST',{expectedVersion:selected.version,noticeKey});
+  setSelected(b);setBookings(old=>old.map(x=>x.id===b.id?b:x));setNotice('Comunicação recolocada na fila; envio ainda não confirmado.');
  });
  function changeService(i:number,patch:Partial<ScheduleServiceDefinition>){
   setDraft(d=>({...d,services:d.services.map((x,j)=>j===i?{...x,...patch}:x)}));
@@ -154,6 +166,26 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
     {label('Validade da reserva (min)',<input type="number" className={field} min={5} max={60} value={draft.holdMinutes} onChange={e=>set('holdMinutes',Number(e.target.value))}/>)}
     {label('Antecedência do lembrete (min)',<input type="number" className={field} min={0} value={draft.reminderMinutes} onChange={e=>set('reminderMinutes',Number(e.target.value))}/>)}
    </div>
+   <h3 className="font-semibold text-white">Pack de atendimento</h3>
+   <select aria-label="Pack de atendimento" className={field} value={draft.pack?.kind??''} onChange={e=>{
+    const kind=e.target.value as BookingPack;
+    if(!kind){setDraft(d=>{const {pack:_pack,...rest}=d;return rest;});return;}
+    set('pack',{kind,cancelNoticeMinutes:1440,noShowGraceMinutes:15,notifyWhatsApp:false});
+   }}><option value="">Agenda horizontal (sem pack)</option>{availablePacks.map(k=><option key={k} value={k}>{packNames[k]}</option>)}</select>
+   {draft.pack&&<div className="space-y-3 rounded-xl border border-slate-800 p-3">
+    {label('Antecedência para cancelamento (min)',<input type="number" min={0} max={10080} className={field} value={draft.pack.cancelNoticeMinutes} onChange={e=>changePack({cancelNoticeMinutes:Number(e.target.value)})}/>)}
+    {label('Tolerância de falta (min)',<input type="number" min={0} max={120} className={field} value={draft.pack.noShowGraceMinutes} onChange={e=>changePack({noShowGraceMinutes:Number(e.target.value)})}/>)}
+    <label className="text-sm text-slate-300"><input type="checkbox" checked={draft.pack.notifyWhatsApp} onChange={e=>changePack({notifyWhatsApp:e.target.checked})}/> Solicitar comunicações transacionais via WhatsApp (consentimento verificado e gates de operação obrigatórios)</label>
+    {draft.pack.notifyWhatsApp&&<div className="space-y-2">
+     <p className="text-xs text-slate-400">Templates UTILITY opcionais para fora da janela de 24 h (pt_BR). O runtime verifica aprovação e texto exato no WABA; sem template aprovado, o envio fica bloqueado.</p>
+     {(['CONFIRMATION','RESCHEDULE','CANCELLATION','REMINDER'] as const).map(kind=><label key={kind} className="block text-xs text-slate-400">{kind}<input className={field} value={draft.pack?.utilityTemplates?.[kind]??''} placeholder="nome_template_meta" onChange={e=>{
+      const next={...draft.pack?.utilityTemplates};
+      if(e.target.value)next[kind]=e.target.value;else delete next[kind];
+      changePack({utilityTemplates:next});
+     }}/></label>)}
+    </div>}
+    <p className="text-xs text-slate-400">Sinal sujeito a revisão humana em cancelamento/falta; nenhum confisco automático. Estética: somente atos administrativos, sem diagnóstico, indicação clínica ou avaliação automatizada.</p>
+   </div>}
    <h3 className="font-semibold text-white">Turnos da unidade</h3><ShiftEditor value={draft.shifts} onChange={s=>set('shifts',s)}/>
    <PeopleEditor title="Profissionais" items={draft.professionals} onChange={p=>set('professionals',p)} unitShifts={draft.shifts}/>
    <PeopleEditor title="Recursos físicos" items={draft.resources} onChange={(p:ScheduleResource[])=>set('resources',p)} unitShifts={draft.shifts}/>
@@ -164,6 +196,10 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
      {label('Duração (min)',<input type="number" className={field} min={15} max={480} step={15} value={s.durationMinutes} onChange={e=>changeService(i,{durationMinutes:Number(e.target.value)})}/>)}
      {label('Sinal em centavos (0 = nenhum)',<input type="number" className={field} min={0} value={s.depositMinor} onChange={e=>changeService(i,{depositMinor:Number(e.target.value)})}/>)}
     </div>
+    {draft.pack&&<div className="grid gap-2 sm:grid-cols-2">
+     {label('Categoria comercial',<input className={field} value={s.category??''} onChange={e=>changeService(i,{category:e.target.value})}/>)}
+     {label('Preço total em centavos',<input type="number" min={0} className={field} value={s.priceMinor??''} onChange={e=>changeService(i,{priceMinor:Number(e.target.value)})}/>)}
+    </div>}
     <label className="text-sm text-slate-300"><input type="checkbox" checked={s.active} onChange={e=>changeService(i,{active:e.target.checked})}/> Ativo</label>
     <p className="text-xs text-slate-400">Profissionais autorizados</p>
     {draft.professionals.map(p=><label key={p.id} className="mr-3 text-sm text-slate-300"><input type="checkbox" checked={s.professionalIds.includes(p.id)}
@@ -201,19 +237,24 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
   {config&&<div className="space-y-3">
    <h3 className="font-semibold text-white">Consultar disponibilidade</h3>
    <div className="grid gap-2 sm:grid-cols-3">
-    {label('Serviço',<select className={field} value={serviceId} onChange={e=>{setServiceId(e.target.value);setProfessionalId('');setAvailable([]);setStartAt('');}}>
-     <option value="">Selecione</option>{services.map(s=><option key={s.id} value={s.id}>{s.name} · {s.durationMinutes} min</option>)}</select>)}
+    {label('Serviço',<select className={field} value={serviceId} onChange={e=>{setServiceId(e.target.value);setAcceptedVersion(null);setProfessionalId('');setAvailable([]);setStartAt('');}}>
+     <option value="">Selecione</option>{services.map(s=><option key={s.id} value={s.id}>{s.name} · {s.durationMinutes} min{s.priceMinor!==undefined?' · '+money(s.priceMinor):''}</option>)}</select>)}
     {label('Profissional',<select className={field} value={professionalId} onChange={e=>{setProfessionalId(e.target.value);setAvailable([]);setStartAt('');}}>
      <option value="">Selecione</option>{pros.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>)}
     {label('Data local',<input type="date" className={field} value={date} onChange={e=>{setDate(e.target.value);setAvailable([]);setStartAt('');}}/>)}
    </div>
    <button disabled={busy||!date||!serviceId||!professionalId} className={btn} onClick={()=>void findSlots()}>Consultar horários</button>
-   <div className="flex flex-wrap gap-2">{available.map(s=><button key={s.startAt} className={btn+(startAt===s.startAt?' border-emerald-400':'')} onClick={()=>setStartAt(s.startAt)}>
+   <div className="flex flex-wrap gap-2">{available.map(s=><button key={s.startAt} className={btn+(startAt===s.startAt?' border-emerald-400':'')} onClick={()=>{setStartAt(s.startAt);setAcceptedVersion(null);}}>
      {s.localTime.slice(11)} · {new Date(s.startAt).toLocaleTimeString('en-GB',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'})} UTC</button>)}</div>
+   {config.pack&&selectedService&&<div className="rounded-xl border border-sky-800 p-3 text-sm text-slate-300">
+    <p>{packNames[config.pack.kind]} · {selectedService.category} · Total {money(selectedService.priceMinor??0)} · Sinal {money(selectedService.depositMinor)}</p>
+    <p className="mt-1 text-xs">Cancelamento com {config.pack.cancelNoticeMinutes} min de antecedência; tolerância de falta {config.pack.noShowGraceMinutes} min. Em cancelamento ou falta, valores pagos serão submetidos à revisão humana.</p>
+    {operator&&<label className="mt-2 block"><input type="checkbox" checked={acceptedVersion===config.version} onChange={e=>setAcceptedVersion(e.target.checked?config.version:null)}/> Registrei o aceite explícito do cliente para preço, sinal e política desta versão.</label>}
+   </div>}
    {operator&&<div className="flex flex-wrap items-end gap-3">
-    {label('Cliente',<select className={field} value={customerId} onChange={e=>setCustomerId(e.target.value)}>
+    {label('Cliente',<select className={field} value={customerId} onChange={e=>{setCustomerId(e.target.value);setAcceptedVersion(null);}}>
      <option value="">Selecione cliente cadastrado</option>{customers.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select>)}
-    <button disabled={busy||!startAt||!customerId} className={btn} onClick={()=>void reserve()}>Reservar temporariamente</button>
+    <button disabled={busy||!startAt||!customerId||!!config.pack&&acceptedVersion!==config.version} className={btn} onClick={()=>void reserve()}>Reservar temporariamente</button>
    </div>}
   </div>}
   {operator&&<div className="space-y-3">
@@ -226,6 +267,14 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
     <h4 className="font-semibold text-white">{status[selected.status]} · v{selected.version}</h4>
     <p className="text-sm text-slate-300">{new Date(selected.startMs).toLocaleString('pt-BR',{timeZone:selected.timezone})} · {selected.timezone}</p>
     <p className="text-sm text-slate-400">Sinal: {selected.deposit.status} · R$ {(selected.deposit.amountMinor/100).toFixed(2)} · Lembrete: {selected.reminder?.state??'—'}</p>
+    <button disabled={busy} className={btn} onClick={()=>void run(async()=>{const b=await api<Booking>(prefix+'/bookings/'+selected.id);setSelected(b);setBookings(old=>old.map(x=>x.id===b.id?b:x));})}>Atualizar estado</button>
+    {selected.pack&&<div className="space-y-1 text-sm text-slate-300"><p>{packNames[selected.pack.kind]} · Total {money(selected.pack.priceMinor)} · Política v{selected.pack.configVersion}</p>
+     {selected.pack.notifyWhatsApp&&(selected.status==='HELD'||selected.status==='CONFIRMED')&&<p className="break-all text-xs text-slate-400">Para consentimento de avisos, o cliente deve enviar ao WhatsApp oficial: <strong>AUTORIZO AVISOS DE AGENDAMENTO {selected.id}</strong>. Para revogar: CANCELAR AVISOS DE AGENDAMENTO.</p>}
+     {selected.checkedInAt&&<p>Presença registrada: {new Date(selected.checkedInAt).toLocaleString('pt-BR',{timeZone:selected.timezone})}</p>}
+     {selected.lateCancellation&&<p className="text-amber-300">Cancelamento fora da antecedência configurada; revisão humana.</p>}
+     {selected.status==='NO_SHOW'&&<p className="text-amber-300">Falta registrada; revisar eventual sinal, sem desconto automático.</p>}
+     {(selected.notices??[]).map(n=><div key={n.key} className="flex flex-wrap items-center gap-2 border-t border-slate-800 py-1"><span>{n.kind}: {n.state==='ACCEPTED_BY_PROVIDER'?'Aceito pelo provedor (não confirma entrega ao destinatário)':n.state}</span>{n.failureCode&&<span className="text-xs text-slate-400">{n.failureCode}</span>}{admin&&n.state==='BLOCKED'&&<button disabled={busy} className={btn} onClick={()=>void retryNotice(n.key)}>Reavaliar envio</button>}</div>)}
+    </div>}
     {selected.status==='HELD'&&<>
      <button disabled={busy||!['CONFIRMED','NOT_REQUIRED'].includes(selected.deposit.status)} className={btn} onClick={()=>void command('/confirm')}>Confirmar reserva</button>
      {selected.deposit.status==='UNPAID'&&<div className="flex gap-2">
@@ -241,11 +290,13 @@ export function SchedulingPanel({tenantId,unitId,role}:{tenantId:string;unitId:s
     {(selected.status==='HELD'||selected.status==='CONFIRMED')&&<div className="space-y-2">
      <p className="text-xs text-slate-400">Para reagendar, consulte o mesmo serviço e selecione um novo horário disponível acima.</p>
      <button disabled={busy||!startAt||serviceId!==selected.serviceId||!professionalId} className={btn} onClick={()=>void command('/reschedule',{professionalId,startAt})}>Reagendar atomicamente</button>
-     {label('Motivo do cancelamento',<input className={field} value={why} onChange={e=>setWhy(e.target.value)}/>)}
+     {label('Motivo do cancelamento',selected.pack?.kind==='AESTHETICS_ADMIN'?<select className={field} value={why} onChange={e=>setWhy(e.target.value)}>{['Solicitação do cliente','Solicitação do estabelecimento','Imprevisto operacional','Outro motivo administrativo'].map(r=><option key={r}>{r}</option>)}</select>:<input className={field} value={why} onChange={e=>setWhy(e.target.value)}/>)}
      <button disabled={busy||!why} className={btn} onClick={()=>void command('/cancel',{reason:why})}>Cancelar reserva</button>
     </div>}
     {selected.status==='CONFIRMED'&&<>
-     <button disabled={busy||selected.endMs>Date.now()} className={btn} onClick={()=>void command('/complete')}>Concluir atendimento</button>
+     {selected.pack&&!selected.checkedInAt&&<><button disabled={busy||Date.now()<selected.startMs-1800000||Date.now()>=selected.endMs} className={btn} onClick={()=>void command('/check-in')}>Registrar presença</button>
+     {canMarkNoShow&&<button disabled={busy||Date.now()<selected.startMs+selected.pack.noShowGraceMinutes*60000} className={btn} onClick={()=>void command('/no-show')}>Registrar falta</button>}</>}
+     <button disabled={busy||selected.endMs>Date.now()||!!selected.pack&&!selected.checkedInAt} className={btn} onClick={()=>void command('/complete')}>Concluir atendimento</button>
      {selected.reminder?.state==='READY'&&<button disabled={busy} className={btn} onClick={()=>void command('/reminder/ack',{reminderKey:selected.reminder!.key})}>Reconhecer lembrete interno</button>}
     </>}
    </article>}

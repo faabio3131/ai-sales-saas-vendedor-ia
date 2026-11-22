@@ -18,10 +18,10 @@ const manifests:readonly CapabilityManifest[]=[
  {id:'RETAIL_INVENTORY',domain:'RETAIL',version:1,maturity:'PLANNED',dependsOn:['RETAIL_CATALOG'],certification:'FUTURE_IMPLEMENTATION'},
  {id:'SERVICE_CATALOG',domain:'SERVICES',version:1,maturity:'READY_INTERNAL',dependsOn:[],certification:'INTERNAL_ONLY'},
  {id:'SCHEDULING',domain:'SERVICES',version:1,maturity:'READY_INTERNAL',dependsOn:['SERVICE_CATALOG'],certification:'INTERNAL_ONLY'},
- {id:'SERVICE_BOOKING',domain:'SERVICES',version:1,maturity:'PLANNED',dependsOn:['SCHEDULING'],certification:'FUTURE_IMPLEMENTATION'},
- {id:'BEAUTY_SERVICES',domain:'BEAUTY',version:1,maturity:'PLANNED',dependsOn:['SERVICE_CATALOG'],certification:'FUTURE_IMPLEMENTATION'},
- {id:'BEAUTY_BOOKING',domain:'BEAUTY',version:1,maturity:'PLANNED',dependsOn:['SCHEDULING','BEAUTY_SERVICES'],certification:'FUTURE_IMPLEMENTATION'},
- {id:'HEALTH_ADMIN',domain:'HEALTH_SERVICE',version:1,maturity:'PLANNED',dependsOn:['SERVICE_CATALOG'],certification:'FUTURE_IMPLEMENTATION'},
+ {id:'SERVICE_BOOKING',domain:'SERVICES',version:1,maturity:'READY_INTERNAL',dependsOn:['SCHEDULING'],certification:'INTERNAL_ONLY'},
+ {id:'BEAUTY_SERVICES',domain:'BEAUTY',version:1,maturity:'READY_INTERNAL',dependsOn:['SERVICE_CATALOG'],certification:'INTERNAL_ONLY'},
+ {id:'BEAUTY_BOOKING',domain:'BEAUTY',version:1,maturity:'READY_INTERNAL',dependsOn:['SCHEDULING','BEAUTY_SERVICES'],certification:'INTERNAL_ONLY'},
+ {id:'HEALTH_ADMIN',domain:'HEALTH_SERVICE',version:1,maturity:'READY_INTERNAL',dependsOn:['SERVICE_CATALOG','SCHEDULING'],certification:'INTERNAL_ONLY'},
 ];
 const templates:readonly CapabilityTemplate[]=[
  {id:'FOOD_SERVICE_STD',version:1,vertical:'FOOD_SERVICE',

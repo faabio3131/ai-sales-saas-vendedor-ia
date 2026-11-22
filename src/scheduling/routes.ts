@@ -5,6 +5,8 @@ import {createOrderPaymentRuntime} from '../orderPayments/runtime';
 import {FirestoreScheduleRepository} from './firestoreRepository';
 import {SchedulingService} from './service';
 import {BookingDepositService} from './deposits';
+import type {PackNoticeService} from '../bookingPacks/notices';
+import {createPackNoticeRuntime} from '../bookingPacks/runtime';
 
 function context(req:Request){
  if(!req.tenantContext)throw new ApplicationError({category:'FORBIDDEN',
@@ -14,6 +16,7 @@ function context(req:Request){
 export function createSchedulingRouter(
  service:SchedulingService=new SchedulingService(new FirestoreScheduleRepository(),new FirestoreCustomerRepository()),
  deposits:BookingDepositService=new BookingDepositService(new FirestoreScheduleRepository(),service,createOrderPaymentRuntime().resolver),
+ notices:PackNoticeService=createPackNoticeRuntime(),
 ):Router{
  const router=Router();
  router.get('/units/:unitId/config',async(req,res,next)=>{
@@ -46,11 +49,20 @@ export function createSchedulingRouter(
  router.post('/units/:unitId/bookings/:id/complete',async(req,res,next)=>{
   try{res.json({ok:true,data:await service.complete(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
  });
+ router.post('/units/:unitId/bookings/:id/check-in',async(req,res,next)=>{
+  try{res.json({ok:true,data:await service.checkIn(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
+ });
+ router.post('/units/:unitId/bookings/:id/no-show',async(req,res,next)=>{
+  try{res.json({ok:true,data:await service.noShow(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
+ });
  router.post('/units/:unitId/bookings/:id/deposit/pix',async(req,res,next)=>{
   try{res.json({ok:true,data:await deposits.issue(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
  });
  router.post('/units/:unitId/bookings/:id/deposit/refresh',async(req,res,next)=>{
   try{res.json({ok:true,data:await deposits.refresh(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
+ });
+ router.post('/units/:unitId/bookings/:id/notice/retry',async(req,res,next)=>{
+  try{res.json({ok:true,data:await notices.retryBlocked(context(req),req.params.unitId,req.params.id,req.body)});}catch(e){next(e);}
  });
  router.post('/units/:unitId/maintenance',async(req,res,next)=>{
   try{res.json({ok:true,data:await service.maintain(context(req),req.params.unitId,req.body)});}catch(e){next(e);}

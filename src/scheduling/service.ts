@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import type {TenantContext} from '../types/contracts';
 import type {CustomerRepository} from '../customers/contracts';
 import {requireBusinessScope,requireBusinessAdmin} from '../business/service';
-import type {Booking,ScheduleRepository,ScheduleTransaction,ScheduleConfig,ScheduleScope} from './model';
+import type {Booking,BookingNotice,ScheduleRepository,ScheduleTransaction,ScheduleConfig,ScheduleScope} from './model';
 import {DAY,MINUTE,MAX_DURATION,day,dayWindow,definition,id,instant,integer,object,occupies,
  parseConfig,reason,reject,slotAllowed,slots} from './rules';
 
@@ -21,6 +21,7 @@ export class SchedulingService{
   if(!await tx.grant(now))return reject('SCHEDULE_CAPABILITY_REQUIRED','FORBIDDEN');
   const c=await tx.config();
   if(!c)return reject('SCHEDULE_CONFIG_REQUIRED','CONFLICT');
+  if(c.pack&&!await tx.grant(now,c.pack.kind))return reject('PACK_CAPABILITY_REQUIRED','FORBIDDEN');
   return c;
  }
  private async getRow(tx:ScheduleTransaction,bookingId:string){
@@ -32,7 +33,9 @@ export class SchedulingService{
   const scope=this.scope(ctx,u);
   return this.store.transact(scope,async tx=>{
    if(!await tx.grant(this.now()))return reject('SCHEDULE_CAPABILITY_REQUIRED','FORBIDDEN');
-   return tx.config();
+   const c=await tx.config();
+   if(c?.pack&&!await tx.grant(this.now(),c.pack.kind))return reject('PACK_CAPABILITY_REQUIRED','FORBIDDEN');
+   return c;
   });
  }
  async configure(ctx:TenantContext,u:string,raw:unknown){
@@ -41,6 +44,7 @@ export class SchedulingService{
   return this.store.transact(scope,async tx=>{
    const now=this.now();
    if(!await tx.grant(now))return reject('SCHEDULE_CAPABILITY_REQUIRED','FORBIDDEN');
+   if(input.pack&&!await tx.grant(now,input.pack.kind))return reject('PACK_CAPABILITY_REQUIRED','FORBIDDEN');
    const current=await tx.config();
    if((current?.version??0)!==expectedVersion)return reject('SCHEDULE_CONFIG_VERSION_CONFLICT','CONFLICT');
    // No silent invalidation: change shifts, vacations or resources only after
@@ -80,15 +84,35 @@ export class SchedulingService{
  private next(b:Booking,ctx:TenantContext,now:number,patch:Partial<Booking>){
   return {...b,...patch,version:b.version+1,updatedAt:new Date(now).toISOString(),transitionBy:ctx.userId!};
  }
+ private notice(b:Booking,kind:BookingNotice['kind'],now:number):Booking{
+  if(!b.pack?.notifyWhatsApp)return b;
+  // Supersede unsent events, retain immutable previous versions for audit.
+  // At most one lifecycle notification plus a reminder is actionable.
+  const prior=(b.notices??[]).map(n=>n.state==='PENDING'||n.state==='BLOCKED'?{...n,state:'SUPERSEDED' as const}:
+   n.state==='CLAIMED'?{...n,state:'REVIEW_REQUIRED' as const,failureCode:'CLAIM_EXPIRED'}:n);
+  const next:BookingNotice={key:'notice_'+fingerprint([b.id,b.version,kind]).slice(0,48),
+   kind,state:'PENDING',dueMs:now};
+  return {...b,notices:[...prior.slice(-3),next]};
+ }
+ private reminderNotice(b:Booking,now:number):Booking{
+  if(!b.pack?.notifyWhatsApp||!b.reminder)return b;
+  const key='notice_'+fingerprint([b.id,b.reminder.key,'REMINDER']).slice(0,48);
+  if(b.notices?.some(n=>n.key===key))return b;
+  const n:BookingNotice={key,kind:'REMINDER',state:'PENDING',dueMs:now};
+  const pending=(b.notices??[]).filter(x=>x.state==='PENDING'||x.state==='CLAIMED');
+  const history=(b.notices??[]).filter(x=>x.state!=='PENDING'&&x.state!=='CLAIMED');
+  return {...b,notices:[...history.slice(-2),...pending,n]};
+ }
  private reminder(b:Booking,c:ScheduleConfig){
   return {dueMs:b.startMs-c.reminderMinutes*MINUTE,state:'PENDING' as const,
    key:b.id+'_'+b.version};
  }
  async reserve(ctx:TenantContext,u:string,raw:unknown){
-  const scope=this.scope(ctx,u,true),a=object(raw,['serviceId','professionalId','customerId','startAt','idempotencyKey','expectedConfigVersion']);
+  const scope=this.scope(ctx,u,true),a=object(raw,['serviceId','professionalId','customerId','startAt','idempotencyKey','expectedConfigVersion','acceptedPolicyVersion']);
   const serviceId=id(a.serviceId),professionalId=id(a.professionalId),customerId=id(a.customerId),
    startMs=instant(a.startAt),key=id(a.idempotencyKey),expectedConfigVersion=integer(a.expectedConfigVersion,1,100000);
-  const hash=fingerprint(['RESERVE',serviceId,professionalId,customerId,startMs,expectedConfigVersion]);
+  const accepted=a.acceptedPolicyVersion===undefined?null:integer(a.acceptedPolicyVersion,1,100000);
+  const hash=fingerprint(['RESERVE',serviceId,professionalId,customerId,startMs,expectedConfigVersion,...(accepted===null?[]:[accepted])]);
   const customer=await this.customers.findById(scope.tenantId,customerId);
   if(!customer||customer.tenantId!==scope.tenantId||customer.id!==customerId||customer.status!=='ACTIVE')
    return reject('SCHEDULE_CUSTOMER_INVALID','FORBIDDEN');
@@ -98,6 +122,7 @@ export class SchedulingService{
    if(replay)return replay;
    const now=this.now(),c=await this.configFor(tx,now);
    if(c.version!==expectedConfigVersion)return reject('SCHEDULE_CONFIG_VERSION_CONFLICT','CONFLICT');
+   if(c.pack&&accepted!==c.version)return reject('PACK_POLICY_ACCEPTANCE_REQUIRED','CONFLICT');
    const {s}=definition(c,serviceId,professionalId),endMs=startMs+s.durationMinutes*MINUTE;
    if(!slotAllowed(c,serviceId,professionalId,startMs,now,await tx.window(startMs,endMs)))
     return reject('SCHEDULE_SLOT_UNAVAILABLE','CONFLICT');
@@ -105,6 +130,7 @@ export class SchedulingService{
     customerId,serviceId,professionalId,resourceIds:[...s.resourceIds],startMs,endMs,
     timezone:c.timezone,status:'HELD',holdUntilMs:Math.min(startMs,now+c.holdMinutes*MINUTE),
     deposit:{amountMinor:s.depositMinor,currency:'BRL',status:s.depositMinor?'UNPAID':'NOT_REQUIRED'},
+    ...(c.pack?{pack:{...c.pack,configVersion:c.version,priceMinor:s.priceMinor!,acceptedBy:ctx.userId!,acceptedAt:new Date(now).toISOString()}}:{}),
     createdAt:new Date(now).toISOString(),updatedAt:new Date(now).toISOString(),
     createdBy:ctx.userId!,transitionBy:ctx.userId!};
    tx.saveBooking(b);tx.saveReceipt(key,{fingerprint:hash,bookingId});return b;
@@ -118,7 +144,10 @@ export class SchedulingService{
    if(replay)return replay;
    const b=await this.getRow(tx,bookingId);
    if(b.version!==expectedVersion)return reject('SCHEDULE_BOOKING_VERSION_CONFLICT','CONFLICT');
-   const next=await fn(tx,b,this.now());
+   const now=this.now();
+   if(b.notices?.some(n=>n.state==='CLAIMED'&&(n.claimUntilMs??0)>now))
+    return reject('PACK_NOTICE_IN_FLIGHT','CONFLICT');
+   const next=await fn(tx,b,now);
    tx.saveBooking(next);tx.saveReceipt(key,{fingerprint:hash,bookingId:b.id});return next;
   });
  }
@@ -136,7 +165,7 @@ export class SchedulingService{
     if(!slotAllowed(c,b.serviceId,b.professionalId,b.startMs,now,await tx.window(b.startMs,b.endMs),b.id))
      return reject('SCHEDULE_SLOT_UNAVAILABLE','CONFLICT');
     const next=this.next(b,ctx,now,{status:'CONFIRMED'});
-    return {...next,reminder:this.reminder(next,c)};
+    return this.notice({...next,reminder:this.reminder(next,c)},'CONFIRMATION',now);
    });
  }
  async reschedule(ctx:TenantContext,u:string,bookingId:string,raw:unknown){
@@ -145,7 +174,7 @@ export class SchedulingService{
    professionalId=id(a.professionalId),startMs=instant(a.startAt);
   return this.transition(ctx,u,id(bookingId),key,fingerprint(['RESCHEDULE',bookingId,version,professionalId,startMs]),version,
    async(tx,b,now)=>{
-    if(!occupies(b,now)||b.startMs<=now)return reject('SCHEDULE_RESCHEDULE_INVALID','CONFLICT');
+    if(b.checkedInAt||!occupies(b,now)||b.startMs<=now)return reject('SCHEDULE_RESCHEDULE_INVALID','CONFLICT');
     if(b.deposit.status==='CREATING'||b.deposit.status==='REVIEW_REQUIRED')return reject('SCHEDULE_DEPOSIT_REVIEW_PENDING','CONFLICT');
     const c=await this.configFor(tx,now),{s}=definition(c,b.serviceId,professionalId),
      endMs=startMs+s.durationMinutes*MINUTE;
@@ -155,7 +184,7 @@ export class SchedulingService{
      return reject('SCHEDULE_SLOT_UNAVAILABLE','CONFLICT');
     const next=this.next(b,ctx,now,{professionalId,startMs,endMs,resourceIds:[...s.resourceIds],
      holdUntilMs:b.status==='HELD'?Math.min(b.holdUntilMs,startMs):b.holdUntilMs});
-    return b.status==='CONFIRMED'?{...next,reminder:this.reminder(next,c)}:next;
+    return b.status==='CONFIRMED'?this.notice({...next,reminder:this.reminder(next,c)},'RESCHEDULE',now):next;
    });
  }
  async cancel(ctx:TenantContext,u:string,bookingId:string,raw:unknown){
@@ -163,9 +192,13 @@ export class SchedulingService{
    version=integer(a.expectedVersion,1,100000),why=reason(a.reason);
   return this.transition(ctx,u,id(bookingId),key,fingerprint(['CANCEL',bookingId,version,why]),version,
    async(_tx,b,now)=>{
-    if(b.status!=='HELD'&&b.status!=='CONFIRMED'||b.startMs<=now)
+    if(b.checkedInAt||b.status!=='HELD'&&b.status!=='CONFIRMED'||b.startMs<=now)
      return reject('SCHEDULE_CANCEL_INVALID','CONFLICT');
-    return this.terminate(b,ctx,now,'CANCELLED',why);
+    if(b.pack?.kind==='AESTHETICS_ADMIN'&&!['Solicitação do cliente','Solicitação do estabelecimento','Imprevisto operacional','Outro motivo administrativo'].includes(why))
+     return reject('PACK_ADMINISTRATIVE_REASON_REQUIRED');
+    const next=this.terminate(b,ctx,now,'CANCELLED',why);
+    if(!b.pack)return next;
+    return this.notice({...next,lateCancellation:b.status==='CONFIRMED'&&b.startMs-now<b.pack.cancelNoticeMinutes*MINUTE},'CANCELLATION',now);
    });
  }
  private terminate(b:Booking,ctx:TenantContext,now:number,status:'CANCELLED'|'EXPIRED',why:string){
@@ -178,9 +211,32 @@ export class SchedulingService{
   const a=object(raw,['expectedVersion','idempotencyKey']),key=id(a.idempotencyKey),v=integer(a.expectedVersion,1,100000);
   return this.transition(ctx,u,id(bookingId),key,fingerprint(['COMPLETE',bookingId,v]),v,
    async(_tx,b,now)=>{
-    if(b.status!=='CONFIRMED'||b.endMs>now)return reject('SCHEDULE_COMPLETE_INVALID','CONFLICT');
+    if(b.status!=='CONFIRMED'||b.endMs>now||b.pack&&!b.checkedInAt)return reject('SCHEDULE_COMPLETE_INVALID','CONFLICT');
     return this.next(b,ctx,now,{status:'COMPLETED',
+     ...(b.notices?{notices:b.notices.map(n=>n.state==='PENDING'?{...n,state:'SUPERSEDED' as const}:n)}:{}),
      ...(b.reminder?{reminder:{...b.reminder,state:'CANCELLED' as const}}:{})});
+   });
+ }
+ async checkIn(ctx:TenantContext,u:string,bookingId:string,raw:unknown){
+  const a=object(raw,['expectedVersion','idempotencyKey']),k=id(a.idempotencyKey),v=integer(a.expectedVersion,1,100000);
+  return this.transition(ctx,u,id(bookingId),k,fingerprint(['CHECK_IN',bookingId,v]),v,
+   async(_tx,b,now)=>{
+    if(!b.pack||b.status!=='CONFIRMED'||b.checkedInAt||now<b.startMs-30*MINUTE||now>=b.endMs)
+     return reject('PACK_CHECK_IN_INVALID','CONFLICT');
+    return this.next(b,ctx,now,{checkedInAt:new Date(now).toISOString(),
+     ...(b.notices?{notices:b.notices.map(n=>n.state==='PENDING'||n.state==='BLOCKED'?{...n,state:'SUPERSEDED' as const}:n)}:{})});
+   });
+ }
+ async noShow(ctx:TenantContext,u:string,bookingId:string,raw:unknown){
+  if(!['OWNER','ADMIN','MANAGER'].includes(ctx.role??''))return reject('PACK_NO_SHOW_ROLE_REQUIRED','FORBIDDEN');
+  const a=object(raw,['expectedVersion','idempotencyKey']),k=id(a.idempotencyKey),v=integer(a.expectedVersion,1,100000);
+  return this.transition(ctx,u,id(bookingId),k,fingerprint(['NO_SHOW',bookingId,v]),v,
+   async(_tx,b,now)=>{
+    if(!b.pack||b.status!=='CONFIRMED'||b.checkedInAt||now<b.startMs+b.pack.noShowGraceMinutes*MINUTE)
+     return reject('PACK_NO_SHOW_INVALID','CONFLICT');
+    const next=this.terminate(b,ctx,now,'CANCELLED','Ausência registrada pelo responsável');
+    return {...next,status:'NO_SHOW',noShowAt:new Date(now).toISOString(),
+     ...(next.notices?{notices:next.notices.map(n=>n.state==='PENDING'?{...n,state:'SUPERSEDED' as const}:n)}:{})};
    });
  }
  /** Scoped maintenance: materialize expired holds and durable due reminders.
@@ -197,10 +253,11 @@ export class SchedulingService{
    // Cap Firestore writes: max 100 transitions per cycle, caller repeats.
    for(const b of records){
     if(expired+ready>=100)break;
+    if(b.notices?.some(n=>n.state==='CLAIMED'&&(n.claimUntilMs??0)>now))continue;
     if(b.status==='HELD'&&b.holdUntilMs<=now){
      tx.saveBooking(this.terminate(b,ctx,now,'EXPIRED','Prazo de reserva expirado'));expired++;
     }else if(b.status==='CONFIRMED'&&b.startMs>now&&b.reminder?.state==='PENDING'&&b.reminder.dueMs<=now){
-     tx.saveBooking(this.next(b,ctx,now,{reminder:{...b.reminder,state:'READY'}}));ready++;
+     tx.saveBooking(this.reminderNotice(this.next(b,ctx,now,{reminder:{...b.reminder,state:'READY'}}),now));ready++;
     }
    }
    return {expired,ready,more:expired+ready===100};
@@ -216,11 +273,13 @@ export class SchedulingService{
    const now=this.now(),records=await tx.due(now);
    let expired=0,ready=0,missed=0;
    for(const b of records){
+    if(b.notices?.some(n=>n.state==='CLAIMED'&&(n.claimUntilMs??0)>now))continue;
     if(b.status==='HELD'&&b.holdUntilMs<=now){
      tx.saveBooking(this.terminate(b,ctx,now,'EXPIRED','Prazo de reserva expirado'));expired++;
     }else if(b.status==='CONFIRMED'&&b.reminder?.state==='PENDING'&&b.reminder.dueMs<=now){
      const state=b.startMs<=now?'CANCELLED':'READY';
-     tx.saveBooking(this.next(b,ctx,now,{reminder:{...b.reminder,state}}));
+     const next=this.next(b,ctx,now,{reminder:{...b.reminder,state}});
+     tx.saveBooking(state==='READY'?this.reminderNotice(next,now):next);
      if(state==='READY')ready++;else missed++;
     }else if(b.status==='CONFIRMED'&&b.reminder?.state==='READY'&&b.startMs<=now){
      tx.saveBooking(this.next(b,ctx,now,{reminder:{...b.reminder,state:'CANCELLED'}}));missed++;

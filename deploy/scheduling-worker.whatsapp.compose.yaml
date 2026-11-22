@@ -1,0 +1,9 @@
+# Optional, explicitly approved WhatsApp worker override. Do not use until
+# real tenant/unit Meta connection, vault, signed consent and go-live are certified.
+services:
+  scheduling-worker:
+    environment:
+      ATENDEVENDE_BOOKING_WHATSAPP_LIVE_ENABLED: "${ATENDEVENDE_BOOKING_WHATSAPP_LIVE_ENABLED:?Explicit approval required}"
+      ATENDEVENDE_PILOT_LIVE_ENABLED: "${ATENDEVENDE_PILOT_LIVE_ENABLED:?Explicit approval required}"
+      ATENDEVENDE_PILOT_GO_LIVE_APPROVED: "${ATENDEVENDE_PILOT_GO_LIVE_APPROVED:?Explicit approval required}"
+      ATENDEVENDE_PILOT_ALLOWED_UNITS: "${ATENDEVENDE_PILOT_ALLOWED_UNITS:?Explicit tenant/unit allowlist required}"

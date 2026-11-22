@@ -61,7 +61,7 @@ export class BookingDepositService{
    }
    const b=await tx.booking(bid),now=this.scheduling.now();
    if(!b)return reject('SCHEDULE_BOOKING_NOT_FOUND','NOT_FOUND');
-   if(!await tx.grant(now))return reject('SCHEDULE_CAPABILITY_REQUIRED','FORBIDDEN');
+   if(!await tx.grant(now,b.pack?.kind))return reject('SCHEDULE_CAPABILITY_REQUIRED','FORBIDDEN');
    if(b.version!==v||b.status!=='HELD'||b.holdUntilMs<=now||b.deposit.status!=='UNPAID')
     return reject('SCHEDULE_DEPOSIT_STATE_CONFLICT','CONFLICT');
    const next=this.update(b,ctx,{...b.deposit,status:'CREATING',provider:provider.id,

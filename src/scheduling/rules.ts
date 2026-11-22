@@ -1,7 +1,7 @@
 import {ApplicationError} from '../infrastructure/errors';
 import type {AppErrorCategory} from '../types/contracts';
 import type {ScheduleConfig,ScheduleServiceDefinition,ScheduleProfessional,
- ScheduleResource,ScheduleSlot,Shift,ScheduleBlock,Occupancy,Booking} from './model';
+ ScheduleResource,ScheduleSlot,Shift,ScheduleBlock,Occupancy,Booking,PackPolicy,BookingPack,NoticeKind} from './model';
 
 export const MINUTE=60_000,DAY=86_400_000,MAX_DURATION=480*MINUTE;
 export function reject(code:string,category:AppErrorCategory='VALIDATION'):never{
@@ -77,18 +77,21 @@ function shifts(v:unknown):Shift[]{
  return list;
 }
 function person(v:unknown):ScheduleProfessional{
- const a=object(v,['id','name','active','shifts']);
- return {id:id(a.id),name:text(a.name),active:bool(a.active),shifts:shifts(a.shifts)};
+ const a=object(v,['id','name','active','shifts','title']);
+ return {id:id(a.id),name:text(a.name),active:bool(a.active),shifts:shifts(a.shifts),
+  ...(a.title===undefined?{}:{title:text(a.title,80)})};
 }
 function service(v:unknown):ScheduleServiceDefinition{
- const a=object(v,['id','name','active','durationMinutes','professionalIds','resourceIds','depositMinor']);
+ const a=object(v,['id','name','active','durationMinutes','professionalIds','resourceIds','depositMinor','priceMinor','category']);
  const durationMinutes=integer(a.durationMinutes,15,480);
  if(durationMinutes%15)return reject('SCHEDULE_DURATION_GRID');
  const professionalIds=distinct(array(a.professionalIds,40).map(id));
  if(!professionalIds.length)return reject('SCHEDULE_PROFESSIONAL_REQUIRED');
  return {id:id(a.id),name:text(a.name),active:bool(a.active),durationMinutes,
    professionalIds,resourceIds:distinct(array(a.resourceIds,12).map(id)),
-   depositMinor:integer(a.depositMinor,0,10_000_000)};
+   depositMinor:integer(a.depositMinor,0,10_000_000),
+   ...(a.priceMinor===undefined?{}:{priceMinor:integer(a.priceMinor,0,100_000_000)}),
+   ...(a.category===undefined?{}:{category:text(a.category,80)})};
 }
 function block(v:unknown):ScheduleBlock{
  const a=object(v,['id','target','targetId','startAt','endAt']);
@@ -99,12 +102,30 @@ function block(v:unknown):ScheduleBlock{
  if(a.target==='UNIT'&&a.targetId!==undefined)return reject('SCHEDULE_BLOCK_TARGET');
  return {id:id(a.id),target:a.target,...(a.target==='UNIT'?{}:{targetId:id(a.targetId)}),startMs,endMs};
 }
+function parsePack(raw:unknown):PackPolicy{
+ const a=object(raw,['kind','cancelNoticeMinutes','noShowGraceMinutes','notifyWhatsApp','utilityTemplates']);
+ if(typeof a.kind!=='string'||!['SALON','BARBERSHOP','AESTHETICS_ADMIN','PROFESSIONAL_SERVICES'].includes(a.kind))return reject('PACK_KIND_INVALID');
+ const utilityTemplates:Partial<Record<NoticeKind,string>>={};
+ if(a.utilityTemplates!==undefined){
+  const templates=object(a.utilityTemplates,['CONFIRMATION','RESCHEDULE','CANCELLATION','REMINDER']);
+  for(const [kind,name] of Object.entries(templates)){
+   if(typeof name!=='string'||!/^[a-z0-9_]{1,128}$/.test(name))return reject('PACK_TEMPLATE_NAME_INVALID');
+   utilityTemplates[kind as NoticeKind]=name;
+  }
+ }
+ return {kind:a.kind as BookingPack,cancelNoticeMinutes:integer(a.cancelNoticeMinutes,0,10080),
+  noShowGraceMinutes:integer(a.noShowGraceMinutes,0,120),notifyWhatsApp:bool(a.notifyWhatsApp),
+  ...(Object.keys(utilityTemplates).length?{utilityTemplates}:{})};
+}
 export function parseConfig(raw:unknown):Omit<ScheduleConfig,'tenantId'|'unitId'|'version'|'updatedAt'|'updatedBy'> & {expectedVersion:number}{
  const a=object(raw,['expectedVersion','timezone','holdMinutes','reminderMinutes','shifts','holidays',
-  'professionals','resources','services','blocks']);
+  'professionals','resources','services','blocks','pack']);
  const professionals=rows(a.professionals,40,person),resources:ScheduleResource[]=rows(a.resources,60,person),
   services=rows(a.services,60,service),blocks=rows(a.blocks,150,block);
+ const pack=a.pack===undefined?undefined:parsePack(a.pack);
  for(const s of services){
+  if(pack&&s.active&&(s.priceMinor===undefined||!s.category||s.depositMinor>s.priceMinor))
+   return reject('PACK_SERVICE_PRICE_OR_CATEGORY_INVALID');
   if(s.professionalIds.some(p=>!professionals.some(x=>x.id===p))||
      s.resourceIds.some(r=>!resources.some(x=>x.id===r)))return reject('SCHEDULE_SERVICE_REFERENCE');
   if(s.active&&(!s.professionalIds.some(p=>professionals.some(x=>x.id===p&&x.active))||
@@ -118,7 +139,7 @@ export function parseConfig(raw:unknown):Omit<ScheduleConfig,'tenantId'|'unitId'
  return {expectedVersion:integer(a.expectedVersion,0,100000),timezone:zone(a.timezone),
   holdMinutes:integer(a.holdMinutes,5,60),reminderMinutes:integer(a.reminderMinutes,0,10080),
   shifts:shifts(a.shifts),holidays:distinct(array(a.holidays,366).map(day)),
-  professionals,resources,services,blocks};
+  professionals,resources,services,blocks,...(pack?{pack}:{})};
 }
 const formats=new Map<string,Intl.DateTimeFormat>();
 function local(ms:number,tz:string){

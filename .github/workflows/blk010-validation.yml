@@ -54,7 +54,11 @@ jobs:
         env:
           NODE_ENV: test
         run: npm test -- tests/t10SchedulingEngine.test.ts
-      - name: T10 isolated Firestore transactional acceptance
+      - name: T11 service pack and transactional template acceptance
+        env:
+          NODE_ENV: test
+        run: npm test -- tests/t11ServiceBookingPacks.test.ts tests/t11BookingTemplates.test.ts
+      - name: T10 and T11 isolated Firestore transactional acceptance
         env:
           NODE_ENV: test
           T10_FIRESTORE_EMULATOR: 'true'
@@ -72,7 +76,7 @@ jobs:
             sleep 1
           done
           test "$READY" = 1
-          npm test -- tests/t10FirestoreEmulator.test.ts
+          npm test -- tests/t10FirestoreEmulator.test.ts tests/t11FirestoreEmulator.test.ts
       - name: T10 scheduling worker compose config gate
         env:
           ATENDEVENDE_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -81,6 +85,19 @@ jobs:
         run: |
           docker compose -f deploy/scheduling-worker.compose.yaml config --format json > /tmp/scheduling-compose.json
           node -e "const assert=require('node:assert/strict');const s=require('/tmp/scheduling-compose.json').services['scheduling-worker'];assert.equal(s.read_only,true);assert.deepEqual(s.cap_drop,['ALL']);assert.equal(s.volumes[0].read_only,true);assert.ok(JSON.stringify(s.command).includes('scheduling-worker.cjs'));assert.ok(!('ATENDEVENDE_PILOT_LIVE_ENABLED' in s.environment));"
+      - name: T11 booking communication worker opt-in compose gate
+        env:
+          ATENDEVENDE_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          FIREBASE_PROJECT_ID: demo-atendevende-t10
+          SCHEDULING_FIREBASE_CREDENTIAL_FILE: /tmp/test-service-account.json
+          ATENDEVENDE_BOOKING_WHATSAPP_LIVE_ENABLED: 'false'
+          ATENDEVENDE_PILOT_LIVE_ENABLED: 'false'
+          ATENDEVENDE_PILOT_GO_LIVE_APPROVED: 'false'
+          ATENDEVENDE_PILOT_ALLOWED_UNITS: '{}'
+          WHATSAPP_SECRET_DIR: /tmp/fixture-wa-secrets
+        run: |
+          docker compose -f deploy/scheduling-worker.compose.yaml -f deploy/scheduling-worker.whatsapp.compose.yaml -f deploy/scheduling-worker.whatsapp-mounted.compose.yaml config --format json > /tmp/t11-compose.json
+          node -e "const a=require('node:assert/strict');const s=require('/tmp/t11-compose.json').services['scheduling-worker'];a.equal(s.environment.ATENDEVENDE_BOOKING_WHATSAPP_LIVE_ENABLED,'false');a.equal(s.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');a.equal(s.environment.WHATSAPP_VAULT_BACKEND,'MOUNTED');a.ok(s.volumes.find(v=>v.target==='/run/secrets/atendevende-whatsapp').read_only);a.equal(s.read_only,true);"
       - name: Runtime security boundaries
         env:
           NODE_ENV: production
@@ -102,6 +119,8 @@ jobs:
             STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
             test "$STATUS" = "401"
           done
+          STATUS=$(curl --silent --output /tmp/booking-boundary.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"expectedVersion":1,"idempotencyKey":"attack"}' http://127.0.0.1:3000/api/scheduling/units/main/bookings/book_123/no-show)
+          test "$STATUS" = "401"
           STATUS=$(curl --silent --output /tmp/autonomy.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"tool":"ORDER_STATUS","idempotencyKey":"attack_111","payload":{"orderId":"order_111"}}' http://127.0.0.1:3000/api/autonomy/units/main/execute)
           test "$STATUS" = "401"
           STATUS=$(curl --silent --output /tmp/sales.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"leadId":"spoofed"}' http://127.0.0.1:3000/api/sales/decision)

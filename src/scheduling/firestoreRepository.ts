@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
-import type {ScheduleRepository,ScheduleScope,ScheduleTransaction,ScheduleConfig,Booking,Occupancy,RequestReceipt} from './model';
+import type {ScheduleRepository,ScheduleScope,ScheduleTransaction,ScheduleConfig,Booking,Occupancy,RequestReceipt,BookingPack} from './model';
 import type {CapabilityAssignment} from '../capabilities/model';
 import {capabilityTemplate} from '../capabilities/catalog';
 import type {BusinessProfileRevision} from '../business/model';
@@ -43,7 +43,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
    }
    const port:ScheduleTransaction={
     config:async()=>config,
-    grant:async(nowMs:number)=>{
+    grant:async(nowMs:number,pack?:BookingPack)=>{
      const a=await trx.get(db.collection('unitCapabilityAssignments').doc(key));
      if(!a.exists||a.get('tenantId')!==scope.tenantId||a.get('unitId')!==scope.unitId)return false;
      const v=a.get('latestVersion');
@@ -62,6 +62,15 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
      const pr=await trx.get(p.ref.collection('versions').where('effectiveFrom','<=',now)
        .orderBy('effectiveFrom','desc').limit(1));
      const profile=pr.docs[0]?.data() as BusinessProfileRevision|undefined;
+     if(pack){
+      const required=pack==='PROFESSIONAL_SERVICES'?['SERVICE_BOOKING']:
+       pack==='AESTHETICS_ADMIN'&&assignment.vertical==='HEALTH_SERVICE'?['HEALTH_ADMIN']:
+       ['BEAUTY_SERVICES','BEAUTY_BOOKING'];
+      if(pack==='PROFESSIONAL_SERVICES'&&assignment.vertical!=='SERVICES'||
+       (pack==='SALON'||pack==='BARBERSHOP')&&assignment.vertical!=='BEAUTY'||
+       pack==='AESTHETICS_ADMIN'&&!['BEAUTY','HEALTH_SERVICE'].includes(assignment.vertical)||
+       !required.every(x=>assignment.enabledCapabilities.some(y=>y===x)))return false;
+     }
      return !!profile&&profile.tenantId===scope.tenantId&&profile.unitId===scope.unitId&&
       (!profile.expiresAt||profile.expiresAt>now)&&
       ['SERVICES','BEAUTY','HEALTH_SERVICE'].includes(profile.capabilityRegistry.vertical)&&
@@ -89,6 +98,11 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
      return snap.docs.map(d=>{const x=d.data() as Booking;checkRow(x);
        if(x.unitId!==scope.unitId)return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');return x;});
     },
+    communicationDue:async(now)=>{
+     const snap=await trx.get(bookings.where('communicationDueMs','<=',now).orderBy('communicationDueMs').limit(25));
+     return snap.docs.map(d=>{const x=d.data() as Booking;checkRow(x);
+      if(x.unitId!==scope.unitId)return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');return x;});
+    },
     receipt:async(k)=>{
      const snap=await trx.get(receipts.doc(hash(k)));
      if(!snap.exists)return null;
@@ -111,11 +125,14 @@ export class FirestoreScheduleRepository implements ScheduleRepository{
      checkRow(b);
      if(b.unitId!==scope.unitId)return reject('SCHEDULE_SCOPE_CORRUPT','INTERNAL');
      // Persist only one next due timestamp, enabling a bounded indexed worker.
-     const {maintenanceDueMs:_old,...rest}=b;
+     const {maintenanceDueMs:_old,communicationDueMs:_comm,...rest}=b;
      const due=b.status==='HELD'?b.holdUntilMs:
       b.status==='CONFIRMED'&&b.reminder?.state==='PENDING'?b.reminder.dueMs:
       b.status==='CONFIRMED'&&b.reminder?.state==='READY'?b.startMs:undefined;
-     const persisted:Booking=due===undefined?rest:{...rest,maintenanceDueMs:due};
+     const pending=(b.notices??[]).filter(n=>n.state==='PENDING'||n.state==='CLAIMED')
+      .map(n=>n.state==='CLAIMED'?n.claimUntilMs??n.dueMs:n.dueMs);
+     const persisted:Booking={...rest,...(due===undefined?{}:{maintenanceDueMs:due}),
+      ...(pending.length?{communicationDueMs:Math.min(...pending)}:{})};
      trx.set(bookings.doc(b.id),persisted);
      trx.create(bookings.doc(b.id).collection('versions').doc(String(b.version)),persisted);
      const lock=asOccupancy(b);

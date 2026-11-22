@@ -3,12 +3,14 @@ import {ensureFirebaseAdminApp} from '../src/infrastructure/firebaseAdmin';
 import {FirestoreScheduleRepository} from '../src/scheduling/firestoreRepository';
 import {SchedulingService} from '../src/scheduling/service';
 import {FirestoreCustomerRepository} from '../src/customers/firestoreRepository';
+import {createPackNoticeRuntime} from '../src/bookingPacks/runtime';
 
 export async function runSchedulingCycle(){
  const db=getFirestore(ensureFirebaseAdminApp());
  const service=new SchedulingService(new FirestoreScheduleRepository(),new FirestoreCustomerRepository());
+ const notices=createPackNoticeRuntime();
  const units=db.collection('schedulingUnits');
- let cursor:string|undefined,processed=0,expired=0,ready=0,missed=0,failed=0;
+ let cursor:string|undefined,processed=0,expired=0,ready=0,missed=0,failed=0,accepted=0,blocked=0,review=0;
  for(;;){
   const query=units.orderBy(FieldPath.documentId()).limit(100);
   const page=await (cursor?query.startAfter(cursor):query).get();
@@ -23,13 +25,15 @@ export async function runSchedulingCycle(){
      expired+=result.expired;ready+=result.ready;missed+=result.missed;
      if(!result.more)break;
     }
+    const deliveries=await notices.cycle({tenantId,unitId});
+    accepted+=deliveries.accepted;blocked+=deliveries.blocked;review+=deliveries.review;
     processed++;
    }catch{failed++;}
   }
   cursor=page.docs.at(-1)!.id;
   if(page.size<100)break;
  }
- return {processed,expired,ready,missed,failed};
+ return {processed,expired,ready,missed,failed,accepted,blocked,review};
 }
 if(process.argv[1]&&/scheduling-worker(?:\.ts|\.cjs)$|schedulingWorker\.ts$/.test(process.argv[1])){
  runSchedulingCycle().then(result=>{

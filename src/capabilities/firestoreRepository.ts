@@ -67,7 +67,8 @@ export class FirestoreCapabilityRepository implements CapabilityRepository {
    }
    if(previous?.enabledCapabilities.includes('SCHEDULING')&&
      (!next.enabledCapabilities.includes('SCHEDULING')||
-      !next.enabledCapabilities.includes('SERVICE_CATALOG')||previous.vertical!==next.vertical||
+      !next.enabledCapabilities.includes('SERVICE_CATALOG')||
+      previous.enabledCapabilities.some(x=>['SERVICE_BOOKING','BEAUTY_SERVICES','BEAUTY_BOOKING','HEALTH_ADMIN'].includes(x)&&!next.enabledCapabilities.includes(x))||previous.vertical!==next.vertical||
       previous.operationMode!==next.operationMode)){
     const now=Date.now();
     await tx.get(db().collection('schedulingTenants').doc(key(next.tenantId)));

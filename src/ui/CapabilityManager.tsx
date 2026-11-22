@@ -5,6 +5,7 @@ import type {CapabilityAssignment,CapabilityId,CapabilityManifest,
  CapabilityTemplate,CapabilityTemplateId} from '../capabilities/model';
 import {ProductionBoard} from './ProductionBoard';
 import {SchedulingPanel} from './SchedulingPanel';
+import type {BookingPack} from '../scheduling/model';
 
 interface CatalogResponse {
  schemaVersion:1;manifests:CapabilityManifest[];templates:CapabilityTemplate[];
@@ -18,9 +19,9 @@ const LABELS:Record<CapabilityId,string>={
  RETAIL_CATALOG:'Catálogo de varejo (futuro)',RETAIL_CHECKOUT:'Checkout de varejo (futuro)',
  RETAIL_INVENTORY:'Estoque de varejo (futuro)',
  SERVICE_CATALOG:'Catálogo de serviços',SCHEDULING:'Agenda horizontal',
- SERVICE_BOOKING:'Reservas de serviços (futuro)',
+ SERVICE_BOOKING:'Reservas de serviços',
  BEAUTY_SERVICES:'Serviços de estética (T11)',BEAUTY_BOOKING:'Agendamento de estética (T11)',
- HEALTH_ADMIN:'Administração clínica (futuro)',
+ HEALTH_ADMIN:'Administração clínica (não clínica)',
 };
 const SECTORS:Record<BusinessVertical,string>={
  FOOD_SERVICE:'Restaurantes e alimentação',RETAIL:'Comércio e varejo',
@@ -240,7 +241,10 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
  {allowFoodBoard&&<ProductionBoard tenantId={tenantId} role={role}/>}
  {!loading&&assignment?.state==='ENABLED_INTERNAL'&&assignment.operationMode==='NATIVE_OPERATIONS'&&assignment.vertical===vertical&&
   assignment.enabledCapabilities.includes('SCHEDULING')&&assignment.enabledCapabilities.includes('SERVICE_CATALOG')&&
-  <SchedulingPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} role={role}/>}
+  <SchedulingPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} role={role} availablePacks={(
+   assignment.vertical==='BEAUTY'&&assignment.enabledCapabilities.includes('BEAUTY_BOOKING')&&assignment.enabledCapabilities.includes('BEAUTY_SERVICES')?['SALON','BARBERSHOP','AESTHETICS_ADMIN']:
+   assignment.vertical==='HEALTH_SERVICE'&&assignment.enabledCapabilities.includes('HEALTH_ADMIN')?['AESTHETICS_ADMIN']:
+   assignment.vertical==='SERVICES'&&assignment.enabledCapabilities.includes('SERVICE_BOOKING')?['PROFESSIONAL_SERVICES']:[]) as BookingPack[]}/>}
  {!loading&&assignment?.operationMode==='INTEGRATED_OPERATIONS'&&assignment.enabledCapabilities.includes('SCHEDULING')&&
   <p className="text-sm text-amber-300">Agenda nativa não habilitada no modo integrado. Aguarde um adaptador de agenda externa certificado; nenhum horário é confirmado em duplicidade.</p>}
  </>;
