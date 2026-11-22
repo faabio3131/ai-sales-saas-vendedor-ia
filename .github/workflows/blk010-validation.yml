@@ -48,6 +48,17 @@ jobs:
         run: npm run typecheck
       - name: T13 AST-based security source gate
         run: npm run security:static
+      - name: T13 release, branch policy, and Firestore active-rules self-test
+        run: |
+          node scripts/t13FirestoreRulesGate.mjs --self-test
+          node scripts/t13ReleaseGate.mjs --self-test
+          node scripts/t13WorkflowGate.mjs
+      - name: T13 independent Semgrep OSS SAST gate
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/t13-semgrep-venv
+          /tmp/t13-semgrep-venv/bin/pip install --disable-pip-version-check --no-cache-dir semgrep==1.186.0
+          /tmp/t13-semgrep-venv/bin/semgrep scan --metrics off --config .semgrep/t13-security.yml --error src cognitive_service
       - name: T13 Python AST security gate
         run: |
           python3 scripts/t13PythonSecurityGate.py --self-test
