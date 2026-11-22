@@ -2,13 +2,23 @@
 # Manual or protected-environment controlled deployment on an authorized host.
 # Never executed from pull request CI. Requires preprovisioned, private files.
 set -Eeuo pipefail
+# Immutable approval inputs originate from the protected GitHub environment,
+# never from a mutable host runtime file.
+APPROVED_REF="${T13_IMAGE_REF:?Signed OCI image required}"
+APPROVED_SHA="${T13_EXPECTED_SHA:?Approved post-merge SHA required}"
 RUNTIME_ENV="${T13_RUNTIME_ENV_FILE:-.t13-runtime.env}"
 [[ -f "$RUNTIME_ENV" && ! -L "$RUNTIME_ENV" ]] ||
  { echo 'HOST_RUNTIME_ENV_NOT_PROVISIONED' >&2; exit 1; }
+# Only a private root/operator-controlled file may configure production.
+MODE=$(stat -c '%a' "$RUNTIME_ENV")
+[[ "$MODE" == "400" || "$MODE" == "600" ]] ||
+ { echo 'HOST_RUNTIME_ENV_PERMISSIONS_UNSAFE' >&2; exit 1; }
 set -a
 # Operator-controlled private host file; NEVER transmitted from the repository.
 . "$RUNTIME_ENV"
 set +a
+T13_IMAGE_REF="$APPROVED_REF"
+T13_EXPECTED_SHA="$APPROVED_SHA"
 : "${T13_IMAGE_REF:?Signed OCI image digest required}"
 : "${FIREBASE_PROJECT_ID:?Firestore project required}"
 : "${T13_SESSION_SECRET_FILE:?Private session secret required}"
@@ -34,7 +44,7 @@ if [[ -f "$STATE" ]]; then
  [[ "$PREVIOUS" =~ ^ghcr[.]io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[a-f0-9]{64}$ ]] ||
   { echo 'PREVIOUS_DIGEST_INVALID' >&2; exit 1; }
 fi
-REPO="${T13_SIGNED_REPOSITORY:-faabio3131/ai-sales-saas-vendedor-ia}"
+REPO='faabio3131/ai-sales-saas-vendedor-ia'
 IDENTITY="https://github.com/$REPO/.github/workflows/t13-certified-release.yml@refs/heads/main"
 verify_image(){
  cosign verify --certificate-identity "$IDENTITY" \

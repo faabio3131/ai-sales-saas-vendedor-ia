@@ -53,6 +53,35 @@ jobs:
           node scripts/t13FirestoreRulesGate.mjs --self-test
           node scripts/t13ReleaseGate.mjs --self-test
           node scripts/t13WorkflowGate.mjs
+      - name: T13 production topology and deploy script static gate
+        env:
+          ATENDEVENDE_IMAGE: ghcr.io/example/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          FIREBASE_PROJECT_ID: demo-t13
+          PUBLIC_APP_URL: https://staging.invalid
+          T13_SESSION_SECRET_FILE: /tmp/ci-session-mount
+          PAYMENT_FIREBASE_CREDENTIAL_FILE: /tmp/ci-firebase-identity.json
+        run: |
+          set -euo pipefail
+          bash -n deploy/t13-controlled-deploy.sh
+          docker compose -f deploy/t13-production.compose.yaml -f deploy/payment-reconciler.compose.yaml config --format json > /tmp/t13-production-topology.json
+          node - <<'NODE'
+          const a=require('node:assert/strict');
+          const data=require('/tmp/t13-production-topology.json');
+          const api=data.services['atendevende-api'],worker=data.services['payment-reconciler'];
+          a.ok(api&&worker);
+          a.equal(api.image,worker.image);
+          a.match(api.image,/^ghcr[.]io\\/[^@]+@sha256:[a-f0-9]{64}$/);
+          a.equal(api.read_only,true);
+          a.equal(worker.read_only,true);
+          a.deepEqual(api.cap_drop,['ALL']);
+          a.equal(api.ports[0].host_ip,'127.0.0.1');
+          a.equal(api.environment.ATENDEVENDE_PILOT_LIVE_ENABLED,'false');
+          a.equal(api.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');
+          a.equal(api.environment.ATENDEVENDE_PILOT_ALLOWED_UNITS,'{}');
+          a.equal(api.environment.SESSION_SECRET_FILE,'/run/secrets/atendevende/session');
+          a.ok(api.volumes.find(v=>v.target==='/run/secrets/atendevende/session'&&v.read_only));
+          a.ok(worker.volumes.find(v=>v.target==='/run/secrets/firebase/service-account.json'&&v.read_only));
+          NODE
       - name: T13 independent Semgrep OSS SAST gate
         run: |
           set -euo pipefail

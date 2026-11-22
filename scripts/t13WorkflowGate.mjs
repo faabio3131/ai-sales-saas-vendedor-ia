@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 const dir='.github/workflows';
 const yaml=fs.readdirSync(dir).filter(p=>/\.ya?ml$/.test(p));
-if(!yaml.includes('blk010-validation.yml')||!yaml.includes('t13-certified-release.yml'))
+if(!yaml.includes('blk010-validation.yml')||!yaml.includes('t13-certified-release.yml')||!yaml.includes('t13-controlled-deploy.yml'))
  throw Error('T13_REQUIRED_WORKFLOWS_MISSING');
 for(const name of yaml){
  const source=fs.readFileSync(path.join(dir,name),'utf8');
@@ -27,4 +27,11 @@ if(!release.includes('workflow_dispatch:')||
  !release.includes('t13ReleaseGate.mjs --verify')||
  !release.includes('t13FirestoreRulesGate.mjs --verify-active'))
  throw Error('T13_RELEASE_SECURITY_GATES_MISSING');
+const deployment=fs.readFileSync(path.join(dir,'t13-controlled-deploy.yml'),'utf8');
+if(!deployment.includes('environment: t13-production-approval')||
+ !deployment.includes('t13ReleaseGate.mjs --verify')||
+ !deployment.includes('cosign verify')||
+ !deployment.includes('gh attestation verify')||
+ !deployment.includes('deploy/t13-controlled-deploy.sh'))
+ throw Error('T13_CONTROLLED_DEPLOY_GATES_MISSING');
 console.log('t13_workflow_supply_chain_gate_passed:'+yaml.length);
