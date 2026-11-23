@@ -169,7 +169,11 @@ jobs:
             sleep 1
           done
           test "$READY" = 1
-          npm test -- tests/t10FirestoreEmulator.test.ts tests/t11FirestoreEmulator.test.ts tests/t12FirestoreEmulator.test.ts
+          # Each suite has its own Vitest process. The T10 8-way transaction stress
+          # still runs in full, but cannot overlap T11/T12 clients on the same emulator.
+          npm test -- tests/t10FirestoreEmulator.test.ts
+          npm test -- tests/t11FirestoreEmulator.test.ts
+          npm test -- tests/t12FirestoreEmulator.test.ts
           # Keep new T13 recovery emulator tests isolated from T10's 8-way
           # transaction contention, so CI cannot manufacture emulator lock timeouts.
           npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
