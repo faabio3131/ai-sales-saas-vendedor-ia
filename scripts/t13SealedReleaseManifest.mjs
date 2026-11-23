@@ -13,7 +13,19 @@ const ownerComment=process.env.T13_DIRECTOR_COMMENT_ID??'';
 const auditDigest=process.env.T13_GEMINI_EVIDENCE_SHA256??'';
 if(ownerMode&&(!/^[1-9][0-9]*$/.test(ownerComment)||!/^[0-9a-f]{64}$/.test(auditDigest)))
  throw Error('T13_DIRECTOR_AUDIT_PROVENANCE_MISSING');
+const attestation=JSON.parse(fs.readFileSync('t13-verified-oci-attestations.json','utf8'));
+if(attestation.status!=='T13_OCI_COSIGN_ATTESTATIONS_VERIFIED'||
+ attestation.imageRef!==ref||
+ attestation.commit!==process.env.GITHUB_SHA||
+ attestation.deploymentAuthorized!==false||
+ attestation.provenancePredicateType!=='https://slsa.dev/provenance/v1'||
+ attestation.sbomPredicateType!=='https://cyclonedx.org/bom')
+ throw Error('T13_SIGNED_OCI_ATTESTATION_VERIFICATION_REQUIRED');
+const provenance=fs.readFileSync('t13-slsa-provenance.json');
 const sbom=fs.readFileSync('t13-sbom.cdx.json');
+if(attestation.provenanceSha256!==createHash('sha256').update(provenance).digest('hex')||
+ attestation.sbomSha256!==createHash('sha256').update(sbom).digest('hex'))
+ throw Error('T13_SIGNED_OCI_PREDICATE_HASH_MISMATCH');
 const manifest={
  schema:'atendevende.t13.sealed-oci/v1',
  commitSha:process.env.GITHUB_SHA,
@@ -23,6 +35,13 @@ const manifest={
  sbomSha256:createHash('sha256').update(sbom).digest('hex'),
  provenanceVerified:true,
  cosignVerified:true,
+ attestationBackend:'SIGSTORE_COSIGN_REGISTRY_OCI',
+ provenancePredicateType:'https://slsa.dev/provenance/v1',
+ sbomPredicateType:'https://cyclonedx.org/bom',
+ provenanceSha256:attestation.provenanceSha256,
+ attestationContentVerified:true,
+ githubArtifactAttestationsUsed:false,
+ slsaClaim:'SELF_REPORTED_BUILD_PROVENANCE_V1_NOT_SLSA_L3',
  exactMainHeadApproved:true,
  approvalMode:mode,
  ...(ownerMode?{auditedT13Head:'a0e335dba1884fb398aea13c8435cd28f98436a9',

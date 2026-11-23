@@ -39,3 +39,25 @@ cobertura incompleta, código src alterado, hash incorreto e evento não manual.
 Use o SHA-256 da transcrição exibido na CI do branch da PR de governança e o HEAD exato da
 mesma PR para publicar o comentário no histórico da PR #29. O gate consulta a API GitHub
 e verifica conta proprietária, author_association OWNER, integridade e ausência de edição.
+
+## Compatibilidade com repositório privado pessoal — attestations de imagem
+
+O workflow #45283271550 demonstrou que o serviço GitHub Artifact Attestations
+falha em repositórios privados de conta pessoal (mesmo com `attestations: write`).
+A assinatura Cosign e a publicação no GHCR chegaram a passar, mas a etapa
+`actions/attest-build-provenance` falhou: nenhuma certificação final foi emitida.
+
+A correção mantém a imagem privada e troca os dois atestados GitHub por **atestados
+OCI Sigstore/Cosign keyless**, associados ao **digest exato** da imagem publicada:
+proveniência do próprio workflow em formato SLSA v1 e SBOM CycloneDX.
+Os dois predicados são assinados usando GitHub OIDC, verificados por identidade
+exata do workflow e issuer e **analisados semanticamente** para comparar commit,
+imagem, repositório, caminho do workflow e conteúdo do SBOM. O selo armazena
+o SHA256 do predicado e o digest do artefato.
+
+Isso **não é** um atestado do serviço GitHub, não alega SLSA Build Level 3 e
+não altera a autenticação nem libera o deploy. O workflow de deploy permanece
+com guardas separados, regras Firestore ativas, verificação Cosign das duas
+attestations e gate de autorização próprio.
+
+Não tornar o repositório público como correção do erro.

@@ -13,7 +13,6 @@ permissions:
   actions: read
   pull-requests: read
   packages: read
-  attestations: read
 concurrency:
   group: t13-production-rollout
   cancel-in-progress: false
@@ -67,7 +66,10 @@ jobs:
           set -euo pipefail
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           cosign verify --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/t13-certified-release.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF"
-          gh attestation verify "oci://$IMAGE_REF" -R "$GITHUB_REPOSITORY"
+          COSIGN_IDENTITY="https://github.com/$GITHUB_REPOSITORY/.github/workflows/t13-certified-release.yml@refs/heads/main"
+          cosign verify-attestation --type slsaprovenance1 --certificate-identity "$COSIGN_IDENTITY" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF" > t13-verified-slsa.jsonl
+          cosign verify-attestation --type cyclonedx --certificate-identity "$COSIGN_IDENTITY" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF" > t13-verified-sbom.jsonl
+          node scripts/t13RegistryAttestationGate.mjs --verify-deploy
       - name: SSH deploy API and workers with rollback
         env:
           IMAGE_REF: "${{ steps.image.outputs.ref }}"
