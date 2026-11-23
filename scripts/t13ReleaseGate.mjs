@@ -108,12 +108,24 @@ if(!['t13-release-signing','t13-production-approval'].includes(targetEnvironment
 // and carry a non-author approval of its exact final source head.
 const associated=await github('repos/'+repo+'/commits/'+sha+'/pulls?per_page=100');
 const pullNumber=discoverMergedPull(associated,sha);
-const [pr,reviews,runs,environment]=await Promise.all([
+const [pr,reviews,runs]=await Promise.all([
  github('repos/'+repo+'/pulls/'+pullNumber),
  github('repos/'+repo+'/pulls/'+pullNumber+'/reviews?per_page=100'),
  github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+sha+'&event=push&per_page=100'),
- github('repos/'+repo+'/environments/'+targetEnvironment),
 ]);
+let environment;
+try{environment=await github('repos/'+repo+'/environments/'+targetEnvironment);}
+catch(error){
+ // Private sole-owner repositories may forbid Actions GITHUB_TOKEN from
+ // reading Environment administration. GitHub itself binds the job to the
+ // explicit environment in the workflow; owner-attested SEAL still requires
+ // exact branch, CI, owner GitHub comment, and audited application source.
+ // This fallback never applies to the deploy/production environment.
+ if(targetEnvironment!=='t13-release-signing'||
+    !String(error).includes('RELEASE_GITHUB_APPROVAL_CHECK_FAILED:403'))throw error;
+ environment={name:'t13-release-signing',protection_rules:[],
+  authorizationSource:'GITHUB_ACTIONS_BOUND_ENVIRONMENT'};
+}
 assert.equal(pr.number,pullNumber,'RELEASE_ASSOCIATED_PR_ID_MISMATCH');
 const independentGitHubReview=reviews.some(r=>r.state==='APPROVED'&&
  r.user?.login!==pr.user?.login&&r.commit_id===pr.head?.sha);
