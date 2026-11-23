@@ -241,3 +241,63 @@ describe('T13 independent reauditor fencing regression',()=>{
   expect(inbox.rows.get(id)?.state).toBe('COMPLETED');
  });
 });
+
+
+describe('T13 signed Mercado Pago multitenant and durable inbox',()=>{
+ const mpTenant='tenant-mp',mpSecret='mercado-pago-webhook-secret-0123456789';
+ const mpPayload={id:'provider-evt',type:'payment',data:{id:'123456'}};
+ function signed(){
+  const ts=String(Math.floor(Date.now()/1000));
+  const requestId='mp-verified-request-id';
+  const signature=createHmac('sha256',mpSecret)
+   .update('id:123456;request-id:'+requestId+';ts:'+ts+';').digest('hex');
+  return {'x-request-id':requestId,'x-signature':'ts='+ts+',v1='+signature};
+ }
+ const mpConnections:MerchantProviderConnectionRepository={
+  ...connections,
+  get:async(t,p)=>t===mpTenant&&p==='MERCADOPAGO'
+   ? {tenantId:mpTenant,providerId:'MERCADOPAGO',recipientId:'collector-mp',
+      credentialRef:'mounted:tenant-mp',status:'ACTIVE'}:null,
+ };
+ const mpVault:MerchantCredentialsVault={load:async()=>({
+  tenantId:mpTenant,providerId:'MERCADOPAGO',recipientId:'collector-mp',clientSecret:mpSecret,
+ })};
+ it('durably stores signed callback then verifies multi-sector payment by PSP GET',async()=>{
+  const recovery=new FakeVerifiedInbox();
+  recovery.state=async id=>recovery.rows.get(id)?.state??null;
+  const retail=vi.fn(async()=>({domain:'RETAIL' as const,paymentId:'retail-record',
+   status:'VERIFIED' as const}));
+  const processor=new PaymentWebhookProcessor({
+   connections:mpConnections,vault:mpVault,
+   payments:{...payments,findByProviderPaymentId:async()=>null},
+   service:{refresh:vi.fn()},multisector:{refreshVerified:retail},recovery,
+  });
+  const rawBody=Buffer.from(JSON.stringify(mpPayload));
+  const req={provider:'MERCADOPAGO',tenantId:mpTenant,headers:signed(),
+   rawBody,payload:mpPayload,queryPaymentId:'123456'};
+  expect(await processor.process(req)).toEqual(['VERIFIED']);
+  expect(recovery.rows.size).toBe(1);
+  expect([...recovery.rows.values()][0].state).toBe('COMPLETED');
+  expect(await processor.process(req)).toEqual([]);
+  expect(retail).toHaveBeenCalledTimes(1);
+  expect(retail).toHaveBeenCalledWith(mpTenant,'MERCADOPAGO','123456');
+ });
+ it('rejects tenant spoofing, altered query id and signature without inbox write',async()=>{
+  const recovery=new FakeVerifiedInbox();
+  const processor=new PaymentWebhookProcessor({
+   connections:mpConnections,vault:mpVault,
+   payments:{...payments,findByProviderPaymentId:async()=>null},
+   service:{refresh:vi.fn()},recovery,
+  });
+  const rawBody=Buffer.from(JSON.stringify(mpPayload));
+  const req={provider:'MERCADOPAGO',tenantId:mpTenant,headers:signed(),
+   rawBody,payload:mpPayload,queryPaymentId:'123456'};
+  await expect(processor.process({...req,tenantId:'attacker'}))
+   .rejects.toMatchObject({code:'PAYMENT_WEBHOOK_UNAUTHORIZED'});
+  await expect(processor.process({...req,queryPaymentId:'999'}))
+   .rejects.toMatchObject({code:'PAYMENT_WEBHOOK_UNAUTHORIZED'});
+  await expect(processor.process({...req,headers:{...req.headers,'x-signature':'ts=0,v1='+ '0'.repeat(64)}}))
+   .rejects.toMatchObject({code:'PAYMENT_WEBHOOK_UNAUTHORIZED'});
+  expect(recovery.rows.size).toBe(0);
+ });
+});
