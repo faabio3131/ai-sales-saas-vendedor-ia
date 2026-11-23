@@ -13,7 +13,6 @@ permissions:
   issues: read
   packages: write
   id-token: write
-  attestations: write
 concurrency:
   group: t13-signed-oci-release
   cancel-in-progress: false
@@ -80,19 +79,14 @@ jobs:
           set -euo pipefail
           cosign sign --yes "$IMAGE_REF"
           cosign verify --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/t13-certified-release.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF"
-      - name: Attest SLSA build provenance
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
-        with:
-          subject-name: "${{ steps.push.outputs.image }}"
-          subject-digest: "${{ steps.push.outputs.digest }}"
-          push-to-registry: true
-      - name: Attest CycloneDX SBOM to signed image digest
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34
-        with:
-          subject-name: "${{ steps.push.outputs.image }}"
-          subject-digest: "${{ steps.push.outputs.digest }}"
-          sbom-path: t13-sbom.cdx.json
-          push-to-registry: true
+      - name: Generate OCI provenance and publish signed SLSA v1 / CycloneDX attestations
+        env:
+          IMAGE_REF: "${{ steps.push.outputs.image_ref }}"
+        run: |
+          set -euo pipefail
+          node scripts/t13RegistryAttestationGate.mjs --prepare
+          cosign attest --yes --type slsaprovenance1 --predicate t13-slsa-provenance.json "$IMAGE_REF"
+          cosign attest --yes --type cyclonedx --predicate t13-sbom.cdx.json "$IMAGE_REF"
       - name: Verify provenance and produce sealed-not-deployed manifest
         env:
           GH_TOKEN: "${{ github.token }}"
@@ -103,7 +97,10 @@ jobs:
           T13_GEMINI_EVIDENCE_SHA256: "${{ steps.release_gate.outputs.audit_sha256 }}"
         run: |
           set -euo pipefail
-          gh attestation verify "oci://$IMAGE_REF" --repo "$GITHUB_REPOSITORY"
+          COSIGN_IDENTITY="https://github.com/$GITHUB_REPOSITORY/.github/workflows/t13-certified-release.yml@refs/heads/main"
+          cosign verify-attestation --type slsaprovenance1 --certificate-identity "$COSIGN_IDENTITY" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF" > t13-verified-slsa.jsonl
+          cosign verify-attestation --type cyclonedx --certificate-identity "$COSIGN_IDENTITY" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF" > t13-verified-sbom.jsonl
+          node scripts/t13RegistryAttestationGate.mjs --verify-seal
           node scripts/t13SealedReleaseManifest.mjs
       - name: Upload immutable release evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -112,4 +109,6 @@ jobs:
           path: |
             t13-sealed-release.json
             t13-sbom.cdx.json
+            t13-slsa-provenance.json
+            t13-verified-oci-attestations.json
           retention-days: 90

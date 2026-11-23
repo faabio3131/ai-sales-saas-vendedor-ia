@@ -27,7 +27,12 @@ const release=fs.readFileSync(path.join(dir,'t13-certified-release.yml'),'utf8')
 if(!release.includes('workflow_dispatch:')||
  !release.includes('environment: t13-release-signing')||
  !release.includes('id-token: write')||
- !release.includes('attestations: write')||
+ !release.includes('cosign attest --yes --type slsaprovenance1')||
+ !release.includes('cosign attest --yes --type cyclonedx')||
+ !release.includes('t13RegistryAttestationGate.mjs --verify-seal')||
+ release.includes('actions/attest-build-provenance@')||
+ release.includes('actions/attest-sbom@')||
+ release.includes('gh attestation verify')||
  !release.includes('t13ReleaseGate.mjs --verify')||
  !release.includes('t13FirestoreRulesGate.mjs --self-test')||
  !release.includes('steps.release_gate.outputs.approval_mode')||
@@ -37,7 +42,10 @@ const deployment=fs.readFileSync(path.join(dir,'t13-controlled-deploy.yml'),'utf
 if(!deployment.includes('environment: t13-production-approval')||
  !deployment.includes('t13ReleaseGate.mjs --verify')||
  !deployment.includes('cosign verify')||
- !deployment.includes('gh attestation verify')||
+ !deployment.includes('cosign verify-attestation --type slsaprovenance1')||
+ !deployment.includes('cosign verify-attestation --type cyclonedx')||
+ !deployment.includes('t13RegistryAttestationGate.mjs --verify-deploy')||
+ deployment.includes('gh attestation verify')||
  !deployment.includes('deploy/t13-controlled-deploy.sh')||
  !deployment.includes('t13FirestoreRulesGate.mjs --verify-active'))
  throw Error('T13_CONTROLLED_DEPLOY_GATES_MISSING');

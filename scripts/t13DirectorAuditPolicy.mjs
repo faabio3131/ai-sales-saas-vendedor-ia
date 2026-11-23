@@ -22,6 +22,7 @@ const POLICY_ONLY_FILES=new Set([
  'scripts/t13ReleaseGate.mjs',
  'scripts/t13WorkflowGate.mjs',
  'scripts/t13SealedReleaseManifest.mjs',
+ 'scripts/t13RegistryAttestationGate.mjs',
  '.github/workflows/t13-certified-release.yml',
  '.github/workflows/t13-controlled-deploy.yml',
  '.github/workflows/blk010-validation.yml',

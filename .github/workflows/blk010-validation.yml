@@ -54,6 +54,7 @@ jobs:
         run: |
           node scripts/t13FirestoreRulesGate.mjs --self-test
           node scripts/t13ReleaseGate.mjs --self-test
+          node scripts/t13RegistryAttestationGate.mjs --self-test
           node scripts/t13WorkflowGate.mjs
           node scripts/t13FirestoreEmulatorIntegrity.mjs --self-test
       - name: T13 committed secret regression gate
