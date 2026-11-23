@@ -1,4 +1,4 @@
-import {getApps,initializeApp} from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ApplicationError} from '../infrastructure/errors';
 import type {TenantContext} from '../types/contracts';
@@ -26,8 +26,8 @@ export interface MerchantProviderConnectionRepository {
     Promise<MerchantProviderConnection|null>;
 }
 function db() {
-  if(!getApps().length) {const projectId=process.env.FIREBASE_PROJECT_ID;initializeApp(projectId?{projectId}:undefined);}
-  return getFirestore();
+  ensureFirebaseAdminApp();
+  return getFirestore(ensureFirebaseAdminApp());
 }
 export class FirestoreMerchantProviderConnectionRepository implements MerchantProviderConnectionRepository {
   async findGenerationByBinding(t:string,p:PaymentProviderId,hash:string){

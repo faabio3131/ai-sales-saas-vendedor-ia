@@ -1,15 +1,12 @@
-import { getApps, initializeApp } from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { SalesFiscalHandoffRepository } from './contracts';
 import {ApplicationError} from '../infrastructure/errors';
 import { SalesFiscalHandoff } from './model';
 
 function db() {
-  if (!getApps().length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    initializeApp(projectId ? { projectId } : undefined);
-  }
-  return getFirestore();
+  ensureFirebaseAdminApp();
+  return getFirestore(ensureFirebaseAdminApp());
 }
 
 export class FirestoreSalesFiscalHandoffRepository implements SalesFiscalHandoffRepository {

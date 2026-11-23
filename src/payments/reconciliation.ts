@@ -1,4 +1,4 @@
-import {getApps,initializeApp} from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {randomUUID} from 'node:crypto';
 import {getFirestore,FieldValue,FieldPath} from 'firebase-admin/firestore';
 import type {Payment} from './model';
@@ -8,8 +8,8 @@ const STATUS=['PENDING','CREATED'] as const;
 const DEFAULT_BATCH=100;
 const MAX_BATCH=250;
 function database(){
- if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
- return getFirestore();
+ ensureFirebaseAdminApp();
+ return getFirestore(ensureFirebaseAdminApp());
 }
 export interface PaymentReconciliationRepository {
  listPending(limit:number):Promise<Payment[]>;

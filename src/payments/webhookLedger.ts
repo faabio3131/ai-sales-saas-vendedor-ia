@@ -16,9 +16,9 @@ export interface VerifiedPaymentWebhookLedger {
 export class FirestoreVerifiedWebhookLedger implements VerifiedPaymentWebhookLedger {
  async record(event:VerifiedPaymentWebhookEvent):Promise<void>{
   if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
-  const id=createHash('sha256').update([
+  const id=createHash('sha256').update(JSON.stringify([
    event.tenantId,event.provider,event.eventId,event.providerPaymentId
-  ].join('\\0')).digest('hex');
+  ])).digest('hex');
   await getFirestore().collection('verifiedPaymentWebhookEvents').doc(id).set({
    ...event,id,verifiedAt:new Date().toISOString(),
   },{merge:true});
@@ -27,6 +27,6 @@ export class FirestoreVerifiedWebhookLedger implements VerifiedPaymentWebhookLed
 export class InMemoryVerifiedWebhookLedger implements VerifiedPaymentWebhookLedger {
  readonly events=new Map<string,VerifiedPaymentWebhookEvent>();
  async record(e:VerifiedPaymentWebhookEvent){
-  this.events.set([e.tenantId,e.provider,e.eventId,e.providerPaymentId].join('\\0'),e);
+  this.events.set(JSON.stringify([e.tenantId,e.provider,e.eventId,e.providerPaymentId]),e);
  }
 }

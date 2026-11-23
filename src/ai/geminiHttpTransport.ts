@@ -7,6 +7,7 @@ export interface GeminiHttpTransportOptions {
   interactionsBaseUrl?: string;
   modelsBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }
 
 interface GeminiInteractionResponse {
@@ -81,6 +82,7 @@ export class GeminiHttpTransport implements GeminiTransport {
   private readonly interactionsBaseUrl: string;
   private readonly modelsBaseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs:number;
 
   constructor(options: GeminiHttpTransportOptions) {
     this.apiKey = options.apiKey.trim();
@@ -88,6 +90,7 @@ export class GeminiHttpTransport implements GeminiTransport {
     this.interactionsBaseUrl = (options.interactionsBaseUrl ?? 'https://generativelanguage.googleapis.com/v1').replace(/\/$/, '');
     this.modelsBaseUrl = (options.modelsBaseUrl ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.timeoutMs=Math.max(1000,Math.min(30000,options.timeoutMs??10000));
 
     if (!this.apiKey) throw new Error('Gemini API key is required.');
     if (!this.model) throw new Error('Gemini model is required.');
@@ -108,6 +111,7 @@ export class GeminiHttpTransport implements GeminiTransport {
         'x-goog-api-key': this.apiKey,
       },
       body: JSON.stringify(buildInteractionBody(request, this.model)),
+      signal:AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!response.ok) {
@@ -138,6 +142,7 @@ export class GeminiHttpTransport implements GeminiTransport {
       headers: {
         'x-goog-api-key': this.apiKey,
       },
+      signal:AbortSignal.timeout(this.timeoutMs),
     });
     return response.ok;
   }

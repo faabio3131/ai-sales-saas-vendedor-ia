@@ -1,5 +1,5 @@
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {createHash} from 'node:crypto';
-import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ApplicationError} from '../infrastructure/errors';
 import type {PaymentRepository,PaymentWebhookEventRepository} from './contracts';
@@ -9,8 +9,8 @@ import type {Payment,PaymentStatus,PaymentWebhookEvent} from './model';
  * This is NOT a fiscal document, a tax decision, or authority to issue one.
  */
 function database(){
- if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
- return getFirestore();
+ ensureFirebaseAdminApp();
+ return getFirestore(ensureFirebaseAdminApp());
 }
 function conflict(code:string):never{
  throw new ApplicationError({category:'CONFLICT',code,message:'Canonical payment state conflict.'});

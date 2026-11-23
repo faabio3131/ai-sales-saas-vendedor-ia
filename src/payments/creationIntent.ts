@@ -1,4 +1,4 @@
-import {getApps,initializeApp} from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ApplicationError} from '../infrastructure/errors';
 
@@ -11,8 +11,8 @@ export interface PaymentCreationIntentRepository {
 }
 export class FirestorePaymentCreationIntentRepository implements PaymentCreationIntentRepository {
  async reserve(intent:PaymentCreationIntent):Promise<void> {
-  if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
-  try {await getFirestore().collection('paymentCreationIntents').doc(intent.paymentId).create(intent);}
+  ensureFirebaseAdminApp();
+  try {await getFirestore(ensureFirebaseAdminApp()).collection('paymentCreationIntents').doc(intent.paymentId).create(intent);}
   catch {
    throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_CREATION_UNCERTAIN',
     message:'A previous payment attempt is already recorded. Reconcile with its provider before retrying.'});

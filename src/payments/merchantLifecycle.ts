@@ -1,5 +1,5 @@
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {createHash} from 'node:crypto';
-import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ApplicationError} from '../infrastructure/errors';
 import type {TenantContext} from '../types/contracts';
@@ -17,8 +17,8 @@ export interface MerchantLifecycleStore{
  write(next:ManagedMerchantConnection,expectedVersion:number):Promise<void>;
 }
 function db(){
- if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
- return getFirestore();
+ ensureFirebaseAdminApp();
+ return getFirestore(ensureFirebaseAdminApp());
 }
 export class FirestoreMerchantLifecycleStore implements MerchantLifecycleStore{
  async get(t:string,p:PaymentProviderId){
