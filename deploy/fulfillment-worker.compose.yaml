@@ -2,6 +2,13 @@ services:
   fulfillment-worker:
     image: ${ATENDEVENDEIA_IMAGE:?ATENDEVENDEIA_IMAGE_REQUIRED}
     restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
     environment:
       NODE_ENV: production
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID_REQUIRED}

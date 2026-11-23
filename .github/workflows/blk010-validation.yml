@@ -150,6 +150,7 @@ jobs:
           FIREBASE_PROJECT_ID: demo-atendevende-t10
         run: |
           curl --fail --location --retry 3 --retry-delay 1 --output /tmp/firestore-emulator.jar https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.19.8.jar
+          echo 'T13_EVIDENCE_FIRESTORE_EMULATOR_SHA256_UNPINNED' && sha256sum /tmp/firestore-emulator.jar
           java -jar /tmp/firestore-emulator.jar --host 127.0.0.1 --port 8089 --project_id demo-atendevende-t10 --rules deploy/t10-scheduling.firestore.rules > /tmp/firestore-emulator.log 2>&1 &
           PID=$!
           trap 'cat /tmp/firestore-emulator.log; kill "$PID" >/dev/null 2>&1 || true' EXIT
@@ -205,6 +206,24 @@ jobs:
         run: |
           docker compose -f deploy/scheduling-worker.compose.yaml -f deploy/scheduling-worker.whatsapp.compose.yaml -f deploy/scheduling-worker.whatsapp-mounted.compose.yaml config --format json > /tmp/t11-compose.json
           node -e "const a=require('node:assert/strict');const s=require('/tmp/t11-compose.json').services['scheduling-worker'];a.equal(s.environment.ATENDEVENDE_BOOKING_WHATSAPP_LIVE_ENABLED,'false');a.equal(s.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');a.equal(s.environment.WHATSAPP_VAULT_BACKEND,'MOUNTED');a.ok(s.volumes.find(v=>v.target==='/run/secrets/atendevende-whatsapp').read_only);a.equal(s.read_only,true);"
+      - name: T13 fulfillment worker compose hardening gate
+        env:
+          ATENDEVENDEIA_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          FIREBASE_PROJECT_ID: demo-t13
+        run: |
+          set -euo pipefail
+          docker compose -f deploy/fulfillment-worker.compose.yaml config --format json > /tmp/t13-fulfillment-worker.json
+          node - <<'NODE'
+          const assert=require('node:assert/strict');
+          const service=require('/tmp/t13-fulfillment-worker.json').services['fulfillment-worker'];
+          assert.ok(service);
+          assert.equal(service.read_only,true);
+          assert.deepEqual(service.cap_drop,['ALL']);
+          assert.ok(service.security_opt.includes('no-new-privileges:true'));
+          assert.ok(service.tmpfs.some(x=>x.startsWith('/tmp:')&&x.includes('noexec')));
+          assert.ok(!service.ports||service.ports.length===0);
+          assert.match(JSON.stringify(service.command),/fulfillment-worker\.last-success/);
+          NODE
       - name: Runtime security boundaries
         env:
           NODE_ENV: production
@@ -265,6 +284,8 @@ jobs:
             assert.match(JSON.stringify(service.healthcheck),/payment-reconciler\.last-success/);
             assert.match(JSON.stringify(service.command),/payment_reconciliation_cycle_failed/);
             assert.equal(service.read_only,true);
+            assert.deepEqual(service.cap_drop,['ALL']);
+            assert.ok(service.security_opt.includes('no-new-privileges:true'));
             assert.ok(JSON.stringify(service.command).includes('$legacy_failed'));
             assert.ok(JSON.stringify(service.command).includes('$order_failed'));
           }
