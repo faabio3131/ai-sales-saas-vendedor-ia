@@ -59,6 +59,25 @@ describe('BLK-150 Payments', () => {
     expect(payment.pixCode).toBe('pix-copy-paste');
   });
 
+  it('uses structured tenant/key hash and never trusts a CONFIRMED creation response', async()=>{
+    const {service,provider}=fixture();
+    provider.createPix=async()=>({
+      provider:'FAKEPAY',providerPaymentId:'pp-1',status:'CONFIRMED',
+      pixCode:'pix-copy-paste',paymentUrl:'https://example.invalid/pay',
+    });
+    const created=await service.create(ctx('tenant-a'),{
+      quoteId:'q1',method:'PIX',idempotencyKey:'creation-confirmed',
+    });
+    const expected=(await import('node:crypto')).createHash('sha256')
+      .update(JSON.stringify(['tenant-a','creation-confirmed'])).digest('hex');
+    expect(created.id).toBe(expected);
+    expect(created.status).toBe('PENDING');
+    expect(created.confirmedAt).toBeUndefined();
+    const refreshed=await service.refresh(ctx('tenant-a'),created.id);
+    expect(refreshed.status).toBe('CONFIRMED');
+    expect(refreshed.confirmedAt).toBeTruthy();
+  });
+
   it('é idempotente por tenant e idempotencyKey', async () => {
     const { service, provider } = fixture();
     const first = await service.create(ctx('tenant-a'), { quoteId:'q1', method:'PIX', idempotencyKey:'same-key' });

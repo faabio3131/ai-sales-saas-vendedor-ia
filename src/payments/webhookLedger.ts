@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {getApps,initializeApp} from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {PaymentStatus} from './model';
 import type {OrderPaymentStatus} from '../orderPayments/model';
@@ -15,11 +15,11 @@ export interface VerifiedPaymentWebhookLedger {
 }
 export class FirestoreVerifiedWebhookLedger implements VerifiedPaymentWebhookLedger {
  async record(event:VerifiedPaymentWebhookEvent):Promise<void>{
-  if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
+  ensureFirebaseAdminApp();
   const id=createHash('sha256').update(JSON.stringify([
    event.tenantId,event.provider,event.eventId,event.providerPaymentId
   ])).digest('hex');
-  await getFirestore().collection('verifiedPaymentWebhookEvents').doc(id).set({
+  await getFirestore(ensureFirebaseAdminApp()).collection('verifiedPaymentWebhookEvents').doc(id).set({
    ...event,id,verifiedAt:new Date().toISOString(),
   },{merge:true});
  }

@@ -51,6 +51,7 @@ describe('Provider-specific payment webhook authentication',()=>{
    rawBody:raw,payload:JSON.parse(raw.toString('utf8'))});
   expect(result).toEqual(['CONFIRMED']);
   expect(audit.events.size).toBe(1);
+  expect(audit.events.has(JSON.stringify([tenant,'ASAAS','evt-1','pay_123']))).toBe(true);
   expect(refresh).toHaveBeenCalledWith({tenantId:tenant,requestId:'bank-webhook'},payment.id);
   await expect(processor.process({provider:'ASAAS',tenantId:'attacker',headers:asaasHeaders,
    rawBody:raw,payload:JSON.parse(raw.toString('utf8'))})).rejects.toMatchObject({code:'PAYMENT_WEBHOOK_UNAUTHORIZED'});
