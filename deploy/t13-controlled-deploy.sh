@@ -65,10 +65,14 @@ docker compose -f "$COMPOSE" -f "$WORKER_COMPOSE" pull
 docker compose -f "$COMPOSE" -f "$WORKER_COMPOSE" up -d --no-build --force-recreate
 PORT="${ATENDEVENDE_PRODUCTION_PORT:-18080}"
 [[ "$PORT" =~ ^[0-9]{2,5}$ ]] || { echo 'INVALID_API_PORT' >&2; exit 1; }
+# Per-run private response file avoids /tmp symlink and concurrent-deploy collisions.
+umask 077
+HEALTH_JSON=$(mktemp /tmp/t13-release-health.XXXXXXXX)
+trap 'rm -f "$HEALTH_JSON"' EXIT
 READY=0
 for attempt in $(seq 1 40); do
- if curl --silent --fail --max-time 3 "http://127.0.0.1:$PORT/api/health" >/tmp/t13-release-health.json; then
-  if python3 -c 'import json; x=json.load(open("/tmp/t13-release-health.json")); assert x["status"]=="ok" and x["governance"]["tenantIsolationEnforced"] is True'; then
+ if curl --silent --fail --max-time 3 "http://127.0.0.1:$PORT/api/health" >"$HEALTH_JSON"; then
+  if python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"]=="ok" and x["governance"]["tenantIsolationEnforced"] is True' "$HEALTH_JSON"; then
    READY=1
    break
   fi

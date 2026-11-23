@@ -8,14 +8,19 @@ const thresholds = Object.freeze({lines:55, statements:50, branches:50, function
 // Independently observed T13 baseline (Claude Code reauditoria 22/11/2026).
 // These floors prevent high-risk paths from disappearing under healthy global
 // averages. Raise them with new tests; do NOT lower them to pass a red CI.
+// Raised using measured HEAD a236ffa / CI #45220334435 coverage,
+// with regression headroom. These are guardrails, not a final adequacy target.
+// Current observed branches: PSP 81.04, MP 86.66, recovery 15,
+// legacy reconciler 29.62, outbox 7.14, order reconciliation 15.62,
+// governance 82.8. Additional fault-path tests must increase weak modules.
 const criticalBranchFloors=Object.freeze({
- 'src/payments/providerWebhooks.ts':75,
- 'src/payments/webhook.ts':20,
- 'src/payments/webhookRecovery.ts':10,
- 'src/payments/reconciliation.ts':20,
- 'src/orderPayments/outbox.ts':5,
- 'src/orderPayments/reconciliation.ts':10,
- 'src/governance/service.ts':10,
+ 'src/payments/providerWebhooks.ts':77,
+ 'src/payments/webhook.ts':80,
+ 'src/payments/webhookRecovery.ts':13,
+ 'src/payments/reconciliation.ts':25,
+ 'src/orderPayments/outbox.ts':6,
+ 'src/orderPayments/reconciliation.ts':13,
+ 'src/governance/service.ts':75,
 });
 function inspect(report) {
   if (!report || !report.total || typeof report.total !== 'object')
@@ -54,6 +59,18 @@ if(process.argv.includes('--self-test')){
   for(const file of Object.keys(criticalBranchFloors))
     rows['/repo/'+file]={branches:{pct:100,total:10,covered:10}};
   if(inspect(rows)<20)throw Error('Self test failed.');
+  // Prove the guard detects a real file-level regression, even while global
+  // coverage stays 100%, and never accepts a missing critical file.
+  const below=structuredClone(rows);
+  below['/repo/src/orderPayments/outbox.ts'].branches={pct:5.9,total:1000,covered:59};
+  let caught=false;
+  try{inspect(below);}catch(e){caught=String(e).includes('COVERAGE_GATE_FAILED');}
+  if(!caught)throw Error('CRITICAL_BRANCH_REGRESSION_NOT_REJECTED');
+  const missing=structuredClone(rows);
+  delete missing['/repo/src/payments/webhookRecovery.ts'];
+  caught=false;
+  try{inspect(missing);}catch(e){caught=String(e).includes('CRITICAL_COVERAGE_FILE_MISSING');}
+  if(!caught)throw Error('MISSING_FINANCIAL_COVERAGE_NOT_REJECTED');
   console.info('t13_coverage_gate_self_test_passed');
 } else {
   const report=JSON.parse(fs.readFileSync(source,'utf8'));

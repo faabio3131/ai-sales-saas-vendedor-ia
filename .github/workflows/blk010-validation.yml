@@ -70,6 +70,9 @@ jobs:
         run: |
           set -euo pipefail
           bash -n deploy/t13-controlled-deploy.sh
+          grep -Fq 'HEALTH_JSON=$(mktemp /tmp/t13-release-health.XXXXXXXX)' deploy/t13-controlled-deploy.sh
+          grep -Fq 'trap '\''rm -f "$HEALTH_JSON"'\'' EXIT' deploy/t13-controlled-deploy.sh
+          if grep -Fq '/tmp/t13-release-health.json' deploy/t13-controlled-deploy.sh; then exit 1; fi
           docker compose -f deploy/t13-production.compose.yaml -f deploy/payment-reconciler.compose.yaml config --format json > /tmp/t13-production-topology.json
           node - <<'NODE'
           const a=require('node:assert/strict');
@@ -118,6 +121,7 @@ jobs:
           test "$READY" = 1
           node -e "const h=require('/tmp/cognitive-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
           npm test -- --coverage --coverage.provider=v8 --coverage.include='src/**/*.{ts,tsx}' --coverage.reporter=json-summary
+          node scripts/t13CoverageGate.mjs --self-test
           node scripts/t13CoverageGate.mjs coverage/coverage-summary.json
       - name: T13 upload quantitative source coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -31,6 +31,15 @@ function requireReady({sha,expected,ref,pr,reviews,runs,environment}){
   throw Error('RELEASE_ENVIRONMENT_REVIEWERS_REQUIRED');
  return true;
 }
+function discoverMergedPull(associated,sha) {
+ if(!Array.isArray(associated))throw Error('RELEASE_COMMIT_ASSOCIATED_PRS_INVALID');
+ const matches=associated.filter(p=>
+  Number.isSafeInteger(p?.number)&&p.number>0&&
+  p?.merge_commit_sha===sha&&p?.base?.ref==='main'&&
+  typeof p.merged_at==='string'&&Number.isFinite(Date.parse(p.merged_at)));
+ if(matches.length!==1)throw Error('RELEASE_MERGED_PULL_ASSOCIATION_NOT_UNIQUE');
+ return matches[0].number;
+}
 if(process.argv.includes('--self-test')){
  const sha='a'.repeat(40);
  const pr={merged:true,base:{ref:'main'},merge_commit_sha:sha,
@@ -42,6 +51,12 @@ if(process.argv.includes('--self-test')){
  const environment={protection_rules:[{type:'required_reviewers',reviewers:[{type:'User',id:123}]}]};
  const input={sha,expected:sha,ref:'refs/heads/main',pr,reviews,runs,environment};
  assert.equal(requireReady(input),true);
+ const associated=[{...pr,number:37,merged_at:'2026-11-22T11:00:00Z'}];
+ assert.equal(discoverMergedPull(associated,sha),37);
+ assert.throws(()=>discoverMergedPull(associated,'c'.repeat(40)));
+ assert.throws(()=>discoverMergedPull([...associated,...associated],sha));
+ assert.throws(()=>discoverMergedPull([{...associated[0],merged_at:null}],sha));
+ assert.throws(()=>discoverMergedPull([{...associated[0],base:{ref:'dev'}}],sha));
  assert.throws(()=>requireReady({...input,pr:{...pr,merge_commit_sha:'c'.repeat(40)}}));
  assert.throws(()=>requireReady({...input,reviews:[]}));
  assert.throws(()=>requireReady({...input,environment:{protection_rules:[]}}));
@@ -69,12 +84,18 @@ async function github(endpoint){
 const targetEnvironment=process.env.T13_REVIEW_ENVIRONMENT??'t13-release-signing';
 if(!['t13-release-signing','t13-production-approval'].includes(targetEnvironment))
  throw Error('RELEASE_ENVIRONMENT_NOT_ALLOWLISTED');
+// GitHub's commit-to-PR association is only a discovery hint.
+// The final selected PR must be merged, target main, match this merge SHA,
+// and carry a non-author approval of its exact final source head.
+const associated=await github('repos/'+repo+'/commits/'+sha+'/pulls?per_page=100');
+const pullNumber=discoverMergedPull(associated,sha);
 const [pr,reviews,runs,environment]=await Promise.all([
- github('repos/'+repo+'/pulls/29'),
- github('repos/'+repo+'/pulls/29/reviews?per_page=100'),
+ github('repos/'+repo+'/pulls/'+pullNumber),
+ github('repos/'+repo+'/pulls/'+pullNumber+'/reviews?per_page=100'),
  github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+sha+'&event=push&per_page=100'),
  github('repos/'+repo+'/environments/'+targetEnvironment),
 ]);
+assert.equal(pr.number,pullNumber,'RELEASE_ASSOCIATED_PR_ID_MISMATCH');
 requireReady({sha,expected,ref,pr,reviews,runs,environment});
 console.log(JSON.stringify({status:'RELEASE_SEAL_APPROVED',sha,
- independentReview:true,postMergeCi:true,protectedEnvironment:true}));
+ pullNumber,independentReview:true,postMergeCi:true,protectedEnvironment:true}));
