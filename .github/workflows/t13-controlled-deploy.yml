@@ -41,6 +41,11 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node scripts/t13ReleaseGate.mjs --verify
+      - name: Verify ACTIVE Firestore rules before production authorization
+        env:
+          FIREBASE_RULES_PROJECT_ID: "${{ vars.FIREBASE_RULES_PROJECT_ID }}"
+          FIREBASE_RULES_ACCESS_TOKEN: "${{ secrets.FIREBASE_RULES_ACCESS_TOKEN }}"
+        run: node scripts/t13FirestoreRulesGate.mjs --verify-active
       - name: Verify signed published OCI digest
         id: image
         env:

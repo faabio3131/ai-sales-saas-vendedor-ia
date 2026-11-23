@@ -3,8 +3,11 @@
  * environment, merged exact SHA, and post-merge main CI SUCCESS.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {verifyDirectorAuditPackage,policyEvidenceText,verifiedChangedFiles,directorAuditSelfTest,
+ T13_BASE_MERGE} from './t13DirectorAuditPolicy.mjs';
 const apiRoot='https://api.github.com/';
-function requireReady({sha,expected,ref,pr,reviews,runs,environment}){
+function requireReady({sha,expected,ref,pr,reviews,runs,environment,environmentName='t13-release-signing',directorApproval}){
  assert.match(sha,/^[a-f0-9]{40}$/);
  assert.equal(sha,expected,'RELEASE_SHA_NOT_EXACT');
  assert.equal(ref,'refs/heads/main','RELEASE_ONLY_FROM_MAIN');
@@ -18,17 +21,26 @@ function requireReady({sha,expected,ref,pr,reviews,runs,environment}){
   if(!prior||Date.parse(r.submitted_at)>=Date.parse(prior.submitted_at))
    effective.set(r.user.login,r);
  }
- if(![...effective.values()].some(r=>r.state==='APPROVED'&&
-   r.user.login!==pr.user?.login&&r.commit_id===pr.head?.sha))
-  throw Error('RELEASE_INDEPENDENT_FINAL_SHA_REVIEW_REQUIRED');
+ const reviewed=[...effective.values()].some(r=>r.state==='APPROVED'&&
+   r.user.login!==pr.user?.login&&r.commit_id===pr.head?.sha);
+ const protectedEnv=Array.isArray(environment?.protection_rules)&&
+  environment.protection_rules.some(rule=>rule.type==='required_reviewers'&&
+   Array.isArray(rule.reviewers)&&rule.reviewers.length>0);
+ if(environment?.name!==environmentName)
+  throw Error('RELEASE_EXPECTED_ENVIRONMENT_MISSING');
+ // The only alternative to a GitHub third-party APPROVED is an authenticated
+ // owner signoff bound to the external Gemini report AND unchanged audited src.
+ // It is restricted to IMAGE SIGNING, never production deployment.
+ if(!(reviewed&&protectedEnv)&&
+    !(environmentName==='t13-release-signing'&&
+      directorApproval?.status==='DIRECTOR_ATTESTED_GEMINI_SEAL_ONLY'&&
+      directorApproval.deploymentAuthorized===false))
+  throw Error('RELEASE_INDEPENDENT_REVIEW_OR_DIRECTOR_ATTESTATION_REQUIRED');
  if(!Array.isArray(runs.workflow_runs)||!runs.workflow_runs.some(run=>
    run.head_sha===sha&&run.event==='push'&&run.status==='completed'&&
    run.conclusion==='success'&&run.name==='Project Validation'))
   throw Error('RELEASE_POST_MERGE_CI_NOT_CERTIFIED');
- if(!Array.isArray(environment.protection_rules)||
-  !environment.protection_rules.some(rule=>rule.type==='required_reviewers'&&
-    Array.isArray(rule.reviewers)&&rule.reviewers.length>0))
-  throw Error('RELEASE_ENVIRONMENT_REVIEWERS_REQUIRED');
+
  return true;
 }
 function discoverMergedPull(associated,sha) {
@@ -48,9 +60,16 @@ if(process.argv.includes('--self-test')){
   submitted_at:'2026-11-22T10:00:00Z'}];
  const runs={workflow_runs:[{head_sha:sha,event:'push',status:'completed',
   conclusion:'success',name:'Project Validation'}]};
- const environment={protection_rules:[{type:'required_reviewers',reviewers:[{type:'User',id:123}]}]};
+ const environment={name:'t13-release-signing',protection_rules:[{type:'required_reviewers',reviewers:[{type:'User',id:123}]}]};
  const input={sha,expected:sha,ref:'refs/heads/main',pr,reviews,runs,environment};
  assert.equal(requireReady(input),true);
+ directorAuditSelfTest();
+ const ownerMode={status:'DIRECTOR_ATTESTED_GEMINI_SEAL_ONLY',deploymentAuthorized:false};
+ assert.equal(requireReady({...input,reviews:[],environment:{name:'t13-release-signing',
+  protection_rules:[]},directorApproval:ownerMode}),true);
+ assert.throws(()=>requireReady({...input,reviews:[],environmentName:'t13-production-approval',
+  environment:{name:'t13-production-approval',protection_rules:[]},
+  directorApproval:ownerMode}));
  const associated=[{...pr,number:37,merged_at:'2026-11-22T11:00:00Z'}];
  assert.equal(discoverMergedPull(associated,sha),37);
  assert.throws(()=>discoverMergedPull(associated,'c'.repeat(40)));
@@ -59,7 +78,7 @@ if(process.argv.includes('--self-test')){
  assert.throws(()=>discoverMergedPull([{...associated[0],base:{ref:'dev'}}],sha));
  assert.throws(()=>requireReady({...input,pr:{...pr,merge_commit_sha:'c'.repeat(40)}}));
  assert.throws(()=>requireReady({...input,reviews:[]}));
- assert.throws(()=>requireReady({...input,environment:{protection_rules:[]}}));
+ assert.throws(()=>requireReady({...input,environment:{name:'t13-release-signing',protection_rules:[]}}));
  assert.throws(()=>requireReady({...input,runs:{workflow_runs:[]}}));
  console.log('t13_release_guard_self_test_passed');
  process.exit(0);
@@ -89,13 +108,61 @@ if(!['t13-release-signing','t13-production-approval'].includes(targetEnvironment
 // and carry a non-author approval of its exact final source head.
 const associated=await github('repos/'+repo+'/commits/'+sha+'/pulls?per_page=100');
 const pullNumber=discoverMergedPull(associated,sha);
-const [pr,reviews,runs,environment]=await Promise.all([
+const [pr,reviews,runs]=await Promise.all([
  github('repos/'+repo+'/pulls/'+pullNumber),
  github('repos/'+repo+'/pulls/'+pullNumber+'/reviews?per_page=100'),
  github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+sha+'&event=push&per_page=100'),
- github('repos/'+repo+'/environments/'+targetEnvironment),
 ]);
+let environment;
+try{environment=await github('repos/'+repo+'/environments/'+targetEnvironment);}
+catch(error){
+ // Private sole-owner repositories may forbid Actions GITHUB_TOKEN from
+ // reading Environment administration. GitHub itself binds the job to the
+ // explicit environment in the workflow; owner-attested SEAL still requires
+ // exact branch, CI, owner GitHub comment, and audited application source.
+ // This fallback never applies to the deploy/production environment.
+ if(targetEnvironment!=='t13-release-signing'||
+    !String(error).includes('RELEASE_GITHUB_APPROVAL_CHECK_FAILED:403'))throw error;
+ environment={name:'t13-release-signing',protection_rules:[],
+  authorizationSource:'GITHUB_ACTIONS_BOUND_ENVIRONMENT'};
+}
 assert.equal(pr.number,pullNumber,'RELEASE_ASSOCIATED_PR_ID_MISMATCH');
-requireReady({sha,expected,ref,pr,reviews,runs,environment});
-console.log(JSON.stringify({status:'RELEASE_SEAL_APPROVED',sha,
- pullNumber,independentReview:true,postMergeCi:true,protectedEnvironment:true}));
+const independentGitHubReview=reviews.some(r=>r.state==='APPROVED'&&
+ r.user?.login!==pr.user?.login&&r.commit_id===pr.head?.sha);
+const requiredReviewers=Array.isArray(environment.protection_rules)&&
+ environment.protection_rules.some(rule=>rule.type==='required_reviewers'&&
+  Array.isArray(rule.reviewers)&&rule.reviewers.length>0);
+let directorApproval;
+if(!(independentGitHubReview&&requiredReviewers)&&
+   targetEnvironment==='t13-release-signing'){
+ // Do not accept chat text or an untrusted workflow input as approval.
+ // The signed-in director must author an UNEDITED GitHub comment on PR #29,
+ // authorizing exact policy HEAD and SHA256 of the owner-transcribed evidence.
+ const [sourcePr,sourceCiRuns,comments,compare]=await Promise.all([
+  github('repos/'+repo+'/pulls/29'),
+  github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+T13_BASE_MERGE+'&event=push&per_page=100'),
+  github('repos/'+repo+'/issues/29/comments?per_page=100'),
+  github('repos/'+repo+'/compare/'+T13_BASE_MERGE+'...'+sha),
+ ]);
+ directorApproval=verifyDirectorAuditPackage({
+  repository:repo,actor:process.env.GITHUB_ACTOR,
+  eventName:process.env.GITHUB_EVENT_NAME,
+  environmentName:targetEnvironment,environment,currentPr:pr,sourcePr,
+  sourceCiRuns,comments,evidenceText:policyEvidenceText(),
+  changedFiles:verifiedChangedFiles(compare,sha),
+ });
+}
+requireReady({sha,expected,ref,pr,reviews,runs,environment,
+ environmentName:targetEnvironment,directorApproval});
+const mode=directorApproval?'DIRECTOR_ATTESTED_GEMINI_SEAL_ONLY':'GITHUB_INDEPENDENT_REVIEW';
+if(process.env.GITHUB_OUTPUT){
+ const lines=['approval_mode='+mode,'director_comment_id='+
+  (directorApproval?.directorCommentId??''),'audit_sha256='+
+  (directorApproval?.auditEvidenceSha256??'')];
+ fs.appendFileSync(process.env.GITHUB_OUTPUT,lines.join('\n')+'\n');
+}
+console.log(JSON.stringify({status:'RELEASE_SEAL_APPROVED',sha,pullNumber,
+ approvalMode:mode,ownerAttestedGemini:!!directorApproval,
+ directorCommentId:directorApproval?.directorCommentId??null,
+ signedReleaseOnly:true,productionDeploymentAuthorized:false,
+ postMergeCi:true,environmentConfirmed:true}));
