@@ -1,12 +1,12 @@
-import {getApps,initializeApp} from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {getFirestore} from 'firebase-admin/firestore';
 import type {MerchantCustomerMapRepository} from './adapterFactory';
 import type {PagBankCustomer} from './pagbank';
 export class FirestoreMerchantCustomerMap implements MerchantCustomerMapRepository {
  async resolvePagBankCustomer(tenantId:string,customerId:string):Promise<PagBankCustomer|null>{
   if(!tenantId||!customerId)return null;
-  if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
-  const doc=await getFirestore().collection('merchantCustomerBillingProfiles')
+  ensureFirebaseAdminApp();
+  const doc=await getFirestore(ensureFirebaseAdminApp()).collection('merchantCustomerBillingProfiles')
    .doc([tenantId,customerId].map(encodeURIComponent).join('__')).get();
   const x=doc.data();
   if(x?.tenantId!==tenantId||x?.customerId!==customerId||!x?.pagbank)return null;
@@ -15,8 +15,8 @@ export class FirestoreMerchantCustomerMap implements MerchantCustomerMapReposito
 
  async resolve(tenantId:string,providerId:string,customerId:string):Promise<string|null> {
   if(!tenantId||!providerId||!customerId)return null;
-  if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
-  const snapshot=await getFirestore().collection('merchantProviderCustomers')
+  ensureFirebaseAdminApp();
+  const snapshot=await getFirestore(ensureFirebaseAdminApp()).collection('merchantProviderCustomers')
    .doc([tenantId,providerId,customerId].map(encodeURIComponent).join('__')).get();
   const record=snapshot.data();
   if(record?.tenantId!==tenantId||record?.providerId!==providerId||record?.customerId!==customerId||

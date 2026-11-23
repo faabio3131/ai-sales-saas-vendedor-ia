@@ -1,5 +1,5 @@
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import { randomUUID } from 'node:crypto';
-import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { AICapability, AIResponse } from './contracts';
 
@@ -57,12 +57,9 @@ export interface CognitiveMeteringSink {
 }
 export class FirestoreCognitiveMeteringSink implements CognitiveMeteringSink {
   async record(event:CognitiveMeteringEvent):Promise<void> {
-    if (!getApps().length) {
-      const projectId=process.env.FIREBASE_PROJECT_ID;
-      initializeApp(projectId ? {projectId} : undefined);
-    }
+    ensureFirebaseAdminApp();
     // The Firestore document contains only scoped metadata and no prompts, responses or secrets.
-    await getFirestore().collection('cognitiveUsageEvents').doc(randomUUID()).create({
+    await getFirestore(ensureFirebaseAdminApp()).collection('cognitiveUsageEvents').doc(randomUUID()).create({
       ...event,
       cost:{...event.cost},
     });

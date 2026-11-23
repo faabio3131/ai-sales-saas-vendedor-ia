@@ -1,5 +1,5 @@
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {createHash} from 'node:crypto';
-import {getApps,initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ApplicationError} from '../infrastructure/errors';
 import type {TenantContext} from '../types/contracts';
@@ -7,6 +7,7 @@ import type {MerchantProviderConnection} from './connections';
 import type {MerchantCredentialsVault} from './merchantVault';
 import {mountedSecretReference} from './mountedVault';
 import {providerDescriptor,type PaymentProviderId} from './providerCatalog';
+import {merchantConnectionBindingHash} from './resolver';
 
 export interface ManagedMerchantConnection extends MerchantProviderConnection{
  version:number;updatedAt:string;verificationEvidenceRef?:string;verifiedAt?:string;
@@ -16,8 +17,8 @@ export interface MerchantLifecycleStore{
  write(next:ManagedMerchantConnection,expectedVersion:number):Promise<void>;
 }
 function db(){
- if(!getApps().length)initializeApp(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:undefined);
- return getFirestore();
+ ensureFirebaseAdminApp();
+ return getFirestore(ensureFirebaseAdminApp());
 }
 export class FirestoreMerchantLifecycleStore implements MerchantLifecycleStore{
  async get(t:string,p:PaymentProviderId){
@@ -37,6 +38,22 @@ export class FirestoreMerchantLifecycleStore implements MerchantLifecycleStore{
    if(prior&&(prior.tenantId!==next.tenantId||prior.providerId!==next.providerId))
     throw error('PAYMENT_SCOPE_MISMATCH','FORBIDDEN');
    if(next.version!==expectedVersion+1)throw error('PAYMENT_CONNECTION_VERSION_CONFLICT','CONFLICT');
+   // Record verified merchant account generations in the same transaction.
+   // Never archive actual secrets; only an independently controlled vault ref.
+   const generations=db().collection('merchantPaymentConnectionGenerations');
+   for(const candidate of [prior,next]){
+    if(candidate?.status!=='ACTIVE'||!candidate.credentialRef||!candidate.recipientId)continue;
+    const hash=merchantConnectionBindingHash(candidate);
+    const evidence=generations.doc(hash);
+    const existing=await tx.get(evidence);
+    if(existing.exists){
+     const found=existing.data() as MerchantProviderConnection;
+     if(found.tenantId!==candidate.tenantId||found.providerId!==candidate.providerId||
+       found.recipientId!==candidate.recipientId||found.credentialRef!==candidate.credentialRef||
+       found.version!==candidate.version)
+      throw error('PAYMENT_HISTORY_INTEGRITY_CONFLICT','CONFLICT');
+    }else tx.create(evidence,candidate);
+   }
    tx.set(ref,next);
   });
  }
@@ -59,13 +76,19 @@ function provider(value:unknown):PaymentProviderId{
  return value as PaymentProviderId;
 }
 export function paymentVaultReference(tenantId:string,providerId:PaymentProviderId,
- backend:'MOUNTED'|'GOOGLE',projectId?:string):string{
+ backend:'MOUNTED'|'GOOGLE',projectId?:string,secretVersion?:number):string{
  id(tenantId,TENANT);provider(providerId);
- if(backend==='MOUNTED')return mountedSecretReference(tenantId,providerId);
+ if(secretVersion!==undefined&&(!Number.isSafeInteger(secretVersion)||secretVersion<1))
+  throw error('PAYMENT_SECRET_VERSION_INVALID');
+ if(backend==='MOUNTED'){
+  if(secretVersion!==undefined)throw error('PAYMENT_MOUNT_SECRET_VERSION_UNSUPPORTED');
+  return mountedSecretReference(tenantId,providerId);
+ }
  if(!projectId||!/^[a-zA-Z0-9_-]{4,80}$/.test(projectId))
   throw error('PAYMENT_SECRET_PROJECT_INVALID');
  const hash=createHash('sha256').update(tenantId+'\0'+providerId).digest('hex').slice(0,48);
- return 'projects/'+projectId+'/secrets/avpay-'+hash+'/versions/latest';
+ return 'projects/'+projectId+'/secrets/avpay-'+hash+'/versions/'+
+  (secretVersion===undefined?'latest':String(secretVersion));
 }
 export interface ExternalPaymentVerifier{
  /** May perform a harmless provider-side authenticated check. MUST NOT create a payment. */
@@ -94,11 +117,12 @@ export class MerchantProviderOnboardingService{
   * Secrets must have been provisioned out-of-band with restricted IAM/0600 mount.
   * Never accepts raw credentials or arbitrary secret refs from a tenant.
   */
- async attachVault(tenantId:string,providerId:PaymentProviderId,backend:'MOUNTED'|'GOOGLE',projectId?:string){
+ async attachVault(tenantId:string,providerId:PaymentProviderId,backend:'MOUNTED'|'GOOGLE',projectId?:string,
+  secretVersion?:number){
   const t=id(tenantId,TENANT),p=provider(providerId),old=await this.store.get(t,p);
   if(!old||old.status!=='PENDING_VERIFICATION'||!old.recipientId)
    throw error('PAYMENT_CONNECTION_NOT_PENDING','CONFLICT');
-  const credentialRef=paymentVaultReference(t,p,backend,projectId);
+  const credentialRef=paymentVaultReference(t,p,backend,projectId,secretVersion);
   await this.store.write({...old,credentialRef,updatedAt:this.clock().toISOString(),version:old.version+1},old.version);
  }
  /** OPERATIONS-ONLY: requires an independent provider verification, not an owner checkbox. */

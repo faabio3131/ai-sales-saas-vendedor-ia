@@ -9,11 +9,14 @@ import type {MerchantProviderConnectionRepository} from './connections';
 import type {MerchantCredentialsVault} from './merchantVault';
 import type {PaymentRepository} from './contracts';
 import type {VerifiedPaymentWebhookLedger} from './webhookLedger';
+import type {MultisectorWebhookResult,MultisectorWebhookService} from './multisectorWebhook';
+import {verifiedWebhookDeliveryId} from './webhookRecovery';
+import type {VerifiedWebhookKey,VerifiedWebhookRecoveryRepository} from './webhookRecovery';
 
 type Headers=Record<string,string|string[]|undefined>;
 type EventDetails={paymentIds:string[];eventId:string};
 const PIX_BANKS=new Set<string>(['EFI','BANCO_INTER','BANCO_DO_BRASIL']);
-const DIRECT=new Set<string>(['ASAAS','PAGARME','PAGBANK']);
+const DIRECT=new Set<string>(['ASAAS','PAGARME','PAGBANK','MERCADOPAGO']);
 export const ENABLED_WEBHOOK_PROVIDERS=new Set<string>([...PIX_BANKS,...DIRECT]);
 
 function deny():never {
@@ -63,12 +66,34 @@ export function verifyPagBankEcdsa(value:string|string[]|undefined,raw:Buffer,ke
 }
 export function authorizePaymentWebhook(args:{
  provider:string;tenantId:string;headers:Headers;rawBody:Buffer;secret:string;
- publicKeyBase64?:string;now?:number;
+ publicKeyBase64?:string;now?:number;payload?:unknown;queryPaymentId?:string;
 }):boolean {
  const {provider,tenantId,headers,rawBody,secret}=args;
  if(rawBody.length===0||rawBody.length>256*1024)return false;
  if(provider==='PAGBANK')return verifyPagBankEcdsa(headers['x-payload-signature'],rawBody,args.publicKeyBase64);
  if(!secret||secret.length<16)return false;
+
+ if(provider==='MERCADOPAGO'){
+  const body=args.payload;
+  const data=body&&typeof body==='object'&&!Array.isArray(body)&&'data' in body
+   ? (body as {data?:unknown}).data:null;
+  const id=data&&typeof data==='object'&&!Array.isArray(data)&&'id' in data
+   ? String((data as {id:unknown}).id??''):'';
+  const reqid=header(headers,'x-request-id');
+  if(!/^\d{1,30}$/.test(id)||id!==args.queryPaymentId||!reqid||reqid.length>160)
+   return false;
+  const parts=header(headers,'x-signature').split(',').map(piece=>piece.trim().split('=',2));
+  if(parts.length!==2||parts.some(pair=>pair.length!==2)||parts[0][0]===parts[1][0])
+   return false;
+  const values=Object.fromEntries(parts);
+  const ts=values.ts??'',v1=values.v1??'';
+  if(!/^(?:\d{10}|\d{13}|\d{16})$/.test(ts)||!/^[0-9a-fA-F]{64}$/.test(v1))
+   return false;
+  const epoch=Number(ts)*(ts.length===10?1000:1);
+  if(!Number.isFinite(epoch)||Math.abs(epoch-(args.now??Date.now()))>300000)return false;
+  const manifest='id:'+id.toLowerCase()+';request-id:'+reqid+';ts:'+ts+';';
+  return verifyDigest(v1,hmac(secret,manifest));
+ }
  if(provider==='ASAAS')return equals(header(headers,'asaas-access-token'),secret);
  if(provider==='PAGARME')return verifyDigest(header(headers,'x-hub-signature'),hmac(secret,rawBody));
  if(PIX_BANKS.has(provider)){
@@ -83,8 +108,16 @@ export function authorizePaymentWebhook(args:{
  }
  return false;
 }
-export function parsePaymentWebhook(provider:string,payload:unknown):EventDetails {
+export function parsePaymentWebhook(provider:string,payload:unknown,headers:Headers={}):EventDetails {
  const body=bodyRecord(payload);
+ if(provider==='MERCADOPAGO'){
+  const data=bodyRecord(body.data),paymentId=String(data.id??'');
+  const requestId=header(headers,'x-request-id');
+  if(!/^\d{1,30}$/.test(paymentId)||!requestId||requestId.length>160)return deny();
+  const eventId='mp:'+createHash('sha256')
+   .update(JSON.stringify([paymentId,requestId,String(body.id??'')])).digest('hex');
+  return {paymentIds:[paymentId],eventId};
+ }
  if(provider==='ASAAS'){
   const payment=bodyRecord(body.payment);
   const id=string(payment.id),eventId=string(body.id);
@@ -131,46 +164,101 @@ export interface PaymentWebhookRuntime {
  audit?:VerifiedPaymentWebhookLedger;
  orderPayments?:Pick<OrderPaymentRepository,'byProvider'>;
  orderService?:Pick<OrderPaymentService,'refreshFromWebhook'>;
+ multisector?:MultisectorWebhookService;
+ recovery?:VerifiedWebhookRecoveryRepository;
 }
 export class PaymentWebhookProcessor {
  constructor(private readonly runtime:PaymentWebhookRuntime){}
  async process(input:{
   provider:string;tenantId:string;headers:Headers;rawBody:Buffer;payload:unknown;
- }):Promise<Array<PaymentStatus|OrderPaymentStatus>>{
-  const {provider,tenantId,headers,rawBody,payload}=input;
+  queryPaymentId?:string;
+ }):Promise<Array<PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status']>>{
+  const {provider,tenantId,headers,rawBody,payload,queryPaymentId}=input;
   if(!ENABLED_WEBHOOK_PROVIDERS.has(provider)||!tenantId||tenantId.length>150)return deny();
   const connection=await this.runtime.connections.get(tenantId,provider as PaymentProviderId);
   if(!connection||connection.status!=='ACTIVE'||!connection.credentialRef||!connection.recipientId)return deny();
   const secrets=await this.runtime.vault.load(connection);
   if(secrets.tenantId!==tenantId||secrets.providerId!==provider||secrets.recipientId!==connection.recipientId)return deny();
-  if(!authorizePaymentWebhook({provider,tenantId,headers,rawBody,secret:secrets.webhookSecret??'',
-   publicKeyBase64:secrets.webhookPublicKeyBase64}))return deny();
-  const event=parsePaymentWebhook(provider,payload);
-  const statuses:Array<PaymentStatus|OrderPaymentStatus>=[];
+  if(!authorizePaymentWebhook({provider,tenantId,headers,rawBody,
+   secret:provider==='MERCADOPAGO'?secrets.webhookSecret??secrets.clientSecret??'':
+    secrets.webhookSecret??'',
+   publicKeyBase64:secrets.webhookPublicKeyBase64,payload,queryPaymentId}))return deny();
+  const event=parsePaymentWebhook(provider,payload,headers);
+  const statuses:Array<PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status']>=[];
   for(const providerPaymentId of event.paymentIds){
-   const persisted=await this.runtime.payments.findByProviderPaymentId(tenantId,provider,providerPaymentId);
+   const delivery={tenantId,provider,eventId:event.eventId,providerPaymentId};
+   // Persist only signed notification coordinates before attempting PSP GET.
+   // Unknown payment references and temporary PSP errors remain retryable.
+   const recovery=this.runtime.recovery;
+   if(!recovery){
+    // Production must not acknowledge an event that has no durable retry path.
+    if(process.env.NODE_ENV==='production')
+     throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_DURABLE_INBOX_REQUIRED',
+      message:'Verified webhook recovery inbox is required.'});
+    statuses.push(await this.reconcileVerified(delivery));
+    continue;
+   }
+   await recovery.enqueue(delivery,Date.now());
+   const id=verifiedWebhookDeliveryId(delivery);
+   const claim=await recovery.claim(id,Date.now());
+   if(!claim){
+    // Duplicate delivery already reconciled: safe acknowledgement without replay.
+    if(await recovery.state?.(id)==='COMPLETED')continue;
+    // Another worker owns the lease or retry is delayed: keep the PSP retryable.
+    throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_RECONCILIATION_IN_PROGRESS',
+     message:'Verified event is queued or being reconciled.'});
+   }
+   const leaseToken=typeof claim==='string'?claim:undefined;
+   try{
+    const status=await this.reconcileVerified(delivery);
+    const finished=await recovery.finish(id,Date.now(),true,'PSP_GET_VERIFIED',leaseToken);
+    if(finished===false)
+     throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_LEASE_LOST',
+      message:'Lease changed while verifying provider status.'});
+    statuses.push(status);
+   }catch(error){
+    await recovery.finish(id,Date.now(),false,'PSP_RECONCILIATION_FAILED',leaseToken);
+    throw error;
+   }
+  }
+  return statuses;
+ }
+ /** Invoked only by the trusted worker using previously signature-verified inbox records. */
+ async reconcileVerified(delivery:VerifiedWebhookKey):
+ Promise<PaymentStatus|OrderPaymentStatus|MultisectorWebhookResult['status']>{
+  const {tenantId,provider,eventId,providerPaymentId}=delivery;
+  const persisted=await this.runtime.payments.findByProviderPaymentId(tenantId,provider,providerPaymentId);
    // Webhook payload status is NEVER used. Only tenant-bound PSP GET can
    // reconcile a legacy quote payment or a new T04 order payment.
    if(persisted){
     const result=await this.runtime.service.refresh({tenantId,requestId:'bank-webhook'},persisted.id);
     await this.runtime.audit?.record({
-     tenantId,provider,eventId:event.eventId,providerPaymentId,
+     tenantId,provider,eventId,providerPaymentId,
      paymentId:persisted.id,verifiedStatus:result.status,
     });
-    statuses.push(result.status);
-    continue;
+    return result.status;
    }
    const orderPayment=await this.runtime.orderPayments?.byProvider(tenantId,provider,providerPaymentId);
-   if(!orderPayment||!this.runtime.orderService)return deny();
-   const result=await this.runtime.orderService.refreshFromWebhook(tenantId,provider,providerPaymentId);
-   if(!result)return deny();
+   if(orderPayment&&this.runtime.orderService){
+    const result=await this.runtime.orderService.refreshFromWebhook(tenantId,provider,providerPaymentId);
+    if(!result)return deny();
+    await this.runtime.audit?.record({
+     tenantId,provider,eventId,providerPaymentId,
+     paymentId:orderPayment.id,verifiedStatus:result.status,domain:'ORDER_PAYMENT',
+    });
+    return result.status;
+   }
+   // The same verified notification can also refer to retail checkout or
+   // scheduled-service deposits. Never trust its claimed settlement state.
+   const multi=await this.runtime.multisector?.refreshVerified(tenantId,provider,providerPaymentId);
+   if(!multi)
+    throw new ApplicationError({category:'CONFLICT',code:'PAYMENT_WEBHOOK_REFERENCE_UNMATCHED',
+      message:'Authenticated payment notification has no uniquely bound source.'});
    await this.runtime.audit?.record({
-    tenantId,provider,eventId:event.eventId,providerPaymentId,
-    paymentId:orderPayment.id,verifiedStatus:result.status,
+    tenantId,provider,eventId,providerPaymentId,
+    paymentId:multi.paymentId,verifiedStatus:multi.status,domain:multi.domain,
    });
-   statuses.push(result.status);
-  }
-  return statuses;
+   return multi.status;
  }
 }
 export async function handleBankWebhook(req:Request,res:Response,processor:PaymentWebhookProcessor):Promise<void>{
@@ -179,7 +267,8 @@ export async function handleBankWebhook(req:Request,res:Response,processor:Payme
  const raw=(req as Request&{paymentRawBody?:Buffer}).paymentRawBody;
  if(!raw){res.status(401).json({ok:false});return;}
  try{
-  const statuses=await processor.process({provider,tenantId,headers:req.headers,rawBody:raw,payload:req.body});
+  const statuses=await processor.process({provider,tenantId,headers:req.headers,rawBody:raw,payload:req.body,
+   queryPaymentId:typeof req.query['data.id']==='string'?req.query['data.id']:undefined});
   res.status(200).json({ok:true,processed:statuses.length});
  }catch(error){
   const forbidden=error instanceof ApplicationError&&(error.category==='FORBIDDEN'||error.category==='NOT_FOUND');

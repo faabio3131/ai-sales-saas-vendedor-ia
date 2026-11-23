@@ -33,6 +33,7 @@ export type DepositStatus='NOT_REQUIRED'|'UNPAID'|'CREATING'|'PENDING'|'CONFIRME
 export interface BookingDeposit {
  amountMinor:number;currency:'BRL';status:DepositStatus;
  provider?:string;providerPaymentId?:string;referenceId?:string;
+ merchantBindingHash?:string;
  pixCode?:string;verifiedAt?:string;
 }
 export interface BookingReminder {dueMs:number;state:'PENDING'|'READY'|'ACKNOWLEDGED'|'CANCELLED';key:string}

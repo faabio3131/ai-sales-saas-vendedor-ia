@@ -7,6 +7,7 @@ export interface RetailLine{itemId:string;sku:string;name:string;quantity:number
 export type RetailStatus='CART'|'CONFIRMED'|'COMPLETED'|'CANCELLED';
 export interface RetailPayment{state:'UNPAID'|'CREATING'|'PENDING'|'VERIFIED'|'MANUAL_RECORDED'|'REVIEW_REQUIRED'|'REFUNDED';
  method?:'CASH'|'CARD'|'PIX_MANUAL'|'PIX';provider?:string;providerPaymentId?:string;referenceId?:string;pixCode?:string;
+ merchantBindingHash?:string;
  evidenceRef?:string;recordedBy?:string;verifiedAt?:string}
 export interface RetailOrder extends Scope{
  id:string;version:number;catalogVersion:number;customerId:string;status:RetailStatus;

@@ -1,0 +1,87 @@
+name: T13 Controlled Production Rollout
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        required: true
+        type: string
+      image_digest:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  packages: read
+  attestations: read
+concurrency:
+  group: t13-production-rollout
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    environment: t13-production-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact main SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Validate approvals and post-merge CI
+        env:
+          GITHUB_TOKEN: "${{ github.token }}"
+          T13_EXPECTED_SHA: "${{ inputs.expected_sha }}"
+          T13_REVIEW_ENVIRONMENT: t13-production-approval
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/t13ReleaseGate.mjs --verify
+      - name: Verify signed published OCI digest
+        id: image
+        env:
+          DIGEST: "${{ inputs.image_digest }}"
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
+          IMAGE="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "ref=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Install pinned Cosign verifier
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22
+        with:
+          cosign-release: v3.1.4
+      - name: Verify signature and attestation
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          IMAGE_REF: "${{ steps.image.outputs.ref }}"
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          cosign verify --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/t13-certified-release.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$IMAGE_REF"
+          gh attestation verify "oci://$IMAGE_REF" -R "$GITHUB_REPOSITORY"
+      - name: SSH deploy API and workers with rollback
+        env:
+          IMAGE_REF: "${{ steps.image.outputs.ref }}"
+          DEPLOY_HOST: "${{ vars.T13_DEPLOY_HOST }}"
+          DEPLOY_USER: "${{ vars.T13_DEPLOY_USER }}"
+          SSH_PRIVATE: "${{ secrets.T13_DEPLOY_SSH_PRIVATE_KEY }}"
+          SSH_KNOWN_HOSTS: "${{ secrets.T13_DEPLOY_KNOWN_HOSTS }}"
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{2,250}$ ]] || exit 1
+          [[ "$DEPLOY_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,31}$ ]] || exit 1
+          [[ -n "$SSH_PRIVATE" && -n "$SSH_KNOWN_HOSTS" ]] || exit 1
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+          umask 077
+          printf '%s\n' "$SSH_PRIVATE" > "$TMP/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$TMP/hosts"
+          REMOTE="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh -i "$TMP/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" "$REMOTE" 'test -d /opt/atendevendeia && test -w /opt/atendevendeia && mkdir -p /opt/atendevendeia/deploy'
+          scp -i "$TMP/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" deploy/t13-production.compose.yaml deploy/payment-reconciler.compose.yaml "$REMOTE:/opt/atendevendeia/deploy/"
+          scp -i "$TMP/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" deploy/t13-controlled-deploy.sh "$REMOTE:/opt/atendevendeia/"
+          ssh -i "$TMP/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" "$REMOTE" "cd /opt/atendevendeia && T13_IMAGE_REF='$IMAGE_REF' T13_EXPECTED_SHA='$GITHUB_SHA' bash ./t13-controlled-deploy.sh"

@@ -57,9 +57,14 @@ class Store implements GovernanceRepository {
     deny('AUTONOMY_IDEMPOTENCY_CONFLICT','CONFLICT');
    return {receipt:old,created:false};
   }
+  // Keep the in-memory reservation critical section synchronous, like Firestore's
+  // transaction. Awaiting here allowed two concurrent calls to reserve one key.
+  const policy=this.policies.get(this.k(r.tenantId,r.unitId));
+  if(!policy||policy.version!==r.policyVersion||!policy.allowedTools.includes(r.tool))
+   deny('AUTONOMY_POLICY_VERSION_CONFLICT','CONFLICT');
   if(approvalId){
-   const a=await this.getApproval(r.tenantId,r.unitId,approvalId);
-   if(!a||a.status!=='APPROVED'||a.tool!==r.tool||a.policyVersion!==r.policyVersion||
+   const a=this.grants.get(approvalId);
+   if(!a||a.tenantId!==r.tenantId||a.unitId!==r.unitId||a.status!=='APPROVED'||a.tool!==r.tool||a.policyVersion!==r.policyVersion||
      a.requestHash!==r.requestHash||a.granteeUserId!==r.actorId||
      a.maxAmountMinor<amount||a.expiresAt<=stamp)deny('AUTONOMY_APPROVAL_SCOPE_DENIED');
    this.grants.set(a.id,{...a,status:'CONSUMED',consumedAt:stamp});
@@ -340,5 +345,31 @@ describe('T07 — adversarial security, failure fencing and escalation',()=>{
    expiresAt:'2026-11-21T18:30:00.000Z'});
   await expect(f.service.execute(actor(),'main',{...draft(),approvalId:a.id}))
    .rejects.toMatchObject({code:'AUTONOMY_APPROVAL_SCOPE_DENIED'});
+ });
+});
+
+describe('T13 governance policy fencing',()=>{
+ it('stale policy cannot reserve or execute after revocation',async()=>{
+  const f=await setup();
+  const reserve=f.store.reserve.bind(f.store);
+  f.store.reserve=async (...args:Parameters<Store['reserve']>)=>{
+   await f.service.publish(actor(),'main',{...publish('ASSIST',1),allowedTools:[]});
+   return reserve(...args);
+  };
+  await expect(f.service.execute(actor(),'main',draft())).rejects.toMatchObject({code:'AUTONOMY_POLICY_VERSION_CONFLICT'});
+  expect(f.events).toHaveLength(0);
+  expect(f.store.receipts.size).toBe(0);
+ });
+ it('revocation after reservation but before dispatch leaves a review receipt without side effects',async()=>{
+  const f=await setup();
+  const reserve=f.store.reserve.bind(f.store);
+  f.store.reserve=async (...args:Parameters<Store['reserve']>)=>{
+   const result=await reserve(...args);
+   await f.service.publish(actor(),'main',{...publish('ASSIST',1),allowedTools:[]});
+   return result;
+  };
+  await expect(f.service.execute(actor(),'main',draft())).rejects.toMatchObject({code:'AUTONOMY_EXECUTION_UNCERTAIN'});
+  expect(f.events).toHaveLength(0);
+  expect([...f.store.receipts.values()][0]?.status).toBe('REVIEW_REQUIRED');
  });
 });

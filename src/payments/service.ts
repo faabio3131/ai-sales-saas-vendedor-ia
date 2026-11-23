@@ -50,7 +50,7 @@ export class PaymentService {
     if (!key) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_IDEMPOTENCY_REQUIRED', message:'Idempotency key is required.' });
     if (!['PIX', 'PAYMENT_LINK', 'PIX_MANUAL', 'CARD_ON_DELIVERY', 'CASH_ON_DELIVERY'].includes(input.method)) throw new ApplicationError({ category:'VALIDATION', code:'PAYMENT_METHOD_INVALID', message:'Payment method is invalid.' });
     if(key.length>128) throw new ApplicationError({category:'VALIDATION',code:'PAYMENT_IDEMPOTENCY_INVALID',message:'Invalid idempotency key.'});
-    const paymentId=createHash('sha256').update(tenantId+'\\0'+key).digest('hex');
+    const paymentId=createHash('sha256').update(JSON.stringify([tenantId,key])).digest('hex');
     const existing = await this.payments.findByIdempotencyKey(tenantId, key);
     if (existing) {
       if (existing.quoteId !== input.quoteId || existing.method !== input.method) throw new ApplicationError({ category:'CONFLICT', code:'PAYMENT_IDEMPOTENCY_CONFLICT', message:'Idempotency key already belongs to another payment.' });
@@ -90,8 +90,13 @@ export class PaymentService {
     } as const;
 
     let providerResult;
+    let merchantBindingHash:string|undefined;
     try {
-      const provider=this.providerResolver ? await this.providerResolver.forNewPayment(tenantId,input.providerId) : this.provider;
+      const selection=this.providerResolver?.forNewPaymentWithBinding
+        ? await this.providerResolver.forNewPaymentWithBinding(tenantId,input.providerId):undefined;
+      const provider=selection?.provider??(this.providerResolver
+        ? await this.providerResolver.forNewPayment(tenantId,input.providerId):this.provider);
+      merchantBindingHash=selection?.bindingHash;
       // Claim before non-atomic external I/O: unknown outcomes must be reconciled, not retried blindly.
       if(this.creationIntents)await this.creationIntents.reserve({
         tenantId,paymentId,quoteId:quote.id,method:input.method,providerId:provider.id,
@@ -113,8 +118,10 @@ export class PaymentService {
       quoteId: quote.id,
       provider: providerResult.provider,
       providerPaymentId: providerResult.providerPaymentId,
+      ...(merchantBindingHash?{merchantBindingHash}:{}),
       method: input.method,
-      status: providerResult.status,
+      // PSP create responses are not settlement evidence: verified GET is mandatory.
+      status:providerResult.status==='CONFIRMED'?'PENDING':providerResult.status,
       amountMinor: quote.totalMinor,
       currency: quote.currency,
       idempotencyKey: key,
@@ -122,7 +129,7 @@ export class PaymentService {
       pixCode: providerResult.pixCode,
       pixQrCodeBase64: providerResult.pixQrCodeBase64,
       expiresAt: providerResult.expiresAt,
-      confirmedAt: providerResult.status === 'CONFIRMED' ? now : undefined,
+      // A confirmation timestamp is written only after verified PSP GET.
       createdAt: now,
       updatedAt: now,
     });
@@ -177,7 +184,7 @@ export class PaymentService {
       confirmedAt: status === 'CONFIRMED' ? (payment.confirmedAt ?? now) : payment.confirmedAt,
       updatedAt: now,
     };
-    const persisted = await this.payments.update(updated);
+    const persisted = await this.payments.update(updated,payment.status);
     await this.notifyConfirmed(persisted);
     return persisted;
   }

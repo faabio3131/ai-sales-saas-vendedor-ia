@@ -1,0 +1,36 @@
+rules:
+  - id: t13-no-dynamic-eval
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Dynamic evaluation is forbidden in AtendeVendeIA runtime.
+    pattern: eval(...)
+    paths:
+      include: [src/**]
+  - id: t13-no-dynamic-function-constructor
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Dynamic Function constructor is forbidden in runtime code.
+    pattern: new Function(...)
+    paths:
+      include: [src/**]
+  - id: t13-no-python-shell-execution
+    languages: [python]
+    severity: ERROR
+    message: Shell execution with os.system is forbidden.
+    pattern: os.system(...)
+    paths:
+      include: [cognitive_service/**]
+  - id: t13-no-python-eval
+    languages: [python]
+    severity: ERROR
+    message: Dynamic Python eval is forbidden.
+    pattern: eval(...)
+    paths:
+      include: [cognitive_service/**]
+  - id: t13-no-python-exec
+    languages: [python]
+    severity: ERROR
+    message: Dynamic Python exec is forbidden.
+    pattern: exec(...)
+    paths:
+      include: [cognitive_service/**]

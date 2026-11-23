@@ -11,6 +11,8 @@ export interface CognitiveRouterOptions {
   failureThreshold?: number;
   cooldownMs?: number;
   meter?: CognitiveMeteringSink;
+  meterTimeoutMs?:number;
+  maxMeterInflight?:number;
   priceSnapshots?: readonly AIPriceSnapshot[];
   now?: () => number;
 }
@@ -32,6 +34,15 @@ export class ResilientAIRouter implements AIRouterInterface {
   private readonly clock:()=>number;
   private readonly meter?:CognitiveMeteringSink;
   private readonly prices:readonly AIPriceSnapshot[];
+  private readonly meterTimeoutMs:number;
+  private readonly maxMeterInflight:number;
+  private meterInflight=0;
+  private readonly meterCounters={accepted:0,dropped:0,failed:0,timedOut:0};
+  /** Low-cardinality metrics for Command/Prometheus adapters. Never export
+   * tenant identifiers, request contents, secret refs, or PII in counters. */
+  getMeteringHealth(){
+    return {...this.meterCounters,inflight:this.meterInflight};
+  }
 
   constructor(providers:AIProviderInterface[],opts:CognitiveRouterOptions={}) {
     const ids=new Set<string>();
@@ -47,6 +58,8 @@ export class ResilientAIRouter implements AIRouterInterface {
     this.cooldownMs=Math.max(1000,Math.min(300000,opts.cooldownMs??30000));
     this.clock=opts.now??Date.now;
     this.meter=opts.meter;
+    this.meterTimeoutMs=Math.max(10,Math.min(1000,opts.meterTimeoutMs??100));
+    this.maxMeterInflight=Math.max(1,Math.min(100,opts.maxMeterInflight??16));
     this.prices=opts.priceSnapshots??[];
   }
 
@@ -72,8 +85,26 @@ export class ResilientAIRouter implements AIRouterInterface {
     state.halfOpenProbe=false;
   }
   private async record(event:CognitiveMeteringEvent):Promise<void> {
-    try { await this.meter?.record(event); }
-    catch { console.warn('cognitive_usage_metering_failed'); }
+    if(!this.meter)return;
+    if(this.meterInflight>=this.maxMeterInflight){
+      this.meterCounters.dropped++;
+      console.warn('cognitive_usage_metering_saturated');return;
+    }
+    this.meterInflight++;
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    const pending=Promise.resolve().then(()=>this.meter!.record(event))
+      .finally(()=>{this.meterInflight--;});
+    try {
+      await Promise.race([pending,new Promise<never>((_,reject)=>{
+        timer=setTimeout(()=>reject(new Error('metering_timeout')),this.meterTimeoutMs);
+      })]);
+      this.meterCounters.accepted++;
+    }catch(error){
+      this.meterCounters.failed++;
+      if(error instanceof Error&&error.message==='metering_timeout')this.meterCounters.timedOut++;
+      console.warn('cognitive_usage_metering_failed');
+    }
+    finally{if(timer)clearTimeout(timer);}
   }
 
   async execute(request:AIRequest):Promise<Result<AIResponse>> {

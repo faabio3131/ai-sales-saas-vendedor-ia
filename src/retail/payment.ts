@@ -9,7 +9,11 @@ import {requirePilotLiveFeature} from '../operations/pilotFlags';
 import {requireBusinessAdmin} from '../business/service';
 import {id,object,integer,reject} from '../scheduling/rules';
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
-export interface RetailProviderResolver{forNewPayment(t:string,providerId?:string):Promise<PaymentProviderInterface>}
+export interface RetailProviderResolver{
+ forNewPayment(t:string,providerId?:string):Promise<PaymentProviderInterface>;
+ forNewPaymentWithBinding?(t:string,providerId?:string):Promise<{provider:PaymentProviderInterface;bindingHash:string}>;
+ forRecordedPayment?(record:{tenantId:string;provider:string;merchantBindingHash?:string}):Promise<PaymentProviderInterface>;
+}
 function ref(provider:string,t:string,b:string){
  if(provider==='PAGARME')return pagarmeOrderReference(t,b);
  if(provider==='PAGBANK')return 'av-'+createHash('sha256').update(t+':'+b).digest('hex').slice(0,32);
@@ -32,14 +36,17 @@ export class RetailPaymentService{
    const r=await tx.receipt(k);if(!r)return null;
    if(r.fingerprint!==fingerprint)return reject('RETAIL_IDEMPOTENCY_CONFLICT','CONFLICT');return tx.order(r.orderId);
   });if(prior)return prior;
-  const p=await this.providers.forNewPayment(s.tenantId,providerId);
+  const selected=this.providers.forNewPaymentWithBinding?
+   await this.providers.forNewPaymentWithBinding(s.tenantId,providerId):undefined;
+  const p=selected?.provider??await this.providers.forNewPayment(s.tenantId,providerId);
   const claim=await this.retail.store.transact(s,async tx=>{
    const r=await tx.receipt(k);
    if(r){if(r.fingerprint!==fingerprint)return reject('RETAIL_IDEMPOTENCY_CONFLICT','CONFLICT');const b=await tx.order(r.orderId);if(!b)return reject('RETAIL_ORDER_NOT_FOUND','NOT_FOUND');return {b,created:false};}
    await this.retail.grant(tx,['RETAIL_CATALOG','RETAIL_CHECKOUT'],true,'PAYMENTS');
    const b=await tx.order(bId);if(!b)return reject('RETAIL_ORDER_NOT_FOUND','NOT_FOUND');
    if(b.version!==v||b.status!=='CONFIRMED'||b.payment.state!=='UNPAID'||b.totalMinor<=0)return reject('RETAIL_PAYMENT_STATE','CONFLICT');
-   const next=this.patch(b,ctx,{state:'CREATING',method:'PIX',provider:p.id,referenceId:ref(p.id,s.tenantId,b.id)});
+   const next=this.patch(b,ctx,{state:'CREATING',method:'PIX',provider:p.id,referenceId:ref(p.id,s.tenantId,b.id),
+    ...(selected?{merchantBindingHash:selected.bindingHash}:{})});
    tx.saveOrder(next);tx.saveReceipt(k,{fingerprint,orderId:b.id});return {b:next,created:true};
   });
   if(!claim.created)return claim.b;
@@ -84,7 +91,10 @@ export class RetailPaymentService{
   if(a.providerPaymentId!==undefined)requireBusinessAdmin(ctx);
   const b=await this.retail.get(ctx,u,id(bid)),pid=a.providerPaymentId??b.payment.providerPaymentId;
   if(!b.payment.provider||typeof pid!=='string'||!pid.trim()||pid.length>200||b.payment.providerPaymentId&&b.payment.providerPaymentId!==pid)return reject('RETAIL_PSP_REFERENCE_REQUIRED');
-  const p=await this.providers.forNewPayment(s.tenantId,b.payment.provider);
+  const p=this.providers.forRecordedPayment?
+   await this.providers.forRecordedPayment({tenantId:s.tenantId,provider:b.payment.provider,
+    merchantBindingHash:b.payment.merchantBindingHash}):
+   await this.providers.forNewPayment(s.tenantId,b.payment.provider);
   if(p.id!==b.payment.provider)return reject('RETAIL_PSP_MISMATCH','FORBIDDEN');
   const r=await p.getPaymentStatus(pid);if(r.providerPaymentId!==pid)return reject('RETAIL_PSP_MISMATCH','FORBIDDEN');
   return this.persist(ctx,s,b.id,r,true);

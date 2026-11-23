@@ -1,4 +1,4 @@
-import {getApps,initializeApp} from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ApplicationError} from '../infrastructure/errors';
 import type {TenantContext} from '../types/contracts';
@@ -10,6 +10,7 @@ export interface MerchantProviderConnection {
   status:'PENDING_VERIFICATION'|'ACTIVE'|'DISABLED';
   recipientId?:string;
   credentialRef?:string; // secure secret-manager reference, not the credential
+  version?:number; // merchant lifecycle CAS version; included in historical binding
 }
 export interface TenantProviderPreferences {
   tenantId:string;
@@ -21,12 +22,21 @@ export interface MerchantProviderConnectionRepository {
   list(tenantId:string):Promise<MerchantProviderConnection[]>;
   preferences(tenantId:string):Promise<TenantProviderPreferences>;
   setPreference(tenantId:string,providerId:PaymentProviderId):Promise<TenantProviderPreferences>;
+  findGenerationByBinding?(tenantId:string,providerId:PaymentProviderId,bindingHash:string):
+    Promise<MerchantProviderConnection|null>;
 }
 function db() {
-  if(!getApps().length) {const projectId=process.env.FIREBASE_PROJECT_ID;initializeApp(projectId?{projectId}:undefined);}
-  return getFirestore();
+  ensureFirebaseAdminApp();
+  return getFirestore(ensureFirebaseAdminApp());
 }
 export class FirestoreMerchantProviderConnectionRepository implements MerchantProviderConnectionRepository {
+  async findGenerationByBinding(t:string,p:PaymentProviderId,hash:string){
+    if(!/^[a-f0-9]{64}$/.test(hash))return null;
+    const snapshot=await db().collection('merchantPaymentConnectionGenerations').doc(hash).get();
+    const record=snapshot.data() as MerchantProviderConnection|undefined;
+    return record?.tenantId===t&&record.providerId===p&&record.status==='ACTIVE'?
+      record:null;
+  }
   async get(tenantId:string,providerId:PaymentProviderId) {
     const snapshot=await db().collection('merchantPaymentConnections').doc(tenantId+'__'+providerId).get();
     const data=snapshot.data() as MerchantProviderConnection|undefined;
@@ -48,7 +58,12 @@ export class FirestoreMerchantProviderConnectionRepository implements MerchantPr
   }
 }
 export class InMemoryMerchantProviderConnectionRepository implements MerchantProviderConnectionRepository {
+  readonly generations=new Map<string,MerchantProviderConnection>();
   constructor(public readonly connections:MerchantProviderConnection[] = []){}
+  async findGenerationByBinding(t:string,p:PaymentProviderId,hash:string){
+    const record=this.generations.get(hash);
+    return record?.tenantId===t&&record.providerId===p&&record.status==='ACTIVE'?record:null;
+  }
   private readonly prefs=new Map<string,TenantProviderPreferences>();
   async get(tenantId:string,providerId:PaymentProviderId) {
     return this.connections.find(c=>c.tenantId===tenantId&&c.providerId===providerId)??null;

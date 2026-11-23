@@ -115,8 +115,10 @@ export class OrderPaymentService {
     // Resolve and verify the merchant's actual PSP account BEFORE reserving
     // a charge. No client-supplied recipient, credentials or provider URL.
     if(ONLINE.has(input.method))requirePilotLiveFeature('ONLINE_PAYMENT_CREATE',scope.tenantId,unitId);
-    const provider=ONLINE.has(input.method)?
-      await this.resolver.forNewPayment(scope.tenantId,input.providerId):undefined;
+    const selection=ONLINE.has(input.method)&&this.resolver.forNewPaymentWithBinding?
+      await this.resolver.forNewPaymentWithBinding(scope.tenantId,input.providerId):undefined;
+    const provider=selection?.provider??(ONLINE.has(input.method)?
+      await this.resolver.forNewPayment(scope.tenantId,input.providerId):undefined);
     if(provider&&input.method!=='PIX'&&
       !provider.supportedMethods?.includes(input.method as 'PAYMENT_LINK'|'CHECKOUT'))
       denyPayment('ORDER_PAYMENT_ONLINE_METHOD_UNSUPPORTED','PROVIDER');
@@ -129,6 +131,7 @@ export class OrderPaymentService {
       ...scope,orderId,customerId:order.customerId,id:'opay_'+randomUUID().replace(/-/g,''),
       status:'CREATION_RESERVED',version:1,method:input.method,
       amountMinor:order.totalMinor,currency:'BRL',provider:provider?.id??'OFFLINE',
+      ...(selection?{merchantBindingHash:selection.bindingHash}:{}),
       idempotencyKey:key,fingerprint:hash,createdAt:now,updatedAt:now,
       createdBy:ctx.userId!,...(tendered!==undefined?{cashTenderedMinor:tendered}:{}),
       ...(change!==undefined?{changeMinor:change}:{}),

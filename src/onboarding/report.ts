@@ -14,21 +14,35 @@ import type {Subscription} from '../plans/model';
 import {activePlan} from '../retail/plan';
 import {object,reject} from '../scheduling/rules';
 const key=(t:string,u:string)=>createHash('sha256').update(JSON.stringify([t,u])).digest('hex');
+/** Financial aggregates never treat corrupt money or integer overflow as zero. */
+function addMoney(total:number,value:number):number{
+ if(!Number.isSafeInteger(total)||!Number.isSafeInteger(value)||value<0||
+    !Number.isSafeInteger(total+value))
+  return reject('REPORT_FINANCIAL_INTEGRITY','CONFLICT');
+ return total+value;
+}
 export function summarize(orders:Order[],retail:RetailOrder[],bookings:Booking[]){
+ for(const o of orders)if(!Number.isSafeInteger(o.totalMinor)||o.totalMinor<0)
+  return reject('REPORT_FINANCIAL_INTEGRITY','CONFLICT');
+ for(const o of retail)if(!Number.isSafeInteger(o.totalMinor)||o.totalMinor<0||
+   (o.status==='COMPLETED'&&o.acceptedTotalMinor!==undefined&&o.acceptedTotalMinor!==o.totalMinor))
+  return reject('REPORT_FINANCIAL_INTEGRITY','CONFLICT');
+ for(const b of bookings)if(b.pack&&(!Number.isSafeInteger(b.pack.priceMinor)||b.pack.priceMinor<0))
+  return reject('REPORT_FINANCIAL_INTEGRITY','CONFLICT');
  return {
   food:{orders:orders.length,confirmed:orders.filter(o=>o.status==='CONFIRMED').length,
    cancelled:orders.filter(o=>o.status==='CANCELLED').length,
-   confirmedOrderValueMinor:orders.filter(o=>o.status==='CONFIRMED').reduce((a,o)=>a+o.totalMinor,0)},
+   confirmedOrderValueMinor:orders.filter(o=>o.status==='CONFIRMED').reduce((a,o)=>addMoney(a,o.totalMinor),0)},
   retail:{orders:retail.length,carts:retail.filter(o=>o.status==='CART').length,
    completed:retail.filter(o=>o.status==='COMPLETED').length,cancelled:retail.filter(o=>o.status==='CANCELLED').length,
-   completedValueMinor:retail.filter(o=>o.status==='COMPLETED').reduce((a,o)=>a+o.totalMinor,0),
-   verifiedCompletedMinor:retail.filter(o=>o.status==='COMPLETED'&&o.payment.state==='VERIFIED').reduce((a,o)=>a+o.totalMinor,0),
-   manuallyRecordedCompletedMinor:retail.filter(o=>o.status==='COMPLETED'&&o.payment.state==='MANUAL_RECORDED').reduce((a,o)=>a+o.totalMinor,0),
+   completedValueMinor:retail.filter(o=>o.status==='COMPLETED').reduce((a,o)=>addMoney(a,o.totalMinor),0),
+   verifiedCompletedMinor:retail.filter(o=>o.status==='COMPLETED'&&o.payment.state==='VERIFIED').reduce((a,o)=>addMoney(a,o.totalMinor),0),
+   manuallyRecordedCompletedMinor:retail.filter(o=>o.status==='COMPLETED'&&o.payment.state==='MANUAL_RECORDED').reduce((a,o)=>addMoney(a,o.totalMinor),0),
    reviewRequired:retail.filter(o=>o.payment.state==='REVIEW_REQUIRED').length},
   services:{appointments:bookings.length,confirmed:bookings.filter(b=>b.status==='CONFIRMED').length,
    completed:bookings.filter(b=>b.status==='COMPLETED').length,noShows:bookings.filter(b=>b.status==='NO_SHOW').length,
    cancelled:bookings.filter(b=>b.status==='CANCELLED').length,
-   completedPricedValueMinor:bookings.filter(b=>b.status==='COMPLETED'&&b.pack).reduce((a,b)=>a+b.pack!.priceMinor,0),
+   completedPricedValueMinor:bookings.filter(b=>b.status==='COMPLETED'&&b.pack).reduce((a,b)=>addMoney(a,b.pack!.priceMinor),0),
    completedWithoutPrice:bookings.filter(b=>b.status==='COMPLETED'&&!b.pack).length},
  };
 }

@@ -1,0 +1,33 @@
+# T13 production: externally controlled reverse proxy; no public listener.
+# Never use a tag; ATENDEVENDE_IMAGE must be a certified OCI digest.
+services:
+  atendevende-api:
+    image: "${ATENDEVENDE_IMAGE:?Signed OCI image required}"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    ports:
+      - "127.0.0.1:${ATENDEVENDE_PRODUCTION_PORT:-18080}:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      SESSION_SECRET_FILE: /run/secrets/atendevende/session
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase/service-account.json
+      FIREBASE_PROJECT_ID: "${FIREBASE_PROJECT_ID:?Firebase project required}"
+      PUBLIC_APP_URL: "${PUBLIC_APP_URL:?HTTPS public app URL required}"
+      ATENDEVENDE_PILOT_LIVE_ENABLED: "false"
+      ATENDEVENDE_PILOT_GO_LIVE_APPROVED: "false"
+      ATENDEVENDE_PILOT_ALLOWED_UNITS: "{}"
+    volumes:
+      - "${T13_SESSION_SECRET_FILE:?0400 node-owned secret required}:/run/secrets/atendevende/session:ro"
+      - "${PAYMENT_FIREBASE_CREDENTIAL_FILE:?Service-account file required}:/run/secrets/firebase/service-account.json:ro"
+    healthcheck:
+      test: ["CMD","wget","-qO-","http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

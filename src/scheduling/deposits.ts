@@ -11,6 +11,8 @@ import {id,integer,object,reject} from './rules';
 
 export interface DepositProviderResolver{
  forNewPayment(tenantId:string,providerId?:string):Promise<PaymentProviderInterface>;
+ forNewPaymentWithBinding?(tenantId:string,providerId?:string):Promise<{provider:PaymentProviderInterface;bindingHash:string}>;
+ forRecordedPayment?(record:{tenantId:string;provider:string;merchantBindingHash?:string}):Promise<PaymentProviderInterface>;
 }
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 function reference(provider:string,t:string,b:string){
@@ -50,7 +52,9 @@ export class BookingDepositService{
    return tx.booking(r.bookingId);
   });
   if(replay)return replay;
-  const provider=await this.resolver.forNewPayment(s.tenantId,providerId);
+  const selected=this.resolver.forNewPaymentWithBinding?
+   await this.resolver.forNewPaymentWithBinding(s.tenantId,providerId):undefined;
+  const provider=selected?.provider??await this.resolver.forNewPayment(s.tenantId,providerId);
   const claim=await this.store.transact(s,async tx=>{
    const prior=await tx.receipt(key);
    if(prior){
@@ -65,7 +69,8 @@ export class BookingDepositService{
    if(b.version!==v||b.status!=='HELD'||b.holdUntilMs<=now||b.deposit.status!=='UNPAID')
     return reject('SCHEDULE_DEPOSIT_STATE_CONFLICT','CONFLICT');
    const next=this.update(b,ctx,{...b.deposit,status:'CREATING',provider:provider.id,
-    referenceId:reference(provider.id,s.tenantId,b.id)});
+    referenceId:reference(provider.id,s.tenantId,b.id),
+    ...(selected?{merchantBindingHash:selected.bindingHash}:{})});
    tx.saveBooking(next);tx.saveReceipt(key,{fingerprint:hash,bookingId:bid});
    return {booking:next,created:true};
   });
@@ -126,7 +131,10 @@ export class BookingDepositService{
    return reject('SCHEDULE_DEPOSIT_PROVIDER_ID_REQUIRED');
   if(b.deposit.providerPaymentId&&p!==b.deposit.providerPaymentId)
    return reject('SCHEDULE_DEPOSIT_PROVIDER_ID_CONFLICT','CONFLICT');
-  const provider=await this.resolver.forNewPayment(s.tenantId,b.deposit.provider);
+  const provider=this.resolver.forRecordedPayment?
+   await this.resolver.forRecordedPayment({tenantId:s.tenantId,provider:b.deposit.provider,
+    merchantBindingHash:b.deposit.merchantBindingHash}):
+   await this.resolver.forNewPayment(s.tenantId,b.deposit.provider);
   if(provider.id!==b.deposit.provider)return reject('SCHEDULE_DEPOSIT_PSP_MISMATCH','FORBIDDEN');
   const r=await provider.getPaymentStatus(p);
   if(r.providerPaymentId!==p)return reject('SCHEDULE_DEPOSIT_PSP_MISMATCH','FORBIDDEN');

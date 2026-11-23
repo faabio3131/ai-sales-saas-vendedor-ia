@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {retailFiscalIntent} from '../fiscal/multisectorIntents';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import type {RetailRepository,RetailTransaction,Scope,RetailCatalog,RetailOrder,Stock,Receipt} from './model';
@@ -58,6 +59,10 @@ export class FirestoreRetailRepository implements RetailRepository{
     if(staged){
      const before=await port.order(staged.id);
      count+=Number(staged.status==='CONFIRMED')-Number(before?.status==='CONFIRMED');
+     if(staged.status==='COMPLETED'&&before?.status!=='COMPLETED'){
+      const fiscal=retailFiscalIntent(staged);
+      writes.push(()=>trx.create(db.collection('multisectorFiscalIntents').doc(fiscal.id),fiscal));
+     }
     }
     if(count<0)return reject('RETAIL_ACTIVE_COUNT_CORRUPT','INTERNAL');
     trx.set(unit,{...s,activeOrders:count,sequence:Number(fence.get('sequence')??0)+1});

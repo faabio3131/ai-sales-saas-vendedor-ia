@@ -9,6 +9,8 @@ export interface Payment {
   saleId?: string;
   provider: string;
   providerPaymentId?: string;
+  /** Digest of the verified merchant connection at payment creation. */
+  merchantBindingHash?: string;
   method: PaymentMethod;
   status: PaymentStatus;
   amountMinor: number;

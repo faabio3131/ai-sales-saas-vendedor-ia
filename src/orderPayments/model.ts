@@ -13,6 +13,7 @@ export interface OrderPayment {
   id:string;tenantId:string;unitId:string;orderId:string;customerId:string;
   version:number;method:OrderPaymentMethod;status:OrderPaymentStatus;
   amountMinor:number;currency:'BRL';provider:string;providerPaymentId?:string;
+  merchantBindingHash?:string;
   idempotencyKey:string;fingerprint:string;
   paymentUrl?:string;pixCode?:string;pixQrCodeBase64?:string;expiresAt?:string;
   cashTenderedMinor?:number;changeMinor?:number;
@@ -56,5 +57,6 @@ export interface FinancialEventConsumer {publish(event:OutboxRecord):Promise<voi
 /** Service uses existing merchant PSP adapters and tenant-bound vault. */
 export interface OrderPaymentProviderResolver {
   forNewPayment(tenantId:string,providerId?:string):Promise<PaymentProviderInterface>;
-  forRecordedPayment(record:{tenantId:string;provider:string}):Promise<PaymentProviderInterface>;
+  forNewPaymentWithBinding?(tenantId:string,providerId?:string):Promise<{provider:PaymentProviderInterface;bindingHash:string}>;
+  forRecordedPayment(record:{tenantId:string;provider:string;merchantBindingHash?:string}):Promise<PaymentProviderInterface>;
 }

@@ -1,14 +1,12 @@
-import { getApps, initializeApp } from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { SalesFiscalHandoffRepository } from './contracts';
+import {ApplicationError} from '../infrastructure/errors';
 import { SalesFiscalHandoff } from './model';
 
 function db() {
-  if (!getApps().length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    initializeApp(projectId ? { projectId } : undefined);
-  }
-  return getFirestore();
+  ensureFirebaseAdminApp();
+  return getFirestore(ensureFirebaseAdminApp());
 }
 
 export class FirestoreSalesFiscalHandoffRepository implements SalesFiscalHandoffRepository {
@@ -23,7 +21,22 @@ export class FirestoreSalesFiscalHandoffRepository implements SalesFiscalHandoff
   }
 
   async create(handoff: SalesFiscalHandoff): Promise<SalesFiscalHandoff> {
-    await db().collection('salesFiscalHandoffs').doc(handoff.id).create(handoff);
-    return handoff;
+    const ref=db().collection('salesFiscalHandoffs').doc(handoff.id);
+    return db().runTransaction(async tx=>{
+      const previous=(await tx.get(ref)).data() as SalesFiscalHandoff|undefined;
+      if(previous){
+        if(previous.tenantId!==handoff.tenantId||previous.paymentId!==handoff.paymentId||
+           previous.quoteId!==handoff.quoteId||previous.customerId!==handoff.customerId||
+           previous.idempotencyKey!==handoff.idempotencyKey||
+           previous.amountMinor!==handoff.amountMinor||
+           previous.currency!==handoff.currency||
+           previous.paymentConfirmedAt!==handoff.paymentConfirmedAt)
+          throw new ApplicationError({category:'CONFLICT',code:'FISCAL_HANDOFF_IDEMPOTENCY_CONFLICT',
+            message:'Conflicting fiscal payment evidence.'});
+        return previous;
+      }
+      tx.create(ref,handoff);
+      return handoff;
+    });
   }
 }

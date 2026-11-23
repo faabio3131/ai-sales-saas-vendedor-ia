@@ -1,4 +1,4 @@
-import { getApps, initializeApp } from 'firebase-admin/app';
+import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { ApplicationError } from '../infrastructure/errors';
 import { TenantContext } from '../types/contracts';
@@ -19,11 +19,8 @@ export interface PaymentMethodsRepository {
 }
 
 function firestore() {
-  if (!getApps().length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    initializeApp(projectId ? { projectId } : undefined);
-  }
-  return getFirestore();
+  ensureFirebaseAdminApp();
+  return getFirestore(ensureFirebaseAdminApp());
 }
 
 export class FirestorePaymentMethodsRepository implements PaymentMethodsRepository {

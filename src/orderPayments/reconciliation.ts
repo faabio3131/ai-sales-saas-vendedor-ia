@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { ensureFirebaseAdminApp } from '../infrastructure/firebaseAdmin';
 import type { OrderPayment } from './model';
@@ -7,8 +8,8 @@ const STATES=['PENDING','CREATION_RESERVED','RECONCILIATION_REQUIRED','REFUND_PE
   'EXPIRED','FAILED','CANCELLED'] as const;
 export interface OrderPaymentReconciliationRepository {
   candidates(limit:number):Promise<OrderPayment[]>;
-  claim(id:string,now:number):Promise<boolean>;
-  finish(id:string,now:number,success:boolean,reason:string):Promise<void>;
+  claim(id:string,now:number):Promise<boolean|string>;
+  finish(id:string,now:number,success:boolean,reason:string,claimToken?:string):Promise<boolean|void>;
   investigation(payment:OrderPayment,reason:string):Promise<void>;
 }
 export class FirestoreOrderPaymentReconciliationRepository implements OrderPaymentReconciliationRepository {
@@ -32,29 +33,32 @@ export class FirestoreOrderPaymentReconciliationRepository implements OrderPayme
     }
     return entries;
   }
-  async claim(id:string,now:number):Promise<boolean>{
+  async claim(id:string,now:number):Promise<string|false>{
     const ref=database().collection('orderPaymentReconciliationLeases').doc(id);
     return database().runTransaction(async tx=>{
       const old=await tx.get(ref);
       if((Number(old.get('leaseUntil'))||0)>now||(Number(old.get('nextDueAt'))||0)>now||
         old.get('dlq')===true)return false;
-      tx.set(ref,{leaseUntil:now+120_000,lastAttemptAt:now},{merge:true});
-      return true;
+      const claimToken=randomUUID();
+      tx.set(ref,{leaseUntil:now+120_000,claimToken,lastAttemptAt:now},{merge:true});
+      return claimToken;
     });
   }
-  async finish(id:string,now:number,success:boolean,reason:string):Promise<void>{
+  async finish(id:string,now:number,success:boolean,reason:string,claimToken?:string):Promise<boolean>{
     const ref=database().collection('orderPaymentReconciliationLeases').doc(id);
-    await database().runTransaction(async tx=>{
+    return database().runTransaction(async tx=>{
       const old=await tx.get(ref);
+      if(!claimToken||old.get('claimToken')!==claimToken)return false;
       const failures=success?0:Math.min(12,(Number(old.get('failures'))||0)+1);
       const dlq=!success&&failures>=8;
       const backoff=success?5*60_000:Math.min(60*60_000,30_000*2**Math.min(failures,7));
-      tx.set(ref,{leaseUntil:0,nextDueAt:dlq?Number.MAX_SAFE_INTEGER:now+backoff,
+      tx.set(ref,{leaseUntil:0,claimToken:'',nextDueAt:dlq?Number.MAX_SAFE_INTEGER:now+backoff,
         failures,dlq,lastOutcome:success?'VERIFIED':'RETRY',lastErrorCode:reason.slice(0,80),
         lastCompletedAt:now},{merge:true});
       if(dlq)tx.set(database().collection('orderPaymentReconciliationDlq').doc(id),{
         paymentId:id,reasonCode:reason.slice(0,80),failures,createdAt:new Date(now).toISOString()
       },{merge:true});
+      return true;
     });
   }
   async investigation(payment:OrderPayment,reason:string):Promise<void>{
@@ -77,17 +81,19 @@ export class OrderPaymentReconciliationWorker {
     const entries=await this.repository.candidates(limit);
     for(const entry of entries){
       result.scanned++;
-      if(!await this.repository.claim(entry.id,this.clock())){result.skipped++;continue;}
+      const claim=await this.repository.claim(entry.id,this.clock());
+      if(!claim){result.skipped++;continue;}
+      const token=typeof claim==='string'?claim:undefined;
       result.claimed++;
       if(!entry.providerPaymentId){
         await this.repository.investigation(entry,'PROVIDER_PAYMENT_REFERENCE_UNKNOWN');
-        await this.repository.finish(entry.id,this.clock(),false,'MANUAL_RECONCILIATION_REQUIRED');
+        await this.repository.finish(entry.id,this.clock(),false,'MANUAL_RECONCILIATION_REQUIRED',token);
         result.manualReview++;continue;
       }
       if(entry.status==='REFUND_PENDING'&&entry.refund?.requestedAt&&
         this.clock()-Date.parse(entry.refund.requestedAt)>24*60*60*1000){
         await this.repository.investigation(entry,'REFUND_REQUIRES_MANUAL_REVIEW');
-        await this.repository.finish(entry.id,this.clock(),false,'REFUND_PENDING_TOO_LONG');
+        await this.repository.finish(entry.id,this.clock(),false,'REFUND_PENDING_TOO_LONG',token);
         result.manualReview++;continue;
       }
       try{
@@ -95,10 +101,11 @@ export class OrderPaymentReconciliationWorker {
         if(checked.id!==entry.id||checked.tenantId!==entry.tenantId||
           checked.amountMinor!==entry.amountMinor||checked.provider!==entry.provider)
           throw new Error('PSP reconciliation mismatch');
-        await this.repository.finish(entry.id,this.clock(),true,'VERIFIED_PSP_GET');
+        const done=await this.repository.finish(entry.id,this.clock(),true,'VERIFIED_PSP_GET',token);
+        if(done===false){result.failed++;continue;}
         result.refreshed++;
       }catch{
-        await this.repository.finish(entry.id,this.clock(),false,'PSP_VERIFICATION_FAILED');
+        await this.repository.finish(entry.id,this.clock(),false,'PSP_VERIFICATION_FAILED',token);
         result.failed++;
       }
     }

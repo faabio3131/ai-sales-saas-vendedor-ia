@@ -302,3 +302,23 @@ Uma tarefa `T(n+1)` permanece **`🔒 BLOQUEADA`** até que `T(n)` tenha simulta
 - **Limites explícitos:** cobertura apenas T03/T04 com unitId verificável; cotações legadas sem unitId não atribuídas; taxas PSP ausentes permanecem null; nenhum dado bancário real ou deploy Contabo/Cloud Run homologado; índices Firestore versionados, não aplicados externamente.
 - **Evidências:** `docs/T05_CLOSURE_CERTIFICATION.md`, `docs/ADR-006_T05_FINANCE_LEDGER_COGNITIVE_ADMIN.md` e `docs/T05_FINANCIAL_ADMIN_RUNBOOK.md`.
 - **T06 permanece BLOQUEADA** até autorização humana explícita pós-certificação T05.
+
+## 12. T13 — Hardening e certificação final (22/11/2026)
+Diretor autorizou a execução integral. Baseline T12: main 79dc72d9d7da801a00acc75e3a9b475d4a6d7f6d, PR #28, CI pós-merge #44982380264 SUCCESS (491 TS + 15 Python). Trava de promoção: T13 não é ENTREGUE até todos os achados aplicáveis serem resolvidos, testes de regressão e CI integral do HEAD aprovados, revisão e certificação pós-merge. Proibido ativar PSP/WhatsApp reais ou alterar infraestrutura sem gates operacionais; homologações externas não bloqueiam engenharia.
+| Etapa | Achados | Estado inicial |
+|---|---|---|
+| T13.1 Governança | AT-001 | Implementação candidata, CI pendente |
+| T13.2 Financeiro multissetorial | AT-002/003 | Pendente |
+| T13.3 Supply chain e runtime | AT-004 | Pendente |
+| T13.4 Resiliência cognitiva | AT-005/006/007 | Parcial: metering, concorrência HTTP; replay distribuído pendente |
+| T13.5 Fiscal | AT-008 | Pendente |
+| T13.6 Gates de qualidade | AT-009 | Pendente |
+| T13.7 Release | Merge, CI pós-merge e deploy | BLOQUEADO |
+A autorização de deploy anteriormente registrada não substitui a certificação do novo HEAD nem o aceite T08.5. Nenhum status externo é inferido.
+
+
+### T13 — Evidência parcial de hardening, sem certificação
+- Corrida de reserva no double de governança corrigida: critical section síncrona para preservar a semântica transacional e testar concorrência real.
+- Pagamentos legados, T04 e T12: as novas operações com o resolver canônico registram hash de vínculo de tenant, provedor, destinatário, referência de cofre e versão. Operações antigas sem vínculo ou com conexão rotacionada passam a exigir investigação humana, jamais PSP GET/refund contra outra conta. A criação com adaptadores mock não substitui homologação.
+- Handoff fiscal: conflito de idempotência detectado e criação transacional em Firestore. Nenhuma emissão fiscal real foi habilitada.
+- **Não entregue:** AT-002 cobertura de consolidação multissetorial, AT-004 supply chain, AT-005 replay distribuído, AT-008 integração fiscal total, AT-009 testes e release; os gates completos e a revisão independente permanecem obrigatórios. Nenhum merge ou deploy autorizado por esta evidência.

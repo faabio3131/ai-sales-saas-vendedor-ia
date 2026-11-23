@@ -13,17 +13,96 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: T13 verify immutable GitHub Actions refs
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const source=fs.readFileSync('.github/workflows/blk010-validation.yml','utf8');
+          const refs=[...source.matchAll(/^\s+uses:\s+([^\s#]+)/gm)].map(x=>x[1]);
+          if(refs.length!==5||refs.some(r=>!/^[-\w]+\/[-\w]+@[0-9a-f]{40}$/.test(r)))
+            throw new Error('Unpinned or unexpected GitHub Actions references');
+          console.log('t13_github_actions_immutable_refs_verified:'+refs.length);
+          NODE
+      - name: Install dependencies (immutable lock)
+        run: npm ci --no-audit --no-fund
+      - name: T13 auditable dependencies and SBOM
+        run: |
+          set -euo pipefail
+          npm audit --audit-level=high
+          npm sbom --sbom-format=cyclonedx > t13-sbom.cdx.json
+          node -e "const b=require('./t13-sbom.cdx.json');if(!b.components?.length)process.exit(1)"
+      - name: T13 upload software bill of materials
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: t13-sbom-cyclonedx
+          path: t13-sbom.cdx.json
+          retention-days: 30
       - name: Build
         run: npm run build
       - name: Typecheck
         run: npm run typecheck
+      - name: T13 AST-based security source gate
+        run: npm run security:static
+      - name: T13 release, branch policy, and Firestore active-rules self-test
+        run: |
+          node scripts/t13FirestoreRulesGate.mjs --self-test
+          node scripts/t13ReleaseGate.mjs --self-test
+          node scripts/t13WorkflowGate.mjs
+          node scripts/t13FirestoreEmulatorIntegrity.mjs --self-test
+      - name: T13 committed secret regression gate
+        run: |
+          node scripts/t13SecretGate.mjs --self-test
+          node scripts/t13SecretGate.mjs
+      - name: T13 production compose and deploy script static gate
+        env:
+          ATENDEVENDE_IMAGE: ghcr.io/example/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          FIREBASE_PROJECT_ID: demo-t13
+          PUBLIC_APP_URL: https://staging.invalid
+          T13_SESSION_SECRET_FILE: /tmp/ci-session-mount
+          PAYMENT_FIREBASE_CREDENTIAL_FILE: /tmp/ci-firebase-identity.json
+        run: |
+          set -euo pipefail
+          bash -n deploy/t13-controlled-deploy.sh
+          grep -Fq 'HEALTH_JSON=$(mktemp /tmp/t13-release-health.XXXXXXXX)' deploy/t13-controlled-deploy.sh
+          grep -Fq 'trap '\''rm -f "$HEALTH_JSON"'\'' EXIT' deploy/t13-controlled-deploy.sh
+          if grep -Fq '/tmp/t13-release-health.json' deploy/t13-controlled-deploy.sh; then exit 1; fi
+          docker compose -f deploy/t13-production.compose.yaml -f deploy/payment-reconciler.compose.yaml config --format json > /tmp/t13-production-topology.json
+          node - <<'NODE'
+          const a=require('node:assert/strict');
+          const config=require('/tmp/t13-production-topology.json');
+          const api=config.services['atendevende-api'];
+          const worker=config.services['payment-reconciler'];
+          a.ok(api&&worker);
+          a.equal(api.image,worker.image);
+          a.match(api.image,new RegExp("^ghcr[.]io/[^@]+@sha256:[a-f0-9]{64}$"));
+          a.equal(api.read_only,true);
+          a.equal(worker.read_only,true);
+          a.deepEqual(api.cap_drop,['ALL']);
+          a.equal(api.ports[0].host_ip,'127.0.0.1');
+          a.equal(api.environment.ATENDEVENDE_PILOT_LIVE_ENABLED,'false');
+          a.equal(api.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');
+          a.equal(api.environment.ATENDEVENDE_PILOT_ALLOWED_UNITS,'{}');
+          a.equal(api.environment.SESSION_SECRET_FILE,'/run/secrets/atendevende/session');
+          a.ok(api.volumes.find(v=>v.target==='/run/secrets/atendevende/session'&&v.read_only));
+          a.ok(worker.volumes.find(v=>v.target==='/run/secrets/firebase/service-account.json'&&v.read_only));
+          NODE
+      - name: T13 independent Semgrep OSS SAST gate
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/t13-semgrep-venv
+          /tmp/t13-semgrep-venv/bin/pip install --disable-pip-version-check --no-cache-dir semgrep==1.186.0
+          /tmp/t13-semgrep-venv/bin/semgrep scan --metrics off --config .semgrep/t13-security.yml --error src cognitive_service
+      - name: T13 Python AST security gate
+        run: |
+          python3 scripts/t13PythonSecurityGate.py --self-test
+          python3 scripts/t13PythonSecurityGate.py
       - name: Python cognitive S2S contract and security tests
         run: python3 -m unittest cognitive_service.test_core -v
       - name: Tests
@@ -41,7 +120,15 @@ jobs:
           done
           test "$READY" = 1
           node -e "const h=require('/tmp/cognitive-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
-          npm test
+          npm test -- --coverage --coverage.provider=v8 --coverage.include='src/**/*.{ts,tsx}' --coverage.reporter=json-summary
+          node scripts/t13CoverageGate.mjs --self-test
+          node scripts/t13CoverageGate.mjs coverage/coverage-summary.json
+      - name: T13 upload quantitative source coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: t13-source-coverage-json
+          path: coverage/coverage-summary.json
+          retention-days: 30
       - name: T08.4 10-journey and dual-operation-mode acceptance matrix
         env:
           NODE_ENV: test
@@ -70,6 +157,7 @@ jobs:
           FIREBASE_PROJECT_ID: demo-atendevende-t10
         run: |
           curl --fail --location --retry 3 --retry-delay 1 --output /tmp/firestore-emulator.jar https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.19.8.jar
+          node scripts/t13FirestoreEmulatorIntegrity.mjs /tmp/firestore-emulator.jar
           java -jar /tmp/firestore-emulator.jar --host 127.0.0.1 --port 8089 --project_id demo-atendevende-t10 --rules deploy/t10-scheduling.firestore.rules > /tmp/firestore-emulator.log 2>&1 &
           PID=$!
           trap 'cat /tmp/firestore-emulator.log; kill "$PID" >/dev/null 2>&1 || true' EXIT
@@ -81,6 +169,29 @@ jobs:
           done
           test "$READY" = 1
           npm test -- tests/t10FirestoreEmulator.test.ts tests/t11FirestoreEmulator.test.ts tests/t12FirestoreEmulator.test.ts
+          # Keep new T13 recovery emulator tests isolated from T10's 8-way
+          # transaction contention, so CI cannot manufacture emulator lock timeouts.
+          npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
+          npm test -- tests/t13FinancialEmulator.test.ts
+      - name: T13 Firestore candidate rules deny direct client access
+        env:
+          NODE_ENV: test
+          T13_FIRESTORE_RULES_EMULATOR: 'true'
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8090
+          FIREBASE_PROJECT_ID: demo-atendevende-t13
+        run: |
+          set -euo pipefail
+          java -jar /tmp/firestore-emulator.jar --host 127.0.0.1 --port 8090 --project_id demo-atendevende-t13 --rules deploy/t13-server-only.firestore.rules > /tmp/t13-rules-emulator.log 2>&1 &
+          PID=$!
+          trap 'cat /tmp/t13-rules-emulator.log; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          READY=0
+          for i in {1..60}; do
+            if curl --silent --fail http://127.0.0.1:8090/ >/dev/null; then READY=1; break; fi
+            if ! kill -0 "$PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          npm test -- tests/t13FirestoreRulesEmulator.test.ts
       - name: T10 scheduling worker compose config gate
         env:
           ATENDEVENDE_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -102,6 +213,24 @@ jobs:
         run: |
           docker compose -f deploy/scheduling-worker.compose.yaml -f deploy/scheduling-worker.whatsapp.compose.yaml -f deploy/scheduling-worker.whatsapp-mounted.compose.yaml config --format json > /tmp/t11-compose.json
           node -e "const a=require('node:assert/strict');const s=require('/tmp/t11-compose.json').services['scheduling-worker'];a.equal(s.environment.ATENDEVENDE_BOOKING_WHATSAPP_LIVE_ENABLED,'false');a.equal(s.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');a.equal(s.environment.WHATSAPP_VAULT_BACKEND,'MOUNTED');a.ok(s.volumes.find(v=>v.target==='/run/secrets/atendevende-whatsapp').read_only);a.equal(s.read_only,true);"
+      - name: T13 fulfillment worker compose hardening gate
+        env:
+          ATENDEVENDEIA_IMAGE: example.invalid/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          FIREBASE_PROJECT_ID: demo-t13
+        run: |
+          set -euo pipefail
+          docker compose -f deploy/fulfillment-worker.compose.yaml config --format json > /tmp/t13-fulfillment-worker.json
+          node - <<'NODE'
+          const assert=require('node:assert/strict');
+          const service=require('/tmp/t13-fulfillment-worker.json').services['fulfillment-worker'];
+          assert.ok(service);
+          assert.equal(service.read_only,true);
+          assert.deepEqual(service.cap_drop,['ALL']);
+          assert.ok(service.security_opt.includes('no-new-privileges:true'));
+          assert.ok(service.tmpfs.some(x=>x.startsWith('/tmp:')&&x.includes('noexec')));
+          assert.ok(!service.ports||service.ports.length===0);
+          assert.match(JSON.stringify(service.command),/fulfillment-worker\.last-success/);
+          NODE
       - name: Runtime security boundaries
         env:
           NODE_ENV: production
@@ -162,6 +291,8 @@ jobs:
             assert.match(JSON.stringify(service.healthcheck),/payment-reconciler\.last-success/);
             assert.match(JSON.stringify(service.command),/payment_reconciliation_cycle_failed/);
             assert.equal(service.read_only,true);
+            assert.deepEqual(service.cap_drop,['ALL']);
+            assert.ok(service.security_opt.includes('no-new-privileges:true'));
             assert.ok(JSON.stringify(service.command).includes('$legacy_failed'));
             assert.ok(JSON.stringify(service.command).includes('$order_failed'));
           }
@@ -240,13 +371,20 @@ jobs:
           COGNITIVE_S2S_SECRET: ci-cognitive-service-secret-0123456789abc
         run: |
           docker build -f cognitive_service/Dockerfile -t atendevende-cognitive-ci .
+          # Local-only Redis exercises the same atomic NX/EX replay gate that
+          # production runs on authenticated rediss. The test container uses
+          # host networking so only 127.0.0.1 is reachable.
+          docker run -d --name atendevende-replay-ci -p 127.0.0.1:16379:6379 redis@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe \
+            redis-server --save "" --appendonly no
           docker run --rm -d --name atendevende-cognitive-ci \
             --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            --network host \
             -e COGNITIVE_S2S_SECRET \
-            -e COGNITIVE_SERVICE_HOST=0.0.0.0 \
-            -e COGNITIVE_ALLOW_NON_LOOPBACK=true \
-            -p 127.0.0.1:18185:8185 atendevende-cognitive-ci
-          cleanup() { docker logs atendevende-cognitive-ci || true; docker rm -f atendevende-cognitive-ci >/dev/null 2>&1 || true; }
+            -e COGNITIVE_SERVICE_PORT=18185 \
+            -e COGNITIVE_SERVICE_HOST=127.0.0.1 \
+            -e COGNITIVE_REPLAY_REDIS_URL=redis://127.0.0.1:16379 \
+            atendevende-cognitive-ci
+          cleanup() { docker logs atendevende-cognitive-ci || true; docker rm -f atendevende-cognitive-ci atendevende-replay-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           READY=0
           for i in {1..20}; do
@@ -255,3 +393,66 @@ jobs:
           done
           test "$READY" = 1
           node -e "const h=require('/tmp/cognitive-docker-health.json');if(h.status!=='ok'||h.contractVersion!=='atendevende.cognitive/v1')process.exit(1)"
+          docker exec atendevende-replay-ci redis-cli ping | grep -qx PONG
+          # A signed request is accepted once but may not be replayed after a
+          # complete service restart while the shared nonce store survives.
+          python3 - <<'PY'
+          import hashlib,hmac,os,time,urllib.request,urllib.error
+          from pathlib import Path
+          raw=b'{}'
+          ts=str(int(time.time()))
+          nonce='c'*32
+          signature=hmac.new(os.environ['COGNITIVE_S2S_SECRET'].encode(),
+             (ts+'.'+nonce+'.').encode()+raw,hashlib.sha256).hexdigest()
+          header=f't={ts},nonce={nonce},v1={signature}'
+          Path('/tmp/av-t13-replay-header.txt').write_text(header)
+          req=urllib.request.Request('http://127.0.0.1:18185/v1/execute',
+            data=raw,headers={'Content-Type':'application/json','X-AV-Signature':header})
+          try:
+            urllib.request.urlopen(req,timeout=5)
+            raise AssertionError('Invalid request unexpectedly succeeded')
+          except urllib.error.HTTPError as e:
+            assert e.code==422,('First signed request must pass auth',e.code)
+          PY
+          docker rm -f atendevende-cognitive-ci
+          docker run --rm -d --name atendevende-cognitive-ci \
+            --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            --network host \
+            -e COGNITIVE_S2S_SECRET \
+            -e COGNITIVE_SERVICE_PORT=18185 \
+            -e COGNITIVE_SERVICE_HOST=127.0.0.1 \
+            -e COGNITIVE_REPLAY_REDIS_URL=redis://127.0.0.1:16379 \
+            atendevende-cognitive-ci
+          for i in {1..20}; do
+            curl --fail --silent http://127.0.0.1:18185/health >/dev/null && break
+            sleep 1
+          done
+          python3 - <<'PY'
+          import urllib.request,urllib.error
+          from pathlib import Path
+          header=Path('/tmp/av-t13-replay-header.txt').read_text()
+          req=urllib.request.Request('http://127.0.0.1:18185/v1/execute',
+           data=b'{}',headers={'Content-Type':'application/json','X-AV-Signature':header})
+          try:
+            urllib.request.urlopen(req,timeout=5)
+            raise AssertionError('Replay unexpectedly accepted after restart')
+          except urllib.error.HTTPError as e:
+            assert e.code==401,('Replay must be denied after restart',e.code)
+          PY
+
+      - name: T13 candidate provenance (non-deployed, non-promoted)
+        run: node scripts/t13EvidenceManifest.mjs
+      - name: T13 prepare bounded code bundles for independent Gemini source review
+        env:
+          T13_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          T13_CHECKOUT_SHA="$(git rev-parse HEAD)" node scripts/t13GeminiAuditBundle.mjs
+      - name: T13 upload immutable-input candidate manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: t13-candidate-evidence
+          path: |
+            t13-evidence-manifest.json
+            t13-gemini-audit/
+          retention-days: 30
