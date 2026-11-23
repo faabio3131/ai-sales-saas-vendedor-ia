@@ -160,7 +160,7 @@ export function directorAuditSelfTest(){
  reject({sourceCiRuns:{workflow_runs:[]}});
  reject({changedFiles:['src/payments/service.ts']});
  reject({changedFiles:['scripts/t13ReleaseGate.mjs','src/pilot/readiness.ts']});
- reject({evidenceText:exampleText.replace('OUT','CHANGED')});
+ reject({evidenceText:exampleText.replace('"reviewerDeclared"', '"reviewerMODIFIED"')});
  const revised=JSON.parse(exampleText);
  revised.declaredFindings.high=1;
  reject({evidenceText:JSON.stringify(revised)});
