@@ -19,6 +19,10 @@ for(const name of yaml){
  if(/\$\{\{\s*(?:github\.event\.pull_request\.(?:title|body)|github\.event\.issue\.title)\s*\}\}/.test(source))
   throw Error('UNTRUSTED_ACTIONS_EXPRESSION:'+name);
 }
+const validation=fs.readFileSync(path.join(dir,'blk010-validation.yml'),'utf8');
+if(!validation.includes('node scripts/t13FirestoreEmulatorIntegrity.mjs /tmp/firestore-emulator.jar')||
+ !validation.includes('node scripts/t13FirestoreEmulatorIntegrity.mjs --self-test'))
+ throw Error('FIRESTORE_EMULATOR_DIGEST_GATE_MISSING');
 const release=fs.readFileSync(path.join(dir,'t13-certified-release.yml'),'utf8');
 if(!release.includes('workflow_dispatch:')||
  !release.includes('environment: t13-release-signing')||

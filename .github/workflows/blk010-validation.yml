@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -53,6 +55,7 @@ jobs:
           node scripts/t13FirestoreRulesGate.mjs --self-test
           node scripts/t13ReleaseGate.mjs --self-test
           node scripts/t13WorkflowGate.mjs
+          node scripts/t13FirestoreEmulatorIntegrity.mjs --self-test
       - name: T13 committed secret regression gate
         run: |
           node scripts/t13SecretGate.mjs --self-test
@@ -150,7 +153,7 @@ jobs:
           FIREBASE_PROJECT_ID: demo-atendevende-t10
         run: |
           curl --fail --location --retry 3 --retry-delay 1 --output /tmp/firestore-emulator.jar https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.19.8.jar
-          echo 'T13_EVIDENCE_FIRESTORE_EMULATOR_SHA256_UNPINNED' && sha256sum /tmp/firestore-emulator.jar
+          node scripts/t13FirestoreEmulatorIntegrity.mjs /tmp/firestore-emulator.jar
           java -jar /tmp/firestore-emulator.jar --host 127.0.0.1 --port 8089 --project_id demo-atendevende-t10 --rules deploy/t10-scheduling.firestore.rules > /tmp/firestore-emulator.log 2>&1 &
           PID=$!
           trap 'cat /tmp/firestore-emulator.log; kill "$PID" >/dev/null 2>&1 || true' EXIT
@@ -435,9 +438,17 @@ jobs:
 
       - name: T13 candidate provenance (non-deployed, non-promoted)
         run: node scripts/t13EvidenceManifest.mjs
+      - name: T13 prepare bounded code bundles for independent Gemini source review
+        env:
+          T13_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          T13_CHECKOUT_SHA="$(git rev-parse HEAD)" node scripts/t13GeminiAuditBundle.mjs
       - name: T13 upload immutable-input candidate manifest
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: t13-candidate-evidence
-          path: t13-evidence-manifest.json
+          path: |
+            t13-evidence-manifest.json
+            t13-gemini-audit/
           retention-days: 30
