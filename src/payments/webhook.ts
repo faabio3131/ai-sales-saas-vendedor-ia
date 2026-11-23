@@ -18,7 +18,7 @@ export async function mercadoPagoWebhookHandler(req:Request,res:Response):Promis
   ? String((data as {id:unknown}).id??''):'';
  const raw=(req as Request&{paymentRawBody?:Buffer}).paymentRawBody;
  if(!tenantId){res.status(503).json({ok:false});return;}
- if(!raw||!String.raw`/^\d{1,30}$/`.test(dataId)||dataId!==bodyId){
+ if(!raw||!/^[0-9]{1,30}$/.test(dataId)||dataId!==bodyId){
   res.status(401).json({ok:false});return;
  }
  try{
