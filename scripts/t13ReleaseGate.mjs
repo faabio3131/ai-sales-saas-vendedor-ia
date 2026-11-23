@@ -126,17 +126,18 @@ if(!(independentGitHubReview&&requiredReviewers)&&
  // Do not accept chat text or an untrusted workflow input as approval.
  // The signed-in director must author an UNEDITED GitHub comment on PR #29,
  // authorizing exact policy HEAD and SHA256 of the owner-transcribed evidence.
- const [sourcePr,sourceCiRuns,comments]=await Promise.all([
+ const [sourcePr,sourceCiRuns,comments,compare]=await Promise.all([
   github('repos/'+repo+'/pulls/29'),
   github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+T13_BASE_MERGE+'&event=push&per_page=100'),
   github('repos/'+repo+'/issues/29/comments?per_page=100'),
+  github('repos/'+repo+'/compare/'+T13_BASE_MERGE+'...'+sha),
  ]);
  directorApproval=verifyDirectorAuditPackage({
   repository:repo,actor:process.env.GITHUB_ACTOR,
   eventName:process.env.GITHUB_EVENT_NAME,
   environmentName:targetEnvironment,environment,currentPr:pr,sourcePr,
   sourceCiRuns,comments,evidenceText:policyEvidenceText(),
-  changedFiles:verifiedChangedFiles(sha),
+  changedFiles:verifiedChangedFiles(compare,sha),
  });
 }
 requireReady({sha,expected,ref,pr,reviews,runs,environment,

@@ -5,7 +5,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
 
 export const T13_BASE_MERGE='dbe52a89c3214d7f40b1f66924bcbb1a90e017eb';
 export const T13_AUDITED_HEAD='a0e335dba1884fb398aea13c8435cd28f98436a9';
@@ -111,16 +110,23 @@ export function verifyDirectorAuditPackage({
   deploymentAuthorized:false,
  });
 }
-export function verifiedChangedFiles(sha){
+/** GitHub-sourced comparison, fail-closed if history or complete file list cannot
+ * be independently verified. No shell commands or code execution modules.
+ */
+export function verifiedChangedFiles(compare,sha){
  assert.match(sha,/^[a-f0-9]{40}$/);
- try{
-  execFileSync('git',['merge-base','--is-ancestor',T13_BASE_MERGE,sha],
-   {stdio:'pipe',timeout:10000});
-  const output=execFileSync('git',['diff','--name-only','--no-renames',
-   T13_BASE_MERGE,sha],{encoding:'utf8',timeout:10000});
-  return output.trim().split('\n').filter(Boolean);
- }catch{fail('T13_VERIFIED_HISTORY_OR_DIFF_UNAVAILABLE');}
+ if(!compare||compare.status!=='ahead'||
+    compare.base_commit?.sha!==T13_BASE_MERGE||
+    compare.merge_base_commit?.sha!==T13_BASE_MERGE||
+    !Number.isSafeInteger(compare.ahead_by)||compare.ahead_by<1||
+    compare.ahead_by>20||!Array.isArray(compare.files)||
+    compare.files.length<1||compare.files.length>=300||
+    compare.files.some(x=>typeof x.filename!=='string'||
+      x.filename.length<1||x.filename.length>400))
+  fail('T13_COMPARE_HISTORY_OR_FILE_LIST_UNVERIFIABLE');
+ return compare.files.map(f=>f.filename);
 }
+
 export function policyEvidenceText(){
  return fs.readFileSync(EVIDENCE_PATH,'utf8');
 }
@@ -161,6 +167,13 @@ export function directorAuditSelfTest(){
  reject({changedFiles:['src/payments/service.ts']});
  reject({changedFiles:['scripts/t13ReleaseGate.mjs','src/pilot/readiness.ts']});
  reject({evidenceText:exampleText.replace('"reviewerDeclared"', '"reviewerMODIFIED"')});
+ assert.deepEqual(verifiedChangedFiles({status:'ahead',
+  base_commit:{sha:T13_BASE_MERGE},merge_base_commit:{sha:T13_BASE_MERGE},
+  ahead_by:2,files:[{filename:'scripts/t13ReleaseGate.mjs'}]},sha),
+  ['scripts/t13ReleaseGate.mjs']);
+ assert.throws(()=>verifiedChangedFiles({status:'diverged',
+  base_commit:{sha:T13_BASE_MERGE},merge_base_commit:{sha:T13_BASE_MERGE},
+  ahead_by:2,files:[{filename:'scripts/t13ReleaseGate.mjs'}]},sha));
  const revised=JSON.parse(exampleText);
  revised.declaredFindings.high=1;
  reject({evidenceText:JSON.stringify(revised)});

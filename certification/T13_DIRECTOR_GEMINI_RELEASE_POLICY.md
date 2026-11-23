@@ -15,7 +15,7 @@ da transcrição e ao HEAD exato da PR de governança.
    t13-release-signing existente e SHA idêntico ao GITHUB_SHA e input.
 2. A PR de governança deve estar merged em main com SHA de merge igual ao SHA de release.
 3. A PR original #29 deve ser a0e335d (HEAD auditado), merge dbe52a89..., CI push SUCCESS.
-4. O diff desde dbe52a89 até o SHA do selo pode alterar somente a lista fechada de arquivos
+4. A comparação GitHub (merge-base e lista completa de arquivos) desde dbe52a89 até o SHA do selo pode alterar somente a lista fechada de arquivos
    de política, documentação, CI e metadados de certificação. **Qualquer alteração em src/,
    serviços de pagamentos, firewalls, imagem de runtime ou outra configuração não listada bloqueia**.
 5. Comentário da conta GitHub proprietária em PR #29 com corpo exato
