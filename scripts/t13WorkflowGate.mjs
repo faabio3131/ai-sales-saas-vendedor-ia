@@ -29,13 +29,16 @@ if(!release.includes('workflow_dispatch:')||
  !release.includes('id-token: write')||
  !release.includes('attestations: write')||
  !release.includes('t13ReleaseGate.mjs --verify')||
- !release.includes('t13FirestoreRulesGate.mjs --verify-active'))
+ !release.includes('t13FirestoreRulesGate.mjs --self-test')||
+ !release.includes('steps.release_gate.outputs.approval_mode')||
+ !release.includes('fetch-depth: 0'))
  throw Error('T13_RELEASE_SECURITY_GATES_MISSING');
 const deployment=fs.readFileSync(path.join(dir,'t13-controlled-deploy.yml'),'utf8');
 if(!deployment.includes('environment: t13-production-approval')||
  !deployment.includes('t13ReleaseGate.mjs --verify')||
  !deployment.includes('cosign verify')||
  !deployment.includes('gh attestation verify')||
- !deployment.includes('deploy/t13-controlled-deploy.sh'))
+ !deployment.includes('deploy/t13-controlled-deploy.sh')||
+ !deployment.includes('t13FirestoreRulesGate.mjs --verify-active'))
  throw Error('T13_CONTROLLED_DEPLOY_GATES_MISSING');
 console.log('t13_workflow_supply_chain_gate_passed:'+yaml.length);

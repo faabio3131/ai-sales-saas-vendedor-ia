@@ -10,6 +10,7 @@ permissions:
   contents: read
   actions: read
   pull-requests: read
+  issues: read
   packages: write
   id-token: write
   attestations: write
@@ -27,22 +28,23 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Verify independent review, protected environment, and post-merge CI
+      - name: Verify independent GitHub review or owner-attested Gemini + director approval, post-merge CI
+        id: release_gate
         env:
           GITHUB_TOKEN: "${{ github.token }}"
           T13_EXPECTED_SHA: "${{ inputs.expected_sha }}"
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node scripts/t13ReleaseGate.mjs --verify
-      - name: Verify deployed client-side Firestore rules are the reviewed candidate
-        env:
-          FIREBASE_RULES_PROJECT_ID: "${{ vars.FIREBASE_RULES_PROJECT_ID }}"
-          FIREBASE_RULES_ACCESS_TOKEN: "${{ secrets.FIREBASE_RULES_ACCESS_TOKEN }}"
-        run: node scripts/t13FirestoreRulesGate.mjs --verify-active
+      - name: Verify reviewed candidate Firestore rules without requiring live deploy
+        run: |
+          node scripts/t13FirestoreRulesGate.mjs --self-test
+          node scripts/t13FirestoreRulesGate.mjs
       - name: Reproduce locked dependencies and audit
         run: |
           npm ci --no-audit --no-fund
@@ -96,6 +98,9 @@ jobs:
           GH_TOKEN: "${{ github.token }}"
           IMAGE_REF: "${{ steps.push.outputs.image_ref }}"
           IMAGE_DIGEST: "${{ steps.push.outputs.digest }}"
+          T13_APPROVAL_MODE: "${{ steps.release_gate.outputs.approval_mode }}"
+          T13_DIRECTOR_COMMENT_ID: "${{ steps.release_gate.outputs.director_comment_id }}"
+          T13_GEMINI_EVIDENCE_SHA256: "${{ steps.release_gate.outputs.audit_sha256 }}"
         run: |
           set -euo pipefail
           gh attestation verify "oci://$IMAGE_REF" --repo "$GITHUB_REPOSITORY"
