@@ -61,3 +61,27 @@ com guardas separados, regras Firestore ativas, verificação Cosign das duas
 attestations e gate de autorização próprio.
 
 Não tornar o repositório público como correção do erro.
+
+## Produção governada — proposta para revisão independente
+
+A rota de revisão GitHub independente permanece disponível. A rota de diretor único exige cumulativamente: o parecer histórico Gemini transcrito e autenticado, comparação fechada de arquivos de política, novo aceite de selagem do HEAD de governança, CI push SUCCESS no SHA exato, run de selagem manual SUCCESS para o mesmo SHA e artefato não expirado. O deploy usa `expected_sha`, `image_digest`, `seal_run_id`, `seal_run_attempt`. O digest deve ter assinatura Cosign e provenance SLSA verificada com o invocationId exato do run/attempt, além do SBOM. Nenhuma alteração em src/ é implicitamente aprovada.
+
+O ambiente `t13-production-approval` deve estar protegido por required reviewers, incluindo a conta proprietária `faabio3131`. Não se remove a proteção nem se utiliza bypass administrativo. No modelo de único diretor, a própria conta poderá aprovar a execução manual que iniciou se a política do ambiente permitir; isto é aprovação humana de implantação, **não** uma segunda revisão independente. Se prevent self-review estiver ativo, a execução fica bloqueada até aprovação por revisor elegível ou decisão explícita da autoridade sobre essa configuração. Segredos permanecem no ambiente protegido/host.
+
+Após revisão independente Gemini do HEAD final de governança, a autoridade humana registra o comentário de aprovação nativo em **Review deployments**, exatamente no formato abaixo (preencher valores reais, nunca declarar a revisão antes de ocorrer). A API de histórico de approvals deve comprovar a conta proprietária, o ID do ambiente, estado approved e conteúdo integral. A primeira tentativa do rollout é obrigatória para a rota do diretor; falhas exigem novo dispatch e novo aceite, não rerun. Nenhuma aprovação de produção é inferida da conversa, do seal ou de um comentário genérico.
+
+```text
+T13-DIRECTOR-PRODUCTION-APPROVAL/V1
+repository=faabio3131/ai-sales-saas-vendedor-ia
+commit=<merge SHA>
+image-digest=<sha256:...>
+seal-run=<run ID>
+seal-attempt=<attempt>
+governance-pr-head=<PR HEAD>
+audit-evidence-sha256=<SHA256 da transcrição original>
+policy-review=GEMINI_REVIEWED_EXACT_GOVERNANCE_HEAD
+decision=AUTHORIZE_CONTROLLED_PRODUCTION_DEPLOY
+commercial-go-live=NOT_AUTHORIZED
+```
+
+A autorização de produção não dispensa verificação Firestore ativa, verificação OCI, SSH com known_hosts e rollback. Não ativa pagamentos reais, WhatsApp ou go-live comercial. A nova política não é certificada até CI, revisão independente e autorização humana do HEAD final.

@@ -1,6 +1,6 @@
-/** Alternative T13 SEAL-only governance for owner-operated private repositories.
- * Historical Gemini audit is an OWNER-ATTESTED external report, not a fake
- * GitHub reviewer or cryptographic Gemini signature. No deploy is authorized.
+/** T13 owner-operated governance. Historical Gemini audit is OWNER-ATTESTED,
+ * not a GitHub reviewer or cryptographic Gemini signature. Production requires
+ * separate, exact native environment approval; a seal never authorizes deploy.
  */
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -46,14 +46,12 @@ export function directorSignoffBody({policyHead,evidenceDigest}){
   'commercial-go-live=NOT_AUTHORIZED',
  ].join('\n');
 }
-export function verifyDirectorAuditPackage({
- repository,actor,eventName,environmentName,environment,
+function verifyDirectorAuditEvidence({
+ repository,actor,eventName,
  currentPr,sourcePr,sourceCiRuns,comments,evidenceText,changedFiles,
 }){
  if(repository!==T13_REPO||actor!==T13_OWNER||eventName!=='workflow_dispatch')
   fail('T13_DIRECTOR_AUTHENTICATED_DISPATCH_REQUIRED');
- if(environmentName!=='t13-release-signing'||environment?.name!==environmentName)
-  fail('T13_DIRECTOR_SEAL_ENVIRONMENT_REQUIRED');
  if(!currentPr?.merged||currentPr?.base?.ref!=='main'||
     currentPr?.user?.login!==T13_OWNER||typeof currentPr.head?.sha!=='string')
   fail('T13_GOVERNANCE_MERGE_NOT_VERIFIED');
@@ -110,6 +108,87 @@ export function verifyDirectorAuditPackage({
   governanceHeadSha:currentPr.head.sha,
   deploymentAuthorized:false,
  });
+}
+export function verifyDirectorAuditPackage(input){
+ if(input.environmentName!=='t13-release-signing'||input.environment?.name!==input.environmentName)
+  fail('T13_DIRECTOR_SEAL_ENVIRONMENT_REQUIRED');
+ return verifyDirectorAuditEvidence(input);
+}
+const PRODUCTION_ENV='t13-production-approval';
+const OWNER_ID=134972286;
+function exact(value,re){
+ if(typeof value!=='string'||!re.test(value))fail('T13_PRODUCTION_IDENTITY_INVALID');
+ return value;
+}
+export function verifyProductionSealRun({sealRun,sha,sealRunId,sealRunAttempt,artifacts}){
+ exact(sha,/^[a-f0-9]{40}$/);
+ exact(sealRunId,/^[1-9][0-9]{0,15}$/);
+ exact(sealRunAttempt,/^[1-9][0-9]{0,5}$/);
+ if(!sealRun||String(sealRun.id)!==sealRunId||
+    String(sealRun.run_attempt)!==sealRunAttempt||
+    sealRun.head_sha!==sha||sealRun.head_branch!=='main'||
+    sealRun.event!=='workflow_dispatch'||sealRun.status!=='completed'||
+    sealRun.conclusion!=='success'||
+    sealRun.path!=='.github/workflows/t13-certified-release.yml'||
+    sealRun.repository?.full_name!==T13_REPO||
+    sealRun.head_repository?.full_name!==T13_REPO)
+  fail('T13_PRODUCTION_SUCCESSFUL_EXACT_SEAL_REQUIRED');
+ if(!Array.isArray(artifacts?.artifacts)||artifacts.total_count!==artifacts.artifacts.length)
+  fail('T13_PRODUCTION_SEAL_ARTIFACT_LIST_UNVERIFIABLE');
+ const evidence=artifacts.artifacts.filter(a=>a.name==='t13-oci-sealed-release'&&
+  a.expired===false&&a.size_in_bytes>0&&
+  a.workflow_run?.head_sha===sha&&String(a.workflow_run?.id)===sealRunId&&
+  /^sha256:[a-f0-9]{64}$/.test(a.digest??''));
+ if(evidence.length!==1)fail('T13_PRODUCTION_SEAL_ARTIFACT_REQUIRED');
+ return true;
+}
+export function productionApprovalBody({sha,digest,sealRunId,sealRunAttempt,policyHead,evidenceDigest}){
+ exact(sha,/^[a-f0-9]{40}$/);exact(digest,/^sha256:[a-f0-9]{64}$/);
+ exact(sealRunId,/^[1-9][0-9]{0,15}$/);exact(sealRunAttempt,/^[1-9][0-9]{0,5}$/);
+ exact(policyHead,/^[a-f0-9]{40}$/);exact(evidenceDigest,/^[a-f0-9]{64}$/);
+ return ['T13-DIRECTOR-PRODUCTION-APPROVAL/V1','repository='+T13_REPO,
+  'commit='+sha,'image-digest='+digest,'seal-run='+sealRunId,
+  'seal-attempt='+sealRunAttempt,'governance-pr-head='+policyHead,
+  'audit-evidence-sha256='+evidenceDigest,
+  'policy-review=GEMINI_REVIEWED_EXACT_GOVERNANCE_HEAD',
+  'decision=AUTHORIZE_CONTROLLED_PRODUCTION_DEPLOY',
+  'commercial-go-live=NOT_AUTHORIZED'].join('\n');
+}
+export function verifyDirectorProductionApproval(input){
+ const {environmentName,environment,sha,digest,sealRunId,sealRunAttempt,
+  sealRun,artifacts,run,runId,runAttempt,approvals,currentPr}=input;
+ const historical=verifyDirectorAuditEvidence(input);
+ verifyProductionSealRun({sealRun,sha,sealRunId,sealRunAttempt,artifacts});
+ if(environmentName!==PRODUCTION_ENV||environment?.name!==PRODUCTION_ENV||
+    !Number.isSafeInteger(environment.id)||environment.id<=0||
+    !Array.isArray(environment.protection_rules)||
+    !environment.protection_rules.some(rule=>rule.type==='required_reviewers'&&
+     Array.isArray(rule.reviewers)&&rule.reviewers.some(r=>r.type==='User'&&
+      r.reviewer?.login===T13_OWNER&&r.reviewer?.id===OWNER_ID)))
+  fail('T13_PRODUCTION_OWNER_PROTECTED_ENVIRONMENT_REQUIRED');
+ exact(runId,/^[1-9][0-9]{0,15}$/);
+ // Review history is run-scoped, not attempt-scoped. A retry must be a fresh dispatch.
+ if(runAttempt!=='1'||String(run?.id)!==runId||run?.run_attempt!==1||
+    run?.head_sha!==sha||run?.head_branch!=='main'||run?.event!=='workflow_dispatch'||
+    run?.path!=='.github/workflows/t13-controlled-deploy.yml'||
+    run?.repository?.full_name!==T13_REPO||run?.head_repository?.full_name!==T13_REPO||
+    run?.actor?.login!==T13_OWNER||run?.actor?.id!==OWNER_ID||
+    currentPr.merge_commit_sha!==sha||
+    sealRun.actor?.login!==T13_OWNER||sealRun.actor?.id!==OWNER_ID)
+  fail('T13_PRODUCTION_FRESH_OWNER_RUN_REQUIRED');
+ const expected=productionApprovalBody({sha,digest,sealRunId,sealRunAttempt,
+  policyHead:currentPr.head.sha,evidenceDigest:historical.auditEvidenceSha256});
+ if(!Array.isArray(approvals)||approvals.length>100)
+  fail('T13_PRODUCTION_REVIEW_HISTORY_UNVERIFIABLE');
+ const relevant=approvals.filter(a=>Array.isArray(a.environments)&&
+  a.environments.some(e=>e.id===environment.id&&e.name===PRODUCTION_ENV));
+ if(relevant.length!==1||relevant[0].state!=='approved'||
+    relevant[0].user?.login!==T13_OWNER||relevant[0].user?.id!==OWNER_ID||
+    relevant[0].comment?.trim()!==expected)
+  fail('T13_PRODUCTION_EXACT_NATIVE_APPROVAL_REQUIRED');
+ return Object.freeze({...historical,status:'DIRECTOR_ATTESTED_GEMINI_PRODUCTION_APPROVED',
+  deploymentAuthorized:true,productionApprovalRunId:runId,sealRunId,sealRunAttempt,
+  imageDigest:digest,commercialGoLiveApproved:false});
 }
 /** GitHub-sourced comparison, fail-closed if history or complete file list cannot
  * be independently verified. No shell commands or code execution modules.
@@ -178,6 +257,45 @@ export function directorAuditSelfTest(){
  const revised=JSON.parse(exampleText);
  revised.declaredFindings.high=1;
  reject({evidenceText:JSON.stringify(revised)});
+ // Production approval is native, exact, separate, and cannot be reused on rerun.
+ const commit=currentPr.merge_commit_sha, imageDigest='sha256:'+'b'.repeat(64);
+ const sealRunId='1234',sealRunAttempt='1',runId='5678';
+ const owner={login:T13_OWNER,id:OWNER_ID},repo={full_name:T13_REPO};
+ const protectedEnvironment={id:42,name:PRODUCTION_ENV,protection_rules:[
+  {type:'required_reviewers',reviewers:[{type:'User',reviewer:owner}]}]};
+ const sealRun={id:1234,run_attempt:1,head_sha:commit,head_branch:'main',
+  event:'workflow_dispatch',status:'completed',conclusion:'success',
+  path:'.github/workflows/t13-certified-release.yml',repository:repo,
+  head_repository:repo,actor:owner};
+ const artifacts={total_count:1,artifacts:[{name:'t13-oci-sealed-release',expired:false,
+  size_in_bytes:100,digest:'sha256:'+'c'.repeat(64),
+  workflow_run:{head_sha:commit,id:1234}}]};
+ const run={...sealRun,id:5678,path:'.github/workflows/t13-controlled-deploy.yml',status:'in_progress',conclusion:null};
+ const approval={state:'approved',user:owner,environments:[{id:42,name:PRODUCTION_ENV}],
+  comment:productionApprovalBody({sha:commit,digest:imageDigest,sealRunId,sealRunAttempt,
+   policyHead:sha,evidenceDigest:digest})};
+ const prod={...input,environmentName:PRODUCTION_ENV,environment:protectedEnvironment,
+  sha:commit,digest:imageDigest,sealRunId,sealRunAttempt,sealRun,artifacts,
+  run,runId,runAttempt:'1',approvals:[approval]};
+ assert.equal(verifyDirectorProductionApproval(prod).deploymentAuthorized,true);
+ assert.equal(verifyDirectorProductionApproval(prod).commercialGoLiveApproved,false);
+ for(const override of [
+  {approvals:[]},{approvals:[{...approval,state:'rejected'}]},
+  {approvals:[{...approval,comment:expectedBodyForTest()}]},
+  {approvals:[{...approval,user:{login:T13_OWNER,id:999}}]},
+  {approvals:[{...approval,environments:[{id:43,name:PRODUCTION_ENV}]}]},
+  {approvals:[approval,{...approval,state:'rejected'}]},
+  {environment:{...protectedEnvironment,protection_rules:[]}},
+  {runAttempt:'2'},{run:{...run,head_sha:'e'.repeat(40)}},
+  {digest:'sha256:'+'d'.repeat(64)},{sealRun:{...sealRun,conclusion:'failure'}},
+  {sealRun:{...sealRun,path:'.github/workflows/blk010-validation.yml'}},
+  {sealRun:{...sealRun,run_attempt:2}},
+  {artifacts:{total_count:1,artifacts:[{...artifacts.artifacts[0],expired:true}]}},
+  {changedFiles:['scripts/t13ReleaseGate.mjs','src/payments/service.ts']},
+  {comments:[]},{actor:'other'},
+ ])assert.throws(()=>verifyDirectorProductionApproval({...prod,...override}));
+ function expectedBodyForTest(){return comment.body;}
+ console.info('t13_director_production_native_approval_self_test_passed');
  console.info('t13_director_attested_gemini_policy_self_test_passed');
  console.info('t13_director_gemini_evidence_sha256:'+digest);
 }

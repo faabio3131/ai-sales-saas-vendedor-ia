@@ -91,7 +91,7 @@ function getStatements(raw,expectedType,{imageRef,digest}){
  if(!matching.length)fail('T13_REQUIRED_SIGNED_ATTESTATION_MISSING:'+expectedType);
  return matching;
 }
-function verify({slsa,sbom,seal=false}){
+function verify({slsa,sbom,seal=false,expectedInvocation}){
  const id=identity();
  const claims=getStatements(slsa,SLSA_TYPE,id);
  const matched=claims.some(stmt=>{
@@ -104,6 +104,7 @@ function verify({slsa,sbom,seal=false}){
     d.uri==='git+https://github.com/'+id.repository+'@refs/heads/main'))return false;
   if(predicate.runDetails?.builder?.id!==
     'https://github.com/'+id.repository+'/'+workflowPath+'@refs/heads/main')return false;
+  if(expectedInvocation&&predicate.runDetails?.metadata?.invocationId!==expectedInvocation)return false;
   if(seal){
    const local=JSON.parse(fs.readFileSync(PREDICATE_FILE,'utf8'));
    return same(predicate,local);
@@ -141,6 +142,8 @@ function selfTest(){
  }
  const slsa=record(SLSA_TYPE,pred),bom=record(SBOM_TYPE,sbom);
  assert.equal(verify({slsa,sbom:bom}).status,'T13_OCI_COSIGN_ATTESTATIONS_VERIFIED');
+ assert.equal(verify({slsa,sbom:bom,expectedInvocation:pred.runDetails.metadata.invocationId}).status,'T13_OCI_COSIGN_ATTESTATIONS_VERIFIED');
+ assert.throws(()=>verify({slsa,sbom:bom,expectedInvocation:pred.runDetails.metadata.invocationId+'/different'}));
  const reject=obj=>assert.throws(()=>verify({slsa,sbom:bom,...obj}));
  reject({slsa:''});
  reject({slsa:record('https://other.test',pred)});
@@ -161,7 +164,12 @@ else if(process.argv.includes('--prepare')){
  console.log('t13_slsa_v1_predicate_prepared:'+obj.buildDefinition.resolvedDependencies[0].digest.gitCommit);
 }else if(process.argv.includes('--verify-seal')||process.argv.includes('--verify-deploy')){
  const mode=process.argv.includes('--verify-seal')?'seal':'deploy';
+ const expectedInvocation=mode==='deploy'?
+  'https://github.com/'+identity().repository+'/actions/runs/'+
+  exactly(process.env.T13_SEAL_RUN_ID,/^[1-9][0-9]{0,15}$/)+'/attempts/'+
+  exactly(process.env.T13_SEAL_RUN_ATTEMPT,/^[1-9][0-9]{0,5}$/):undefined;
  const checked=verify({
+  expectedInvocation,
   slsa:fs.readFileSync(VERIFIED_SLSA,'utf8'),
   sbom:fs.readFileSync(VERIFIED_SBOM,'utf8'),
   seal:mode==='seal',

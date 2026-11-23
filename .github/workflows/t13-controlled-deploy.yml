@@ -8,10 +8,19 @@ on:
       image_digest:
         required: true
         type: string
+      seal_run_id:
+        description: Successful T13 signed release run ID for this exact commit and digest
+        required: true
+        type: string
+      seal_run_attempt:
+        description: Successful release run attempt number
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
   pull-requests: read
+  issues: read
   packages: read
 concurrency:
   group: t13-production-rollout
@@ -35,6 +44,9 @@ jobs:
         env:
           GITHUB_TOKEN: "${{ github.token }}"
           T13_EXPECTED_SHA: "${{ inputs.expected_sha }}"
+          T13_IMAGE_DIGEST: "${{ inputs.image_digest }}"
+          T13_SEAL_RUN_ID: "${{ inputs.seal_run_id }}"
+          T13_SEAL_RUN_ATTEMPT: "${{ inputs.seal_run_attempt }}"
           T13_REVIEW_ENVIRONMENT: t13-production-approval
         run: |
           set -euo pipefail
@@ -62,6 +74,8 @@ jobs:
         env:
           GH_TOKEN: "${{ github.token }}"
           IMAGE_REF: "${{ steps.image.outputs.ref }}"
+          T13_SEAL_RUN_ID: "${{ inputs.seal_run_id }}"
+          T13_SEAL_RUN_ATTEMPT: "${{ inputs.seal_run_attempt }}"
         run: |
           set -euo pipefail
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
