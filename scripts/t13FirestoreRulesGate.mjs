@@ -35,7 +35,7 @@ if(!/^[a-z][a-z0-9-]{3,62}$/.test(project)||token.length<20)
 const root='https://firebaserules.googleapis.com/v1/';
 async function read(path){
  const result=await fetch(root+path,{
-  headers:{Authorization:'Bearer '+token,Accept:'application/json'},
+  headers:{Authorization:'Bearer '+token,Accept:'application/json','x-goog-user-project':project},
   signal:AbortSignal.timeout(12000),
  });
  if(!result.ok)throw Error('FIRESTORE_RULES_API_UNAVAILABLE:'+result.status);
