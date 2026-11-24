@@ -5,8 +5,17 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {verifyDirectorAuditPackage,policyEvidenceText,verifiedChangedFiles,directorAuditSelfTest,
- T13_BASE_MERGE} from './t13DirectorAuditPolicy.mjs';
+ T13_BASE_MERGE,verifyDirectorProductionApproval,verifyProductionSealRun} from './t13DirectorAuditPolicy.mjs';
 const apiRoot='https://api.github.com/';
+function effectiveIndependentReview(pr,reviews){
+ const effective=new Map();
+ for(const r of reviews){
+  if(!r.user?.login||!r.submitted_at)continue;
+  const prior=effective.get(r.user.login);
+  if(!prior||Date.parse(r.submitted_at)>=Date.parse(prior.submitted_at))effective.set(r.user.login,r);
+ }
+ return [...effective.values()].some(r=>r.state==='APPROVED'&&r.user.login!==pr.user?.login&&r.commit_id===pr.head?.sha);
+}
 function requireReady({sha,expected,ref,pr,reviews,runs,environment,environmentName='t13-release-signing',directorApproval}){
  assert.match(sha,/^[a-f0-9]{40}$/);
  assert.equal(sha,expected,'RELEASE_SHA_NOT_EXACT');
@@ -14,27 +23,21 @@ function requireReady({sha,expected,ref,pr,reviews,runs,environment,environmentN
  assert.equal(pr.merged,true,'RELEASE_PR_NOT_MERGED');
  assert.equal(pr.base?.ref,'main','RELEASE_PR_TARGET_NOT_MAIN');
  assert.equal(pr.merge_commit_sha,sha,'RELEASE_MERGE_SHA_MISMATCH');
- const effective=new Map();
- for(const r of reviews){
-  if(!r.user?.login||!r.submitted_at)continue;
-  const prior=effective.get(r.user.login);
-  if(!prior||Date.parse(r.submitted_at)>=Date.parse(prior.submitted_at))
-   effective.set(r.user.login,r);
- }
- const reviewed=[...effective.values()].some(r=>r.state==='APPROVED'&&
-   r.user.login!==pr.user?.login&&r.commit_id===pr.head?.sha);
+ const reviewed=effectiveIndependentReview(pr,reviews);
  const protectedEnv=Array.isArray(environment?.protection_rules)&&
   environment.protection_rules.some(rule=>rule.type==='required_reviewers'&&
    Array.isArray(rule.reviewers)&&rule.reviewers.length>0);
  if(environment?.name!==environmentName)
   throw Error('RELEASE_EXPECTED_ENVIRONMENT_MISSING');
- // The only alternative to a GitHub third-party APPROVED is an authenticated
- // owner signoff bound to the external Gemini report AND unchanged audited src.
- // It is restricted to IMAGE SIGNING, never production deployment.
+ // Historical seal-only approval never grants production authority.
+ // Production alternative is derived exclusively from verified native environment history.
  if(!(reviewed&&protectedEnv)&&
     !(environmentName==='t13-release-signing'&&
       directorApproval?.status==='DIRECTOR_ATTESTED_GEMINI_SEAL_ONLY'&&
-      directorApproval.deploymentAuthorized===false))
+      directorApproval.deploymentAuthorized===false)&&
+    !(environmentName==='t13-production-approval'&&protectedEnv&&
+      directorApproval?.status==='DIRECTOR_ATTESTED_GEMINI_PRODUCTION_APPROVED'&&
+      directorApproval.deploymentAuthorized===true&&directorApproval.commercialGoLiveApproved===false))
   throw Error('RELEASE_INDEPENDENT_REVIEW_OR_DIRECTOR_ATTESTATION_REQUIRED');
  if(!Array.isArray(runs.workflow_runs)||!runs.workflow_runs.some(run=>
    run.head_sha===sha&&run.event==='push'&&run.status==='completed'&&
@@ -70,6 +73,16 @@ if(process.argv.includes('--self-test')){
  assert.throws(()=>requireReady({...input,reviews:[],environmentName:'t13-production-approval',
   environment:{name:'t13-production-approval',protection_rules:[]},
   directorApproval:ownerMode}));
+ const prodMode={status:'DIRECTOR_ATTESTED_GEMINI_PRODUCTION_APPROVED',deploymentAuthorized:true,commercialGoLiveApproved:false};
+ const prodEnv={...environment,name:'t13-production-approval'};
+ assert.equal(requireReady({...input,reviews:[],environmentName:'t13-production-approval',
+  environment:prodEnv,directorApproval:prodMode}),true);
+ assert.throws(()=>requireReady({...input,reviews:[],environmentName:'t13-production-approval',
+  environment:{...prodEnv,protection_rules:[]},directorApproval:prodMode}));
+ assert.throws(()=>requireReady({...input,reviews:[],environmentName:'t13-production-approval',
+  environment:prodEnv,directorApproval:ownerMode}));
+ assert.throws(()=>requireReady({...input,reviews:[],environmentName:'t13-production-approval',
+  environment:prodEnv,directorApproval:{...prodMode,commercialGoLiveApproved:true}}));
  const associated=[{...pr,number:37,merged_at:'2026-11-22T11:00:00Z'}];
  assert.equal(discoverMergedPull(associated,sha),37);
  assert.throws(()=>discoverMergedPull(associated,'c'.repeat(40)));
@@ -127,14 +140,26 @@ catch(error){
   authorizationSource:'GITHUB_ACTIONS_BOUND_ENVIRONMENT'};
 }
 assert.equal(pr.number,pullNumber,'RELEASE_ASSOCIATED_PR_ID_MISMATCH');
-const independentGitHubReview=reviews.some(r=>r.state==='APPROVED'&&
- r.user?.login!==pr.user?.login&&r.commit_id===pr.head?.sha);
+const independentGitHubReview=effectiveIndependentReview(pr,reviews);
 const requiredReviewers=Array.isArray(environment.protection_rules)&&
  environment.protection_rules.some(rule=>rule.type==='required_reviewers'&&
   Array.isArray(rule.reviewers)&&rule.reviewers.length>0);
-let directorApproval;
-if(!(independentGitHubReview&&requiredReviewers)&&
-   targetEnvironment==='t13-release-signing'){
+let directorApproval,productionInputs;
+if(targetEnvironment==='t13-production-approval'){
+ const sealRunId=process.env.T13_SEAL_RUN_ID??'',sealRunAttempt=process.env.T13_SEAL_RUN_ATTEMPT??'';
+ const digest=process.env.T13_IMAGE_DIGEST??'';
+ if(!/^[1-9][0-9]{0,15}$/.test(sealRunId)||!/^[1-9][0-9]{0,5}$/.test(sealRunAttempt)||
+    !/^sha256:[a-f0-9]{64}$/.test(digest))throw Error('T13_PRODUCTION_SEAL_INPUTS_REQUIRED');
+ const [sealRun,artifacts,main]=await Promise.all([
+  github('repos/'+repo+'/actions/runs/'+sealRunId),
+  github('repos/'+repo+'/actions/runs/'+sealRunId+'/artifacts?per_page=100'),
+  github('repos/'+repo+'/branches/main'),
+ ]);
+ assert.equal(main.commit?.sha,sha,'T13_PRODUCTION_MAIN_MOVED');
+ productionInputs={sha,digest,sealRunId,sealRunAttempt,sealRun,artifacts};
+ verifyProductionSealRun(productionInputs);
+}
+if(!(independentGitHubReview&&requiredReviewers)){
  // Do not accept chat text or an untrusted workflow input as approval.
  // The signed-in director must author an UNEDITED GitHub comment on PR #29,
  // authorizing exact policy HEAD and SHA256 of the owner-transcribed evidence.
@@ -144,25 +169,38 @@ if(!(independentGitHubReview&&requiredReviewers)&&
   github('repos/'+repo+'/issues/29/comments?per_page=100'),
   github('repos/'+repo+'/compare/'+T13_BASE_MERGE+'...'+sha),
  ]);
- directorApproval=verifyDirectorAuditPackage({
+ const auditInput={
   repository:repo,actor:process.env.GITHUB_ACTOR,
   eventName:process.env.GITHUB_EVENT_NAME,
   environmentName:targetEnvironment,environment,currentPr:pr,sourcePr,
   sourceCiRuns,comments,evidenceText:policyEvidenceText(),
   changedFiles:verifiedChangedFiles(compare,sha),
- });
+ };
+ if(targetEnvironment==='t13-release-signing')directorApproval=verifyDirectorAuditPackage(auditInput);
+ else{
+  const runId=process.env.GITHUB_RUN_ID??'',runAttempt=process.env.GITHUB_RUN_ATTEMPT??'';
+  if(!/^[1-9][0-9]{0,15}$/.test(runId)||runAttempt!=='1')throw Error('T13_PRODUCTION_FRESH_OWNER_RUN_REQUIRED');
+  const [run,approvals]=await Promise.all([
+   github('repos/'+repo+'/actions/runs/'+runId),
+   github('repos/'+repo+'/actions/runs/'+runId+'/approvals'),
+  ]);
+  directorApproval=verifyDirectorProductionApproval({...auditInput,...productionInputs,
+   run,approvals,runId,runAttempt});
+ }
 }
 requireReady({sha,expected,ref,pr,reviews,runs,environment,
  environmentName:targetEnvironment,directorApproval});
-const mode=directorApproval?'DIRECTOR_ATTESTED_GEMINI_SEAL_ONLY':'GITHUB_INDEPENDENT_REVIEW';
+const mode=directorApproval?.status??'GITHUB_INDEPENDENT_REVIEW';
 if(process.env.GITHUB_OUTPUT){
  const lines=['approval_mode='+mode,'director_comment_id='+
   (directorApproval?.directorCommentId??''),'audit_sha256='+
   (directorApproval?.auditEvidenceSha256??'')];
  fs.appendFileSync(process.env.GITHUB_OUTPUT,lines.join('\n')+'\n');
 }
-console.log(JSON.stringify({status:'RELEASE_SEAL_APPROVED',sha,pullNumber,
+const production=targetEnvironment==='t13-production-approval';
+console.log(JSON.stringify({status:production?'PRODUCTION_APPROVAL_GATE_PASSED':'RELEASE_SEAL_APPROVED',sha,pullNumber,
  approvalMode:mode,ownerAttestedGemini:!!directorApproval,
  directorCommentId:directorApproval?.directorCommentId??null,
- signedReleaseOnly:true,productionDeploymentAuthorized:false,
- postMergeCi:true,environmentConfirmed:true}));
+ signedReleaseOnly:!production,productionDeploymentAuthorized:production,
+ ...(production?{sealRunId:productionInputs.sealRunId,sealRunAttempt:productionInputs.sealRunAttempt,imageDigest:productionInputs.digest}:{}),
+ commercialGoLiveApproved:false,postMergeCi:true,environmentConfirmed:true}));

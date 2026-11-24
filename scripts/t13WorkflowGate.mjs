@@ -41,6 +41,8 @@ if(!release.includes('workflow_dispatch:')||
 const deployment=fs.readFileSync(path.join(dir,'t13-controlled-deploy.yml'),'utf8');
 if(!deployment.includes('environment: t13-production-approval')||
  !deployment.includes('t13ReleaseGate.mjs --verify')||
+ !deployment.includes('T13_SEAL_RUN_ID:')||!deployment.includes('T13_SEAL_RUN_ATTEMPT:')||
+ !deployment.includes('T13_IMAGE_DIGEST:')||!deployment.includes('issues: read')||
  !deployment.includes('cosign verify')||
  !deployment.includes('cosign verify-attestation --type slsaprovenance1')||
  !deployment.includes('cosign verify-attestation --type cyclonedx')||
