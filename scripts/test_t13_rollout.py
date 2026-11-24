@@ -37,7 +37,7 @@ elif a[:1]==["compose"]:
 else: sys.exit(9)
 '''
 class RolloutTests(unittest.TestCase):
-    def run_case(self,mode="",authority=True,previous=False,project="demo-test"):
+    def run_case(self,mode="",authority=True,previous=False,project="demo-test",web_project="demo-test",web_key="fixture-web-public"):
         with tempfile.TemporaryDirectory() as t:
             root=pathlib.Path(t); bin_dir=root/"bin"; bin_dir.mkdir()
             deploy=root/"deploy"; deploy.mkdir()
@@ -47,13 +47,15 @@ class RolloutTests(unittest.TestCase):
                 (root/n).write_text("fixture"); (root/n).chmod(0o600)
             envfile=root/".t13-runtime.env"
             envfile.write_text("FIREBASE_PROJECT_ID=demo-test\nPUBLIC_APP_URL=https://example.invalid\n"
+                "VITE_FIREBASE_API_KEY="+web_key+"\nVITE_FIREBASE_AUTH_DOMAIN=demo-test.firebaseapp.com\n"
+                "VITE_FIREBASE_PROJECT_ID="+web_project+"\nVITE_FIREBASE_APP_ID=1:123:web:abc\n"
                 "T13_SESSION_SECRET_FILE="+str(root/"session")+"\nPAYMENT_FIREBASE_CREDENTIAL_FILE="+str(root/"firebase")+"\n"
                 "T13_WORKER_AUTHORITY_CONFIRMED="+str(authority).lower()+"\n")
             envfile.chmod(0o600)
             state=root/".t13-certified-image"
             if previous: state.write_text(OLD+"\n")
             tools={"docker":MOCK,"id":"#!/bin/sh\necho atendevende_t13\n","cosign":"#!/bin/sh\nexit 0\n",
-                   "curl":"#!/bin/sh\nprintf '%s' '{\"status\":\"ok\",\"governance\":{\"tenantIsolationEnforced\":true}}'\n"}
+                   "curl":"#!/usr/bin/env python3\nimport json,os,sys\nif sys.argv[-1].endswith(\"/api/runtime/firebase-web\"):\n    if os.environ.get(\"MOCK_MODE\")==\"web-health-fail\": sys.exit(22)\n    print(json.dumps({\"ok\":True,\"data\":{\"apiKey\":os.environ[\"VITE_FIREBASE_API_KEY\"],\"authDomain\":os.environ[\"VITE_FIREBASE_AUTH_DOMAIN\"],\"projectId\":os.environ[\"VITE_FIREBASE_PROJECT_ID\"],\"appId\":os.environ[\"VITE_FIREBASE_APP_ID\"]}}))\nelse:\n    print(json.dumps({\"status\":\"ok\",\"governance\":{\"tenantIsolationEnforced\":True}}))\n"}
             for name,content in tools.items():
                 target=bin_dir/name; target.write_text(content); target.chmod(0o700)
             log=root/"calls"
@@ -110,3 +112,18 @@ class RolloutTests(unittest.TestCase):
         self.assertEqual(state,OLD)
         self.assertIn("T13_ROLLBACK_FAILED_MANUAL_RECOVERY_REQUIRED",p.stderr)
         self.assertNotIn("T13_ROLLBACK_HEALTH_VERIFIED",p.stderr)
+    def test_wrong_web_project_refused(self):
+        p,state,log=self.run_case(web_project="other-project")
+        self.assertNotEqual(p.returncode,0)
+        self.assertIn("T13_FIREBASE_WEB_PROJECT_MISMATCH",p.stderr)
+        self.assertEqual(log,"")
+    def test_missing_web_key_refused(self):
+        p,state,log=self.run_case(web_key="")
+        self.assertNotEqual(p.returncode,0)
+        self.assertIsNone(state)
+        self.assertEqual(log,"")
+    def test_web_config_failure_stops_before_worker(self):
+        p,state,log=self.run_case(mode="web-health-fail")
+        self.assertNotEqual(p.returncode,0)
+        self.assertIsNone(state)
+        self.assertNotIn("--wait-timeout 600 payment-reconciler",log)

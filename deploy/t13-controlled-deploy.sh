@@ -35,6 +35,10 @@ export DOCKER_HOST=unix:///run/t13-docker/docker.sock
 : "${T13_SESSION_SECRET_FILE:?Private session secret required}"
 : "${PAYMENT_FIREBASE_CREDENTIAL_FILE:?Private Firebase credentials required}"
 : "${PUBLIC_APP_URL:?Public HTTPS URL required}"
+: "${VITE_FIREBASE_API_KEY:?Public Firebase web key required}"
+: "${VITE_FIREBASE_AUTH_DOMAIN:?Firebase Auth domain required}"
+: "${VITE_FIREBASE_APP_ID:?Firebase web app ID required}"
+[[ "${VITE_FIREBASE_PROJECT_ID:-}" == "$APPROVED_PROJECT" ]] || { echo T13_FIREBASE_WEB_PROJECT_MISMATCH >&2; exit 1; }
 [[ "$T13_IMAGE_REF" =~ ^ghcr[.]io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[a-f0-9]{64}$ ]] ||
  { echo 'INVALID_IMAGE_DIGEST' >&2; exit 1; }
 [[ "$PUBLIC_APP_URL" == https://* ]] || { echo 'HTTPS_REQUIRED' >&2; exit 1; }
@@ -81,7 +85,9 @@ HEALTH_JSON=$(mktemp /tmp/t13-release-health.XXXXXXXX)
 trap 'rm -f "$HEALTH_JSON"' EXIT
 health(){
  curl --silent --fail --max-time 3 "http://127.0.0.1:$PORT/api/health" >"$HEALTH_JSON" &&
- python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"]=="ok" and x["governance"]["tenantIsolationEnforced"] is True' "$HEALTH_JSON"
+ python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"]=="ok" and x["governance"]["tenantIsolationEnforced"] is True' "$HEALTH_JSON" &&
+ curl --silent --fail --max-time 3 "http://127.0.0.1:$PORT/api/runtime/firebase-web" >"$HEALTH_JSON" &&
+ python3 -c 'import json,sys,os; x=json.load(open(sys.argv[1])); assert x["ok"] is True; d=x["data"]; assert all(d[k]==os.environ[v] and isinstance(d[k],str) and d[k].strip() for k,v in (("apiKey","VITE_FIREBASE_API_KEY"),("authDomain","VITE_FIREBASE_AUTH_DOMAIN"),("projectId","VITE_FIREBASE_PROJECT_ID"),("appId","VITE_FIREBASE_APP_ID")))' "$HEALTH_JSON"
 }
 ready(){
  local expected="$1" service cid actual
