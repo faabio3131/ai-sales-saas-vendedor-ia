@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {verifyDirectorAuditPackage,policyEvidenceText,verifiedChangedFiles,directorAuditSelfTest,
  T13_BASE_MERGE,verifyDirectorProductionApproval,verifyProductionSealRun} from './t13DirectorAuditPolicy.mjs';
+import {FRESH_AUDIT_MARKER} from './t13FreshDirectorAudit.mjs';
 const apiRoot='https://api.github.com/';
 function effectiveIndependentReview(pr,reviews){
  const effective=new Map();
@@ -160,22 +161,32 @@ if(targetEnvironment==='t13-production-approval'){
  verifyProductionSealRun(productionInputs);
 }
 if(!(independentGitHubReview&&requiredReviewers)){
- // Do not accept chat text or an untrusted workflow input as approval.
- // The signed-in director must author an UNEDITED GitHub comment on PR #29,
- // authorizing exact policy HEAD and SHA256 of the owner-transcribed evidence.
- const [sourcePr,sourceCiRuns,comments,compare]=await Promise.all([
-  github('repos/'+repo+'/pulls/29'),
-  github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+T13_BASE_MERGE+'&event=push&per_page=100'),
-  github('repos/'+repo+'/issues/29/comments?per_page=100'),
-  github('repos/'+repo+'/compare/'+T13_BASE_MERGE+'...'+sha),
- ]);
- const auditInput={
-  repository:repo,actor:process.env.GITHUB_ACTOR,
-  eventName:process.env.GITHUB_EVENT_NAME,
-  environmentName:targetEnvironment,environment,currentPr:pr,sourcePr,
-  sourceCiRuns,comments,evidenceText:policyEvidenceText(),
-  changedFiles:verifiedChangedFiles(compare,sha),
+ const currentComments=await github('repos/'+repo+'/issues/'+pullNumber+'/comments?per_page=100');
+ if(!Array.isArray(currentComments)||currentComments.length>=100||currentComments.length!==pr.comments)
+  throw Error('T13_CURRENT_PR_COMMENTS_UNVERIFIABLE');
+ let auditInput={
+  repository:repo,actor:process.env.GITHUB_ACTOR,eventName:process.env.GITHUB_EVENT_NAME,
+  environmentName:targetEnvironment,environment,currentPr:pr,
  };
+ if(currentComments.some(c=>c?.body?.startsWith(FRESH_AUDIT_MARKER))){
+  const [files,candidateRuns,headCommit,mergeCommit]=await Promise.all([
+   github('repos/'+repo+'/pulls/'+pullNumber+'/files?per_page=100'),
+   github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+pr.head.sha+'&event=pull_request&per_page=100'),
+   github('repos/'+repo+'/git/commits/'+pr.head.sha),
+   github('repos/'+repo+'/git/commits/'+sha),
+  ]);
+  auditInput={...auditInput,freshAudit:{comments:currentComments,files,candidateRuns,headCommit,mergeCommit}};
+ }else{
+  // Historical evidence may only certify the originally restricted policy diff.
+  const [sourcePr,sourceCiRuns,comments,compare]=await Promise.all([
+   github('repos/'+repo+'/pulls/29'),
+   github('repos/'+repo+'/actions/workflows/blk010-validation.yml/runs?head_sha='+T13_BASE_MERGE+'&event=push&per_page=100'),
+   github('repos/'+repo+'/issues/29/comments?per_page=100'),
+   github('repos/'+repo+'/compare/'+T13_BASE_MERGE+'...'+sha),
+  ]);
+  auditInput={...auditInput,sourcePr,sourceCiRuns,comments,evidenceText:policyEvidenceText(),
+   changedFiles:verifiedChangedFiles(compare,sha)};
+ }
  if(targetEnvironment==='t13-release-signing')directorApproval=verifyDirectorAuditPackage(auditInput);
  else{
   const runId=process.env.GITHUB_RUN_ID??'',runAttempt=process.env.GITHUB_RUN_ATTEMPT??'';
@@ -194,7 +205,10 @@ const mode=directorApproval?.status??'GITHUB_INDEPENDENT_REVIEW';
 if(process.env.GITHUB_OUTPUT){
  const lines=['approval_mode='+mode,'director_comment_id='+
   (directorApproval?.directorCommentId??''),'audit_sha256='+
-  (directorApproval?.auditEvidenceSha256??'')];
+  (directorApproval?.auditEvidenceSha256??''),'audit_kind='+
+  (directorApproval?.auditKind??(directorApproval?'HISTORICAL_RESTRICTED_V1':'')),
+  'audit_head='+(directorApproval?.auditedHeadSha??''),
+  'audit_base='+(directorApproval?.auditBaseSha??directorApproval?.originalMergeSha??'')];
  fs.appendFileSync(process.env.GITHUB_OUTPUT,lines.join('\n')+'\n');
 }
 const production=targetEnvironment==='t13-production-approval';

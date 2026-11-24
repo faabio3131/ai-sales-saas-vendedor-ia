@@ -11,6 +11,12 @@ if(!['GITHUB_INDEPENDENT_REVIEW','DIRECTOR_ATTESTED_GEMINI_SEAL_ONLY'].includes(
 const ownerMode=mode==='DIRECTOR_ATTESTED_GEMINI_SEAL_ONLY';
 const ownerComment=process.env.T13_DIRECTOR_COMMENT_ID??'';
 const auditDigest=process.env.T13_GEMINI_EVIDENCE_SHA256??'';
+const auditKind=process.env.T13_AUDIT_KIND??'';
+const auditHead=process.env.T13_AUDIT_HEAD??'';
+const auditBase=process.env.T13_AUDIT_BASE??'';
+if(ownerMode&&(!['HISTORICAL_RESTRICTED_V1','FRESH_EXACT_PR_V2'].includes(auditKind)||
+ !/^[a-f0-9]{40}$/.test(auditHead)||!/^[a-f0-9]{40}$/.test(auditBase)))
+ throw Error('T13_SEALED_AUDIT_SCOPE_MISSING');
 if(ownerMode&&(!/^[1-9][0-9]*$/.test(ownerComment)||!/^[0-9a-f]{64}$/.test(auditDigest)))
  throw Error('T13_DIRECTOR_AUDIT_PROVENANCE_MISSING');
 const attestation=JSON.parse(fs.readFileSync('t13-verified-oci-attestations.json','utf8'));
@@ -44,8 +50,8 @@ const manifest={
  slsaClaim:'SELF_REPORTED_BUILD_PROVENANCE_V1_NOT_SLSA_L3',
  exactMainHeadApproved:true,
  approvalMode:mode,
- ...(ownerMode?{auditedT13Head:'a0e335dba1884fb398aea13c8435cd28f98436a9',
-  originalCertifiedMainSha:'dbe52a89c3214d7f40b1f66924bcbb1a90e017eb',
+ ...(ownerMode?{auditKind,auditedT13Head:auditHead,auditBaseSha:auditBase,
+  ...(auditKind==='HISTORICAL_RESTRICTED_V1'?{originalCertifiedMainSha:auditBase}:{}),
   directorGitHubCommentId:ownerComment,
   geminiOwnerTranscribedEvidenceSha256:auditDigest,
   independentGitHubReviewerApproved:false,

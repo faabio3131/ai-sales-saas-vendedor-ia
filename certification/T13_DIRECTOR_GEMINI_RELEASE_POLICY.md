@@ -85,3 +85,17 @@ commercial-go-live=NOT_AUTHORIZED
 ```
 
 A autorização de produção não dispensa verificação Firestore ativa, verificação OCI, SSH com known_hosts e rollback. Não ativa pagamentos reais, WhatsApp ou go-live comercial. A nova política não é certificada até CI, revisão independente e autorização humana do HEAD final.
+
+## Revisão externa nova, com escopo exato — V2 (candidata)
+
+Quando a PR altera arquivos não cobertos pela prova histórica, não ampliar a allowlist antiga. O Diretor deve obter de Gemini (ou usar revisão GitHub independente) um parecer NOVO do HEAD exato, incluindo todos os arquivos e o resultado da CI. Antes do merge, o proprietário publica manualmente, como comentário não editado na própria PR, o cabeçalho `T13-DIRECTOR-TRANSCRIBED-GEMINI-AUDIT/V2` seguido de uma nova linha e um objeto JSON:
+
+- repository, pullRequest (inteiro), auditedHead, auditedBase (main antes do merge);
+- candidateCiRunId (string), candidateCiAttempt (inteiro);
+- auditor: "Gemini"; verdict: "APPROVED_FOR_MERGE"; findings: {"critical":0,"high":0,"medium":0};
+- auditedFiles: lista completa dos caminhos alterados; report: texto integral do parecer real (mínimo 300 caracteres);
+- productionDeploymentAuthorized: false; commercialActivationAuthorized: false.
+
+Após o parecer, o Diretor registra comentário separado com corpo exato produzido por freshSignoffBody(report, sha256(corpo integral do comentário de parecer)). O hash é dos bytes UTF-8 exatos, sem newline acrescentado ao final. O gate usa a identidade GitHub do proprietário, CI da PR concluída antes do parecer, lista completa de arquivos, primeiro pai do merge e igualdade da árvore do HEAD auditado com a árvore do merge. Exige ambiente protegido com required reviewer proprietário também na selagem. O parecer continua sendo declaração transcrita pelo Diretor, não assinatura de Gemini; não criar parecer fictício ou autorização automaticamente. O fluxo V1 restrito continua sem alteração de escopo.
+
+Na produção, o comentário nativo usa o mesmo formato V1, trocando somente o cabeçalho por T13-DIRECTOR-PRODUCTION-APPROVAL/V2 e a linha policy-review por policy-review=GEMINI_REVIEWED_EXACT_PR_HEAD. O digest de auditoria é o hash do novo parecer V2. Todos os demais controles de CI push, run de selagem, OCI, aprovação nativa, tentativa única e bloqueio comercial continuam obrigatórios.
