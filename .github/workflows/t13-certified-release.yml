@@ -95,6 +95,9 @@ jobs:
           T13_APPROVAL_MODE: "${{ steps.release_gate.outputs.approval_mode }}"
           T13_DIRECTOR_COMMENT_ID: "${{ steps.release_gate.outputs.director_comment_id }}"
           T13_GEMINI_EVIDENCE_SHA256: "${{ steps.release_gate.outputs.audit_sha256 }}"
+          T13_AUDIT_KIND: "${{ steps.release_gate.outputs.audit_kind }}"
+          T13_AUDIT_HEAD: "${{ steps.release_gate.outputs.audit_head }}"
+          T13_AUDIT_BASE: "${{ steps.release_gate.outputs.audit_base }}"
         run: |
           set -euo pipefail
           COSIGN_IDENTITY="https://github.com/$GITHUB_REPOSITORY/.github/workflows/t13-certified-release.yml@refs/heads/main"

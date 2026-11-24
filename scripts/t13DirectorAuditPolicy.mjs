@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {verifyFreshDirectorAudit,freshDirectorAuditSelfTest} from './t13FreshDirectorAudit.mjs';
 
 export const T13_BASE_MERGE='dbe52a89c3214d7f40b1f66924bcbb1a90e017eb';
 export const T13_AUDITED_HEAD='a0e335dba1884fb398aea13c8435cd28f98436a9';
@@ -112,7 +113,7 @@ function verifyDirectorAuditEvidence({
 export function verifyDirectorAuditPackage(input){
  if(input.environmentName!=='t13-release-signing'||input.environment?.name!==input.environmentName)
   fail('T13_DIRECTOR_SEAL_ENVIRONMENT_REQUIRED');
- return verifyDirectorAuditEvidence(input);
+ return input.freshAudit?verifyFreshDirectorAudit(input):verifyDirectorAuditEvidence(input);
 }
 const PRODUCTION_ENV='t13-production-approval';
 const OWNER_ID=134972286;
@@ -142,22 +143,22 @@ export function verifyProductionSealRun({sealRun,sha,sealRunId,sealRunAttempt,ar
  if(evidence.length!==1)fail('T13_PRODUCTION_SEAL_ARTIFACT_REQUIRED');
  return true;
 }
-export function productionApprovalBody({sha,digest,sealRunId,sealRunAttempt,policyHead,evidenceDigest}){
+export function productionApprovalBody({sha,digest,sealRunId,sealRunAttempt,policyHead,evidenceDigest,auditKind}){
  exact(sha,/^[a-f0-9]{40}$/);exact(digest,/^sha256:[a-f0-9]{64}$/);
  exact(sealRunId,/^[1-9][0-9]{0,15}$/);exact(sealRunAttempt,/^[1-9][0-9]{0,5}$/);
  exact(policyHead,/^[a-f0-9]{40}$/);exact(evidenceDigest,/^[a-f0-9]{64}$/);
- return ['T13-DIRECTOR-PRODUCTION-APPROVAL/V1','repository='+T13_REPO,
+ return [auditKind==='FRESH_EXACT_PR_V2'?'T13-DIRECTOR-PRODUCTION-APPROVAL/V2':'T13-DIRECTOR-PRODUCTION-APPROVAL/V1','repository='+T13_REPO,
   'commit='+sha,'image-digest='+digest,'seal-run='+sealRunId,
   'seal-attempt='+sealRunAttempt,'governance-pr-head='+policyHead,
   'audit-evidence-sha256='+evidenceDigest,
-  'policy-review=GEMINI_REVIEWED_EXACT_GOVERNANCE_HEAD',
+  auditKind==='FRESH_EXACT_PR_V2'?'policy-review=GEMINI_REVIEWED_EXACT_PR_HEAD':'policy-review=GEMINI_REVIEWED_EXACT_GOVERNANCE_HEAD',
   'decision=AUTHORIZE_CONTROLLED_PRODUCTION_DEPLOY',
   'commercial-go-live=NOT_AUTHORIZED'].join('\n');
 }
 export function verifyDirectorProductionApproval(input){
  const {environmentName,environment,sha,digest,sealRunId,sealRunAttempt,
   sealRun,artifacts,run,runId,runAttempt,approvals,currentPr}=input;
- const historical=verifyDirectorAuditEvidence(input);
+ const historical=input.freshAudit?verifyFreshDirectorAudit(input):verifyDirectorAuditEvidence(input);
  verifyProductionSealRun({sealRun,sha,sealRunId,sealRunAttempt,artifacts});
  if(environmentName!==PRODUCTION_ENV||environment?.name!==PRODUCTION_ENV||
     !Number.isSafeInteger(environment.id)||environment.id<=0||
@@ -177,7 +178,7 @@ export function verifyDirectorProductionApproval(input){
     sealRun.actor?.login!==T13_OWNER||sealRun.actor?.id!==OWNER_ID)
   fail('T13_PRODUCTION_FRESH_OWNER_RUN_REQUIRED');
  const expected=productionApprovalBody({sha,digest,sealRunId,sealRunAttempt,
-  policyHead:currentPr.head.sha,evidenceDigest:historical.auditEvidenceSha256});
+  policyHead:currentPr.head.sha,evidenceDigest:historical.auditEvidenceSha256,auditKind:historical.auditKind});
  if(!Array.isArray(approvals)||approvals.length>100)
   fail('T13_PRODUCTION_REVIEW_HISTORY_UNVERIFIABLE');
  const relevant=approvals.filter(a=>Array.isArray(a.environments)&&
@@ -211,6 +212,7 @@ export function policyEvidenceText(){
  return fs.readFileSync(EVIDENCE_PATH,'utf8');
 }
 export function directorAuditSelfTest(){
+ freshDirectorAuditSelfTest();
  const exampleText=policyEvidenceText();
  const sha='f'.repeat(40),digest=evidenceSha256(exampleText);
  const currentPr={merged:true,base:{ref:'main'},user:{login:T13_OWNER},

@@ -49,6 +49,11 @@ if(!deployment.includes('environment: t13-production-approval')||
  !deployment.includes('t13RegistryAttestationGate.mjs --verify-deploy')||
  deployment.includes('gh attestation verify')||
  !deployment.includes('deploy/t13-controlled-deploy.sh')||
- !deployment.includes('t13FirestoreRulesGate.mjs --verify-active'))
+ !deployment.includes('t13FirestoreRulesGate.mjs --verify-active')||
+ !deployment.includes('google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093')||
+ !deployment.includes('steps.rules_auth.outputs.access_token')||
+ !deployment.includes('id-token: write')||
+ deployment.includes('secrets.FIREBASE_RULES_ACCESS_TOKEN')||
+ !deployment.includes('/opt/atendevendeia-t13-runtime'))
  throw Error('T13_CONTROLLED_DEPLOY_GATES_MISSING');
 console.log('t13_workflow_supply_chain_gate_passed:'+yaml.length);

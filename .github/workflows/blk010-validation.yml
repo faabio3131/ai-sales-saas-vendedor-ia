@@ -66,11 +66,16 @@ jobs:
           ATENDEVENDE_IMAGE: ghcr.io/example/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           FIREBASE_PROJECT_ID: demo-t13
           PUBLIC_APP_URL: https://staging.invalid
+          VITE_FIREBASE_API_KEY: ci-public-web-config
+          VITE_FIREBASE_AUTH_DOMAIN: demo-t13.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: demo-t13
+          VITE_FIREBASE_APP_ID: '1:123:web:abc'
           T13_SESSION_SECRET_FILE: /tmp/ci-session-mount
           PAYMENT_FIREBASE_CREDENTIAL_FILE: /tmp/ci-firebase-identity.json
         run: |
           set -euo pipefail
           bash -n deploy/t13-controlled-deploy.sh
+          python3 -m unittest discover -s scripts -p 'test_t13_rollout.py' -v
           grep -Fq 'HEALTH_JSON=$(mktemp /tmp/t13-release-health.XXXXXXXX)' deploy/t13-controlled-deploy.sh
           grep -Fq 'trap '\''rm -f "$HEALTH_JSON"'\'' EXIT' deploy/t13-controlled-deploy.sh
           if grep -Fq '/tmp/t13-release-health.json' deploy/t13-controlled-deploy.sh; then exit 1; fi
@@ -87,6 +92,8 @@ jobs:
           a.equal(worker.read_only,true);
           a.deepEqual(api.cap_drop,['ALL']);
           a.equal(api.ports[0].host_ip,'127.0.0.1');
+          for(const k of ['VITE_FIREBASE_API_KEY','VITE_FIREBASE_AUTH_DOMAIN','VITE_FIREBASE_PROJECT_ID','VITE_FIREBASE_APP_ID']) a.equal(api.environment[k],process.env[k]);
+          a.equal(api.environment.VITE_FIREBASE_PROJECT_ID,api.environment.FIREBASE_PROJECT_ID);
           a.equal(api.environment.ATENDEVENDE_PILOT_LIVE_ENABLED,'false');
           a.equal(api.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');
           a.equal(api.environment.ATENDEVENDE_PILOT_ALLOWED_UNITS,'{}');
