@@ -30,12 +30,14 @@ elif a[:1]==["compose"]:
         if mode=="untracked": print("unknown")
     elif cmd[:2]==["ps","-q"]: print(cmd[-1])
     elif cmd[:1]==["up"]:
+        if cmd[-1]=="atendevende-api" and mode=="api-fail": sys.exit(1)
+        if cmd[-1]=="payment-reconciler" and mode=="rollback-fail": sys.exit(1)
         if cmd[-1]=="payment-reconciler" and mode=="worker-fail" and image.endswith("a"*64): sys.exit(1)
         state.write_text(image)
 else: sys.exit(9)
 '''
 class RolloutTests(unittest.TestCase):
-    def run_case(self,mode="",authority=True,previous=False):
+    def run_case(self,mode="",authority=True,previous=False,project="demo-test"):
         with tempfile.TemporaryDirectory() as t:
             root=pathlib.Path(t); bin_dir=root/"bin"; bin_dir.mkdir()
             deploy=root/"deploy"; deploy.mkdir()
@@ -56,7 +58,7 @@ class RolloutTests(unittest.TestCase):
                 target=bin_dir/name; target.write_text(content); target.chmod(0o700)
             log=root/"calls"
             proc=subprocess.run(["bash",str(SCRIPT)],cwd=root,env={**os.environ,"PATH":str(bin_dir)+":"+os.environ["PATH"],
-                "T13_IMAGE_REF":IMAGE,"T13_EXPECTED_SHA":SHA,"MOCK_LOG":str(log),"MOCK_MODE":mode,
+                "T13_IMAGE_REF":IMAGE,"T13_EXPECTED_SHA":SHA,"T13_EXPECTED_FIREBASE_PROJECT":project,"MOCK_LOG":str(log),"MOCK_MODE":mode,
                 **({"MOCK_PREVIOUS":OLD} if previous else {})},capture_output=True,text=True,timeout=15)
             return proc, state.read_text().strip() if state.exists() else None, log.read_text() if log.exists() else ""
     def test_success(self):
@@ -92,3 +94,19 @@ class RolloutTests(unittest.TestCase):
         self.assertNotEqual(p.returncode,0)
         self.assertEqual(state,OLD)
         self.assertIn("T13_ROLLBACK_HEALTH_VERIFIED",p.stderr)
+    def test_api_failure_stops_before_worker(self):
+        p,state,log=self.run_case(mode="api-fail")
+        self.assertNotEqual(p.returncode,0)
+        self.assertIsNone(state)
+        self.assertNotIn("--wait-timeout 600 payment-reconciler",log)
+    def test_wrong_project_refused(self):
+        p,state,log=self.run_case(project="other-project")
+        self.assertNotEqual(p.returncode,0)
+        self.assertIn("T13_FIREBASE_PROJECT_MISMATCH",p.stderr)
+        self.assertEqual(log,"")
+    def test_failed_rollback_not_certified(self):
+        p,state,log=self.run_case(mode="rollback-fail",previous=True)
+        self.assertNotEqual(p.returncode,0)
+        self.assertEqual(state,OLD)
+        self.assertIn("T13_ROLLBACK_FAILED_MANUAL_RECOVERY_REQUIRED",p.stderr)
+        self.assertNotIn("T13_ROLLBACK_HEALTH_VERIFIED",p.stderr)

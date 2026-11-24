@@ -10,6 +10,8 @@ flock -n 9 || { echo T13_CONCURRENT_ROLLOUT >&2; exit 1; }
 # never from a mutable host runtime file.
 APPROVED_REF="${T13_IMAGE_REF:?Signed OCI image required}"
 APPROVED_SHA="${T13_EXPECTED_SHA:?Approved post-merge SHA required}"
+APPROVED_PROJECT="${T13_EXPECTED_FIREBASE_PROJECT:?Approved Firebase project required}"
+readonly APPROVED_REF APPROVED_SHA APPROVED_PROJECT
 RUNTIME_ENV="${T13_RUNTIME_ENV_FILE:-.t13-runtime.env}"
 [[ -f "$RUNTIME_ENV" && ! -L "$RUNTIME_ENV" ]] ||
  { echo 'HOST_RUNTIME_ENV_NOT_PROVISIONED' >&2; exit 1; }
@@ -29,6 +31,7 @@ export DOCKER_HOST=unix:///run/t13-docker/docker.sock
 [[ "${T13_WORKER_AUTHORITY_CONFIRMED:-}" == true ]] || { echo T13_WORKER_AUTHORITY_NOT_CONFIRMED >&2; exit 1; }
 : "${T13_IMAGE_REF:?Signed OCI image digest required}"
 : "${FIREBASE_PROJECT_ID:?Firestore project required}"
+[[ "$APPROVED_PROJECT" =~ ^[a-z][a-z0-9-]{3,62}$ && "$FIREBASE_PROJECT_ID" == "$APPROVED_PROJECT" ]] || { echo T13_FIREBASE_PROJECT_MISMATCH >&2; exit 1; }
 : "${T13_SESSION_SECRET_FILE:?Private session secret required}"
 : "${PAYMENT_FIREBASE_CREDENTIAL_FILE:?Private Firebase credentials required}"
 : "${PUBLIC_APP_URL:?Public HTTPS URL required}"
@@ -108,11 +111,11 @@ committed=0
 recover(){
  local rc=$?
  trap - EXIT
- rm -f "$HEALTH_JSON"
  if (( changed && ! committed )); then
   echo T13_ROLLOUT_FAILED_ROLLBACK >&2
-  compose stop payment-reconciler atendevende-api || true
-  if [[ -n "$PREVIOUS" ]]; then
+  if ! compose stop payment-reconciler atendevende-api; then
+   echo T13_CANDIDATE_STOP_FAILED_MANUAL_RECOVERY_REQUIRED >&2
+  elif [[ -n "$PREVIOUS" ]]; then
    export ATENDEVENDE_IMAGE="$PREVIOUS"
    if compose up -d --no-build --force-recreate --wait --wait-timeout 180 atendevende-api &&
       health &&
@@ -128,6 +131,7 @@ recover(){
   fi
   (( rc != 0 )) || rc=1
  fi
+ rm -f "$HEALTH_JSON"
  exit "$rc"
 }
 trap recover EXIT
