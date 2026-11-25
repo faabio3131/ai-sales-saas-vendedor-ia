@@ -9,14 +9,16 @@ import type {TenantContext} from '../types/contracts';
 import {channelDocId,channelError,FirestoreWhatsAppConnectionStore} from './whatsappConnections';
 import {EvolutionV2Client,GoogleEvolutionVault,evolutionInstance,evolutionTokenEqual,evolutionEventId,
  type EvolutionVault} from './evolutionClient';
+import {stageEvolutionAttendance} from './evolutionAttendanceStore';
+import {attendanceHash} from './evolutionAttendance';
 
 export type EvolutionStatus='DISABLED'|'NOT_PROVISIONED'|'DISCONNECTED'|'PAIRING'|'CONNECTED';
 export type EvolutionOverview={status:EvolutionStatus;connected:boolean;qrCode?:string;expiresInSeconds?:number;commercialEnabled:false};
 type Scope={tenantId:string;unitId:string};
-type Binding=Scope&{instanceName:string;status:EvolutionStatus;leaseId:string;leaseUntil:number;updatedAt:string};
+type Binding=Scope&{instanceName:string;status:EvolutionStatus;leaseId:string;leaseUntil:number;updatedAt:string;ownerPhone?:string};
 export interface EvolutionStore{
  acquire(s:Scope,leaseId:string):Promise<void>;
- finish(s:Scope,leaseId:string,status:EvolutionStatus):Promise<void>;
+ finish(s:Scope,leaseId:string,status:EvolutionStatus,ownerPhone?:string):Promise<void>;
  get(s:Scope):Promise<Binding|null>;
  persist(s:Scope,id:string,event:EvolutionInbound):Promise<boolean>;
 }
@@ -33,14 +35,23 @@ export class FirestoreEvolutionStore implements EvolutionStore{
    const b=(await tx.get(ref)).data() as Binding|undefined;assertBinding(s,b);
    if(b&&b.leaseUntil>Date.now())throw channelError('EVOLUTION_BUSY','CONFLICT');
    tx.set(ref,{...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status:'DISCONNECTED',
-    leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()} satisfies Binding);
+    leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString(),...(b?.ownerPhone?{ownerPhone:b.ownerPhone}:{})} satisfies Binding);
   });
  }
- async finish(s:Scope,leaseId:string,status:EvolutionStatus){
+ async finish(s:Scope,leaseId:string,status:EvolutionStatus,ownerPhone?:string){
   const ref=scopeRef(s);await db().runTransaction(async tx=>{
    const b=(await tx.get(ref)).data() as Binding|undefined;assertBinding(s,b);
    if(!b||b.leaseId!==leaseId||b.leaseUntil<=Date.now())throw channelError('EVOLUTION_LEASE_EXPIRED','CONFLICT');
-   tx.update(ref,{status,leaseId:'',leaseUntil:0,updatedAt:new Date().toISOString()});
+   if(status==='CONNECTED'){
+    if(!ownerPhone||!/^55[1-9][0-9]{9,10}$/.test(ownerPhone))throw channelError('EVOLUTION_OWNER_UNVERIFIED');
+    const phone=db().collection('evolutionPhoneReservations').doc(attendanceHash(ownerPhone));
+    const meta=db().collection('merchantWhatsAppConnections').doc(channelDocId(s.tenantId,s.unitId));
+    const [claim,other]=await Promise.all([tx.get(phone),tx.get(meta)]);
+    if(claim.exists&&(claim.get('tenantId')!==s.tenantId||claim.get('unitId')!==s.unitId)||
+     b.ownerPhone&&b.ownerPhone!==ownerPhone||other.get('status')==='ACTIVE')throw channelError('EVOLUTION_PHONE_OR_CHANNEL_CONFLICT','CONFLICT');
+    tx.set(phone,{...s,instanceName:b.instanceName,ownerPhone,verifiedAt:new Date().toISOString()});
+   }
+   tx.update(ref,{status,leaseId:'',leaseUntil:0,updatedAt:new Date().toISOString(),...(ownerPhone?{ownerPhone}:{})});
   });
  }
  async persist(s:Scope,id:string,event:EvolutionInbound){
@@ -49,15 +60,18 @@ export class FirestoreEvolutionStore implements EvolutionStore{
   return database.runTransaction(async tx=>{
    const [prior,row]=await Promise.all([tx.get(ref),tx.get(binding)]);
    const b=row.data() as Binding|undefined;assertBinding(s,b);
-   if(!b||b.status!=='CONNECTED'||b.leaseUntil>Date.now())throw channelError('EVOLUTION_SESSION_NOT_VERIFIED');
+   if(!b||b.status!=='CONNECTED'||!b.ownerPhone||b.ownerPhone===event.sender||b.leaseUntil>Date.now())throw channelError('EVOLUTION_SESSION_NOT_VERIFIED');
    if(prior.exists){
     if(prior.get('tenantId')!==s.tenantId||prior.get('unitId')!==s.unitId||
      prior.get('externalMessageId')!==id)throw channelError('EVOLUTION_INBOX_CONFLICT','CONFLICT');
     return false;
    }
-   tx.create(ref,{...s,provider:'EVOLUTION',instanceName:b.instanceName,externalMessageId:id,
-    sender:event.sender,text:event.text,occurredAt:event.occurredAt,state:'RECEIVED',
-    receivedAt:new Date().toISOString()});
+   const claim=await tx.get(database.collection('evolutionPhoneReservations').doc(attendanceHash(b.ownerPhone)));
+   const meta=await tx.get(database.collection('merchantWhatsAppConnections').doc(channelDocId(s.tenantId,s.unitId)));
+   if(!claim.exists||claim.get('tenantId')!==s.tenantId||claim.get('unitId')!==s.unitId||meta.get('status')==='ACTIVE')
+    throw channelError('EVOLUTION_PHONE_OR_CHANNEL_CONFLICT');
+   if(id!==event.externalMessageId)throw channelError('EVOLUTION_EVENT_SCOPE_MISMATCH');
+   await stageEvolutionAttendance(database,tx,s,event,Date.now());
    return true;
   });
  }
@@ -90,7 +104,7 @@ export function parseEvolutionInbound(body:unknown,instance:string,now=Date.now(
  }
  return result;
 }
-type Client=Pick<EvolutionV2Client,'state'|'configureWebhook'|'verifyWebhook'|'qr'|'logout'>;
+type Client=Pick<EvolutionV2Client,'state'|'configureWebhook'|'verifyWebhook'|'qr'|'logout'|'ownerPhone'>;
 type Dependencies={
  store:EvolutionStore;vault:EvolutionVault;client:Client;
  authorizeUnit:(s:Scope,requirePlan:boolean)=>Promise<void>;
@@ -116,6 +130,7 @@ export class EvolutionPairingService{
   const state=await this.deps.client.state(c);
   if(state==='open'){
    if(!binding||binding.status!=='CONNECTED')return overview('PAIRING');
+   if(await this.deps.client.ownerPhone(c)!==binding.ownerPhone)throw channelError('EVOLUTION_OWNER_UNVERIFIED');
    await this.deps.client.verifyWebhook(c,this.deps.callback(s));
    return overview('CONNECTED');
   }
@@ -127,14 +142,14 @@ export class EvolutionPairingService{
   if(await this.deps.metaActive(s))throw channelError('EVOLUTION_META_ACTIVE_CONFLICT','CONFLICT');
   const c=await this.credential(s);if(!c)return overview('NOT_PROVISIONED');
   const lease=randomUUID();await this.deps.store.acquire(s,lease);
-  let status:EvolutionStatus='DISCONNECTED';
+  let status:EvolutionStatus='DISCONNECTED',ownerPhone:string|undefined;
   try{
    await this.deps.client.configureWebhook(c,this.deps.callback(s));
    const state=await this.deps.client.state(c);
-   if(state==='open'){status='CONNECTED';return overview(status);}
+   if(state==='open'){ownerPhone=await this.deps.client.ownerPhone(c);status='CONNECTED';return overview(status);}
    const qrCode=await this.deps.client.qr(c);status='PAIRING';
    return {...overview(status),qrCode,expiresInSeconds:30};
-  }finally{await this.deps.store.finish(s,lease,status);}
+  }finally{await this.deps.store.finish(s,lease,status,ownerPhone);}
  }
  async confirm(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u);
@@ -142,14 +157,14 @@ export class EvolutionPairingService{
   if(await this.deps.metaActive(s))throw channelError('EVOLUTION_META_ACTIVE_CONFLICT','CONFLICT');
   const c=await this.credential(s);if(!c)return overview('NOT_PROVISIONED');
   const lease=randomUUID();await this.deps.store.acquire(s,lease);
-  let status:EvolutionStatus='DISCONNECTED';
+  let status:EvolutionStatus='DISCONNECTED',ownerPhone:string|undefined;
   try{
    const state=await this.deps.client.state(c);
    if(state==='open'){
-    await this.deps.client.verifyWebhook(c,this.deps.callback(s));status='CONNECTED';
+    await this.deps.client.verifyWebhook(c,this.deps.callback(s));ownerPhone=await this.deps.client.ownerPhone(c);status='CONNECTED';
    }else if(state==='connecting')status='PAIRING';
    return overview(status);
-  }finally{await this.deps.store.finish(s,lease,status);}
+  }finally{await this.deps.store.finish(s,lease,status,ownerPhone);}
  }
  async disconnect(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u,false);
@@ -174,6 +189,7 @@ export class EvolutionPairingService{
   if(!b||b.status!=='CONNECTED'||b.leaseUntil>Date.now()||await this.deps.client.state(c)!=='open')
    throw channelError('EVOLUTION_SESSION_NOT_VERIFIED');
   await this.deps.client.verifyWebhook(c,this.deps.callback(s));
+  if(!b.ownerPhone||await this.deps.client.ownerPhone(c)!==b.ownerPhone)throw channelError('EVOLUTION_OWNER_UNVERIFIED');
   const events=parseEvolutionInbound(body,c.instanceName);
   let accepted=0,duplicates=0;
   for(const e of events){if(await this.deps.store.persist(s,e.externalMessageId,e))accepted++;else duplicates++;}
