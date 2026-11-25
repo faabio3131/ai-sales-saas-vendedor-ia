@@ -136,6 +136,21 @@ export class EvolutionPairingService{
    return {...overview(status),qrCode,expiresInSeconds:30};
   }finally{await this.deps.store.finish(s,lease,status);}
  }
+ async confirm(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
+  const s=await this.scope(ctx,u);
+  if(!this.deps.pairingEnabled())return overview('DISABLED');
+  if(await this.deps.metaActive(s))throw channelError('EVOLUTION_META_ACTIVE_CONFLICT','CONFLICT');
+  const c=await this.credential(s);if(!c)return overview('NOT_PROVISIONED');
+  const lease=randomUUID();await this.deps.store.acquire(s,lease);
+  let status:EvolutionStatus='DISCONNECTED';
+  try{
+   const state=await this.deps.client.state(c);
+   if(state==='open'){
+    await this.deps.client.verifyWebhook(c,this.deps.callback(s));status='CONNECTED';
+   }else if(state==='connecting')status='PAIRING';
+   return overview(status);
+  }finally{await this.deps.store.finish(s,lease,status);}
+ }
  async disconnect(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u,false);
   if(!this.deps.pairingEnabled())return overview('DISABLED');
@@ -147,8 +162,10 @@ export class EvolutionPairingService{
  }
  async inbound(t:string,u:string,auth:unknown,body:unknown):Promise<{accepted:number;duplicates:number}>{
   const s={tenantId:t,unitId:u};channelDocId(t,u);
-  if(!this.deps.pairingEnabled()||!this.deps.inboundEnabled()||typeof auth!=='string')
+  if(!this.deps.pairingEnabled()||!this.deps.inboundEnabled()||typeof auth!=='string'||!/^[A-Za-z0-9_=-]{32,256}$/.test(auth))
    throw channelError('EVOLUTION_INBOUND_DISABLED');
+  const existing=await this.deps.store.get(s);
+  if(!existing||existing.status!=='CONNECTED'||existing.leaseUntil>Date.now())throw channelError('EVOLUTION_SESSION_NOT_VERIFIED');
   const c=await this.credential(s);
   if(!c||!evolutionTokenEqual(auth,c.webhookToken))throw channelError('EVOLUTION_WEBHOOK_UNAUTHORIZED');
   await this.deps.authorizeUnit(s,true);
@@ -188,6 +205,7 @@ export function createEvolutionRouter(s=service()):Router{
  const r=Router();r.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
  r.get('/units/:unitId',async(req,res,next)=>{try{res.json({ok:true,data:await s.status(req.tenantContext,req.params.unitId)});}catch(e){next(e);}});
  r.post('/units/:unitId/connect',async(req,res,next)=>{try{res.json({ok:true,data:await s.connect(req.tenantContext,req.params.unitId)});}catch(e){next(e);}});
+ r.post('/units/:unitId/confirm',async(req,res,next)=>{try{res.json({ok:true,data:await s.confirm(req.tenantContext,req.params.unitId)});}catch(e){next(e);}});
  r.post('/units/:unitId/disconnect',async(req,res,next)=>{try{res.json({ok:true,data:await s.disconnect(req.tenantContext,req.params.unitId)});}catch(e){next(e);}});
  return r;
 }
