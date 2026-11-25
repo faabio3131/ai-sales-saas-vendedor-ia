@@ -4,6 +4,7 @@ import type {BusinessVertical} from '../business/model';
 import type {CapabilityAssignment,CapabilityId,CapabilityManifest,
  CapabilityTemplate,CapabilityTemplateId} from '../capabilities/model';
 import {ProductionBoard} from './ProductionBoard';
+import {CompanyProfilePanel} from './CompanyProfilePanel';
 import {SchedulingPanel} from './SchedulingPanel';
 import {MultisectorOnboardingPanel,RetailPanel,MultiSectorReportPanel} from './MultisectorPanel';
 import type {BookingPack} from '../scheduling/model';
@@ -47,6 +48,7 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
  const [reload,setReload]=useState(0);
  const [error,setError]=useState('');
  const [message,setMessage]=useState('');
+ const [createdScope,setCreatedScope]=useState('');
  const prefix='/api/capabilities/units/'+encodeURIComponent(unitId);
  async function api<T>(url:string,options?:RequestInit):Promise<T>{
   const res=await fetch(url,{credentials:'same-origin',...options,
@@ -125,6 +127,8 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
   else setError('Identificador de unidade inválido.');
  }
  return <>
+ {createdScope===tenantId+'-'+unitId&&vertical&&<p role="status" className="mt-5 rounded-xl border border-emerald-700 bg-slate-900 p-4 text-base text-emerald-300">Cadastro e módulos internos salvos com sucesso.</p>}
+ {!loading&&admin&&vertical&&<CompanyProfilePanel key={'profile-'+tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId}/>}
  <section className="mt-5 rounded-3xl border border-violet-500/20 bg-slate-900/70 p-5 sm:p-6"
   aria-label="Registro de capacidades por empresa e unidade">
   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -240,7 +244,7 @@ export function CapabilityManager({tenantId,role}:{tenantId:string;role:string})
    </div>:null}
   </>}
  </section>
- {!loading&&admin&&!vertical&&<MultisectorOnboardingPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} onSaved={()=>setReload(x=>x+1)}/>}
+ {!loading&&admin&&!vertical&&<MultisectorOnboardingPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} onSaved={()=>{setCreatedScope(tenantId+'-'+unitId);setReload(x=>x+1);}}/>}
  {!loading&&assignment?.state==='ENABLED_INTERNAL'&&assignment.vertical==='RETAIL'&&vertical==='RETAIL'&&assignment.enabledCapabilities.includes('RETAIL_CATALOG')&&<RetailPanel key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId} role={role} native={assignment.operationMode==='NATIVE_OPERATIONS'} inventory={assignment.enabledCapabilities.includes('RETAIL_INVENTORY')} checkout={assignment.enabledCapabilities.includes('RETAIL_CHECKOUT')}/>}
  {!loading&&admin&&vertical&&<MultiSectorReportPanel key={'report-'+tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId}/>}
  {allowFoodBoard&&<ProductionBoard tenantId={tenantId} role={role}/>}

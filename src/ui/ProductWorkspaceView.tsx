@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Bot, LockKeyhole, MessageCircle, RefreshCw, Target, Users } from 'lucide-react';
 import { resolveWorkspaceMemberships, WorkspaceMembership } from './workspaceAccess';
+import { authorizedWorkspacePage, workspacePageFromHash, workspacePageLinks } from './workspaceNavigation';
 import { FinancialPanel } from './FinancialPanel';
 import {CapabilityManager} from './CapabilityManager';
 import { PilotOnboardingPanel } from './PilotOnboardingPanel';
@@ -38,11 +39,26 @@ export function ProductWorkspaceView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [accessBlocked, setAccessBlocked] = useState(false);
+  const [requestedPage, setRequestedPage] = useState(() => workspacePageFromHash(window.location.hash));
+
+  useEffect(() => {
+    const changePage = () => {
+      setRequestedPage(workspacePageFromHash(window.location.hash));
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    };
+    window.addEventListener('hashchange', changePage);
+    return () => window.removeEventListener('hashchange', changePage);
+  }, []);
 
   const selectedMembership = useMemo(
     () => memberships.find((membership) => membership.tenantId === tenantId) ?? null,
     [memberships, tenantId],
   );
+
+  const role = selectedMembership?.role ?? '';
+  const page = authorizedWorkspacePage(requestedPage, role);
+  const navigation = workspacePageLinks(role);
+  const roleLabel = ({ OWNER: 'Proprietário', ADMIN: 'Administrador', MANAGER: 'Gerente', ATTENDANT: 'Atendente', OPERATOR: 'Operador', STAFF: 'Equipe', CASHIER: 'Caixa', DELIVERY: 'Entregador' } as Record<string,string>)[role] ?? 'Usuário';
 
   useEffect(() => {
     async function bootstrap() {
@@ -171,11 +187,28 @@ export function ProductWorkspaceView() {
 
       {selectedMembership && (
         <>
-        <div className="mb-5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span className="rounded-full border border-slate-800 px-2.5 py-1">Perfil: <strong className="text-slate-300">{selectedMembership.role}</strong></span>
-          <span className="rounded-full border border-slate-800 px-2.5 py-1">Tenant protegido</span>
+        <nav aria-label="Navegação principal" className="sticky top-0 z-30 mb-5 rounded-xl border border-slate-700 bg-slate-950 p-2 shadow-lg">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-2">
+            <span className="text-sm font-semibold text-slate-100">{navigation.find(link => link.id === page)?.label}</span>
+            <a href="#inicio" onClick={() => window.scrollTo({ top: 0, behavior: 'auto' })} className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-emerald-300 focus-visible:outline-2 focus-visible:outline-emerald-400">Voltar ao início</a>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {navigation.map(link => (
+              <a key={link.id} href={'#' + link.id} aria-current={page === link.id ? 'page' : undefined}
+                onClick={() => window.scrollTo({ top: 0, behavior: 'auto' })}
+                className={'inline-flex min-h-11 items-center rounded-lg px-3 text-base font-medium focus-visible:outline-2 focus-visible:outline-emerald-400 ' +
+                  (page === link.id ? 'bg-emerald-500 text-slate-950' : 'text-slate-200 hover:bg-slate-800')}>
+                {link.label}
+              </a>
+            ))}
+          </div>
+        </nav>
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-slate-300">
+          <span className="rounded-full border border-slate-800 px-2.5 py-1">Perfil: <strong>{roleLabel}</strong></span>
+          <span className="rounded-full border border-slate-800 px-2.5 py-1">Empresa protegida</span>
         </div>
 
+      <div hidden={page !== 'inicio'}>
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {cards.map(({ label, value, icon: Icon }) => (
           <article key={label} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
@@ -209,22 +242,31 @@ export function ProductWorkspaceView() {
         <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <h2 className="font-semibold text-white">Capacidades multissetoriais</h2>
           <p className="mt-3 text-sm leading-6 text-slate-400">
-            As capacidades de cada empresa são configuradas por unidade no registro seguro abaixo.
+            As capacidades de cada empresa são configuradas por unidade em Empresa e módulos.
             Módulos planejados não aparecem como disponíveis até certificação.
           </p>
           <p className="mt-3 text-xs text-amber-300">Ativação comercial não autorizada.</p>
         </article>
       </section>
+      </div>
       {(selectedMembership.role === 'OWNER' || selectedMembership.role === 'ADMIN') && (
-        <FinancialPanel key={tenantId} tenantId={tenantId} role={selectedMembership.role} />
+        <div hidden={page !== 'financeiro'}>
+          <FinancialPanel key={tenantId} tenantId={tenantId} role={selectedMembership.role} />
+        </div>
       )}
       {selectedMembership.role === 'OWNER' && (
-        <PilotOnboardingPanel key={'onboarding-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+        <div hidden={page !== 'piloto'}>
+          <PilotOnboardingPanel key={'onboarding-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+        </div>
       )}
       {selectedMembership.role === 'OWNER' && (
-        <ProviderConnectionPanel key={'providers-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+        <div hidden={page !== 'conexoes'}>
+          <ProviderConnectionPanel key={'providers-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+        </div>
       )}
-      <CapabilityManager key={'capabilities-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+      <div hidden={page !== 'empresa'}>
+        <CapabilityManager key={'capabilities-'+tenantId} tenantId={tenantId} role={selectedMembership.role} />
+      </div>
         </>
       )}
     </div>
