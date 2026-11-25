@@ -5,7 +5,7 @@ services:
     image: "${ATENDEVENDE_IMAGE:?Signed OCI image required}"
     profiles: [evolution-attendance]
     init: true
-    restart: unless-stopped
+    restart: "no"
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
