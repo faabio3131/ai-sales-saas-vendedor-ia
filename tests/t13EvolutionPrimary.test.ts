@@ -7,7 +7,7 @@ import type {TenantContext} from '../src/types/contracts';
 const t='tenant-evo-a',u='main',origin='https://evolution-app.atendevendeia.com.br';
 const ctx=(tenantId=t,role='OWNER'):TenantContext=>({tenantId,role,userId:'owner',requestId:'test'});
 const credentials=(tenantId=t,unitId=u):EvolutionCredential=>({tenantId,unitId,
- instanceName:evolutionInstance(tenantId,unitId),apiKey:'A'.repeat(40),webhookToken:'B'.repeat(40)});
+ instanceName:evolutionInstance(tenantId,unitId),apiKey:'A'.repeat(40),webhookToken:'B'.repeat(40),expectedOwnerPhone:'5511987654321'});
 const c=credentials();
 const image='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC1sAAAAASUVORK5CYII=';
 const qr='data:image/png;base64,'+image;
@@ -21,13 +21,13 @@ function setup(){
    binding={...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status:'DISCONNECTED',
     leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()};
   },
-  async finish(s,leaseId,status){if(!binding||binding.tenantId!==s.tenantId||binding.unitId!==s.unitId||binding.leaseId!==leaseId)throw Error('scope or lease');
-   binding={...binding,status,leaseId:'',leaseUntil:0};},
+  async finish(s,leaseId,status,ownerPhone){if(!binding||binding.tenantId!==s.tenantId||binding.unitId!==s.unitId||binding.leaseId!==leaseId)throw Error('scope or lease');
+   binding={...binding,status,leaseId:'',leaseUntil:0,...(ownerPhone?{ownerPhone}:{})};},
   async get(s){return binding?.tenantId===s.tenantId&&binding.unitId===s.unitId?binding:null;},
   async persist(s,id){const key=evolutionInstance(s.tenantId,s.unitId)+id;if(seen.has(key))return false;seen.add(key);return true;},
  };
  const client={state:vi.fn<()=>Promise<'open'|'close'|'connecting'>>(async()=> 'close'),
-  configureWebhook:vi.fn(async()=>{}),verifyWebhook:vi.fn(async()=>{}),qr:vi.fn(async()=>qr),logout:vi.fn(async()=>{})};
+  configureWebhook:vi.fn(async()=>{}),verifyWebhook:vi.fn(async()=>{}),qr:vi.fn(async()=>qr),logout:vi.fn(async()=>{}),ownerPhone:vi.fn(async()=>c.expectedOwnerPhone)};
  const vault={load:vi.fn(async(tenantId:string,unitId:string)=>credentials(tenantId,unitId))};
  const pairingEnabled=vi.fn(()=>true),inboundEnabled=vi.fn(()=>false),metaActive=vi.fn(async()=>false);
  const authorizeUnit=vi.fn(async()=>{});
@@ -47,6 +47,16 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   expect(()=>validateEvolutionCredential(t,u,{...c,webhookToken:c.apiKey})).toThrow();
   expect(()=>evolutionOrigin('https://api.atendevendeia.com.br')).toThrow();
   expect(()=>evolutionOrigin(origin+'/path')).toThrow();
+ });
+ it('requires exact verified owner number from an instance-scoped provider readback',async()=>{
+  const mock=vi.fn<typeof fetch>().mockResolvedValueOnce(response([{name:c.instanceName,connectionStatus:'open',ownerJid:c.expectedOwnerPhone+':1@s.whatsapp.net'}]))
+   .mockResolvedValueOnce(response([{name:c.instanceName,connectionStatus:'open',ownerJid:'5511000000000@s.whatsapp.net'}]))
+   .mockResolvedValueOnce(response([{name:'foreign',connectionStatus:'open',ownerJid:c.expectedOwnerPhone+'@s.whatsapp.net'}]));
+  const api=new EvolutionV2Client(origin,mock);
+  expect(await api.ownerPhone(c)).toBe(c.expectedOwnerPhone);
+  expect(mock.mock.calls[0][0]).toBe(origin+'/instance/fetchInstances?instanceName='+c.instanceName);
+  await expect(api.ownerPhone(c)).rejects.toMatchObject({code:'EVOLUTION_OWNER_UNVERIFIED'});
+  await expect(api.ownerPhone(c)).rejects.toMatchObject({code:'EVOLUTION_OWNER_UNVERIFIED'});
  });
  it('accepts only bounded PNG data and rejects invalid or non-image URLs',()=>{
   expect(evolutionQr({base64:qr})).toBe(qr);
