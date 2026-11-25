@@ -1,0 +1,77 @@
+# Dedicated Evolution candidate; never share the internal FM database, keys, or networks.
+# Operator must verify image provenance/digests, render config privately and certify before attaching commercial app.
+services:
+  evolution-postgres:
+    image: "${EVOLUTION_POSTGRES_IMAGE:?Pinned PostgreSQL digest required}"
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 0.75
+    environment:
+      POSTGRES_DB: evolution_commercial
+      POSTGRES_USER: evolution_commercial
+      POSTGRES_PASSWORD_FILE: /run/secrets/evolution-postgres-password
+    volumes:
+      - evolution_pg_data:/var/lib/postgresql/data
+      - "${EVOLUTION_POSTGRES_PASSWORD_FILE:?Private secret file required}:/run/secrets/evolution-postgres-password:ro"
+    networks: [provider-backend]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U evolution_commercial -d evolution_commercial"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  evolution-provider:
+    image: "${EVOLUTION_PROVIDER_IMAGE:?Verified candidate image required}"
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+    cpus: 1.5
+    env_file:
+      - "${EVOLUTION_PROVIDER_ENV_FILE:?Private environment file required}"
+    volumes:
+      - evolution_instances:/evolution/instances
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+    networks: [provider-backend, provider-egress]
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:8080/',{signal:AbortSignal.timeout(3000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+  evolution-gateway:
+    image: "${EVOLUTION_GATEWAY_IMAGE:?Pinned gateway digest required}"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "101:101"
+    mem_limit: 128m
+    cpus: 0.25
+    entrypoint: ["nginx","-g","daemon off;"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    volumes:
+      - "${EVOLUTION_GATEWAY_CONF:?Reviewed nginx configuration required}:/etc/nginx/nginx.conf:ro"
+      - "${EVOLUTION_TLS_CERT_FILE:?Private TLS certificate required}:/run/evolution-tls/server.crt:ro"
+      - "${EVOLUTION_TLS_KEY_FILE:?Private TLS key required}:/run/evolution-tls/server.key:ro"
+    depends_on:
+      evolution-provider:
+        condition: service_healthy
+    networks:
+      provider-backend: {}
+      commercial-private:
+        aliases: [evolution-app.atendevendeia.com.br]
+networks:
+  provider-backend:
+    internal: true
+  provider-egress: {}
+  commercial-private:
+    name: t13-evolution-commercial-private
+    internal: true
+volumes:
+  evolution_pg_data:
+  evolution_instances:
