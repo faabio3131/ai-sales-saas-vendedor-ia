@@ -184,6 +184,7 @@ jobs:
           # Keep new T13 recovery emulator tests isolated from T10's 8-way
           # transaction contention, so CI cannot manufacture emulator lock timeouts.
           npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
+          npm test -- tests/t13EvolutionFirestoreEmulator.test.ts
           npm test -- tests/t13FinancialEmulator.test.ts
       - name: T13 Firestore candidate rules deny direct client access
         env:
