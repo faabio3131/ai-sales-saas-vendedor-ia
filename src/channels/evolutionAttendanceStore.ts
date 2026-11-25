@@ -159,7 +159,7 @@ export class FirestoreEvolutionAttendanceStore implements AttendanceStore{
     if(bound(b.data(),j)&&b.get('leaseId')===j.claimId)tx.update(r.binding,{leaseId:'',leaseUntil:0,updatedAt:timestamp});
    }else if(state==='SENT'||state==='UNKNOWN'||out.exists)throw bad();
    if(c.get('tenantId')===j.tenantId&&c.get('customerId')===j.customerId){
-    if(state==='HANDOFF'||state==='UNKNOWN')tx.update(r.conversation,{handlingMode:'HANDOFF',updatedAt:timestamp});
+    if((state==='HANDOFF'||state==='UNKNOWN')&&c.get('handlingMode')==='AI')tx.update(r.conversation,{handlingMode:'HANDOFF',updatedAt:timestamp});
     else if(state==='SENT')tx.update(r.conversation,{lastMessageAt:c.get('lastMessageAt')>timestamp?c.get('lastMessageAt'):timestamp,updatedAt:timestamp});
    }
    tx.update(r.inbox,{state,finishedAt:timestamp,leaseUntil:0});
