@@ -4,7 +4,7 @@ import {channelDocId,channelError} from './whatsappConnections';
 
 export type EvolutionState='open'|'close'|'connecting';
 export interface EvolutionCredential {
- tenantId:string;unitId:string;instanceName:string;apiKey:string;webhookToken:string;
+ tenantId:string;unitId:string;instanceName:string;apiKey:string;webhookToken:string;expectedOwnerPhone:string;
 }
 export interface EvolutionVault {load(t:string,u:string):Promise<EvolutionCredential|null>;}
 const validSecret=(s:unknown):s is string=>typeof s==='string'&&/^[A-Za-z0-9_=-]{32,256}$/.test(s);
@@ -22,9 +22,10 @@ function object(x:unknown):Record<string,unknown>{
 export function validateEvolutionCredential(t:string,u:string,raw:unknown):EvolutionCredential {
  const x=object(raw);
  if(x.tenantId!==t||x.unitId!==u||x.instanceName!==evolutionInstance(t,u)||
-  !validSecret(x.apiKey)||!validSecret(x.webhookToken)||x.apiKey===x.webhookToken)
+  !validSecret(x.apiKey)||!validSecret(x.webhookToken)||x.apiKey===x.webhookToken||
+  typeof x.expectedOwnerPhone!=='string'||!/^55[1-9][0-9]{9,10}$/.test(x.expectedOwnerPhone))
   throw channelError('EVOLUTION_VAULT_BINDING_MISMATCH');
- return {tenantId:t,unitId:u,instanceName:x.instanceName as string,apiKey:x.apiKey,webhookToken:x.webhookToken};
+ return {tenantId:t,unitId:u,instanceName:x.instanceName as string,apiKey:x.apiKey,webhookToken:x.webhookToken,expectedOwnerPhone:x.expectedOwnerPhone};
 }
 /** Per-unit credential. No global administrator key in the app. */
 export class GoogleEvolutionVault implements EvolutionVault{
@@ -75,9 +76,9 @@ export function evolutionQr(value:unknown):string{
 }
 export class EvolutionV2Client{
  constructor(private readonly origin:string,private readonly fetchImpl:typeof fetch=fetch){}
- private async call(c:EvolutionCredential,method:string,route:string,body?:object){
+ private async callRaw(c:EvolutionCredential,method:string,route:string,body?:object,fetchInstance=false):Promise<unknown>{
   if(c.instanceName!==evolutionInstance(c.tenantId,c.unitId))throw channelError('EVOLUTION_SCOPE_MISMATCH');
-  const url=evolutionOrigin(this.origin)+route+'/'+c.instanceName;
+  const url=evolutionOrigin(this.origin)+route+(fetchInstance?'?instanceName='+encodeURIComponent(c.instanceName):'/'+c.instanceName);
   let response:Response;
   try{response=await this.fetchImpl(url,{method,headers:{apikey:c.apiKey,'Content-Type':'application/json'},
    ...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(8000)});}
@@ -89,8 +90,20 @@ export class EvolutionV2Client{
    size+=item.value.byteLength;if(size>256000){await reader.cancel();throw channelError('EVOLUTION_RESPONSE_LIMIT','PROVIDER');}
    chunks.push(item.value);}}
   finally{reader.releaseLock();}
-  try{return object(JSON.parse(Buffer.concat(chunks).toString('utf8')));}
+  try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}
   catch{throw channelError('EVOLUTION_RESPONSE_INVALID','PROVIDER');}
+ }
+ private async call(c:EvolutionCredential,method:string,route:string,body?:object){
+  return object(await this.callRaw(c,method,route,body));
+ }
+ async ownerPhone(c:EvolutionCredential):Promise<string>{
+  const rows=await this.callRaw(c,'GET','/instance/fetchInstances',undefined,true);
+  if(!Array.isArray(rows)||rows.length!==1)throw channelError('EVOLUTION_OWNER_UNVERIFIED','PROVIDER');
+  const row=object(rows[0]);
+  const phone=typeof row.ownerJid==='string'?/^([1-9][0-9]{9,14})(?::[0-9]+)?@s\.whatsapp\.net$/.exec(row.ownerJid)?.[1]:undefined;
+  if(row.name!==c.instanceName||row.connectionStatus!=='open'||!phone||phone!==c.expectedOwnerPhone)
+   throw channelError('EVOLUTION_OWNER_UNVERIFIED','PROVIDER');
+  return phone;
  }
  async state(c:EvolutionCredential):Promise<EvolutionState>{
   const root=await this.call(c,'GET','/instance/connectionState'),i=object(root.instance);
