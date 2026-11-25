@@ -8,7 +8,7 @@ import {FirestoreSubscriptionRepository} from '../plans/firestoreRepository';
 import type {TenantContext} from '../types/contracts';
 import {channelDocId,channelError,FirestoreWhatsAppConnectionStore} from './whatsappConnections';
 import {EvolutionV2Client,GoogleEvolutionVault,evolutionInstance,evolutionTokenEqual,evolutionEventId,
- type EvolutionVault,type EvolutionCredential} from './evolutionClient';
+ type EvolutionVault} from './evolutionClient';
 
 export type EvolutionStatus='DISABLED'|'NOT_PROVISIONED'|'DISCONNECTED'|'PAIRING'|'CONNECTED';
 export type EvolutionOverview={status:EvolutionStatus;connected:boolean;qrCode?:string;expiresInSeconds?:number;commercialEnabled:false};
