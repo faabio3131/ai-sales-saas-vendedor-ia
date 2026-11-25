@@ -1,5 +1,6 @@
 import {useEffect,useState,type FormEvent} from 'react';
 import {CreditCard,MessageCircle,ShieldCheck} from 'lucide-react';
+import {EvolutionConnectionCard} from './EvolutionConnectionCard';
 
 type PaymentStatus='PENDING_VERIFICATION'|'ACTIVE'|'DISABLED';
 interface ProviderInfo{id:string;displayName:string;status:string;kind:string;}
@@ -87,10 +88,10 @@ export function ProviderConnectionPanel({tenantId,role}:{tenantId:string;role:st
   finally{setBusy(false);}
  }
  const field='mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white';
- const label='text-xs text-slate-400';
+ const label='text-sm text-slate-300';
  return <section className="mt-6 rounded-3xl border border-sky-500/20 bg-slate-900/65 p-5 sm:p-6" aria-label="Integrações e credenciais externas">
   <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
-   <ShieldCheck className="h-5 w-5 text-sky-300"/> Provedores e canais da empresa — T08.2
+   <ShieldCheck className="h-5 w-5 text-sky-300"/> Canais de atendimento e recebimentos
   </h2>
   <p className="mt-2 text-sm text-slate-400">Os identificadores são configuráveis para cada empresa e unidade.
    Chaves, tokens e certificados nunca são enviados por este formulário: ficam no cofre operacional.
@@ -104,7 +105,8 @@ export function ProviderConnectionPanel({tenantId,role}:{tenantId:string;role:st
   </form>
   {error&&<p className="mt-3 text-sm text-rose-300" role="alert">{error}</p>}
   {notice&&<p className="mt-3 text-sm text-sky-300" role="status">{notice}</p>}
-  <div className="mt-4 grid gap-4 md:grid-cols-2">
+  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+   <EvolutionConnectionCard key={tenantId+'-'+unitId} tenantId={tenantId} unitId={unitId}/>
    <article className="rounded-xl border border-slate-800 p-4">
     <h3 className="flex items-center gap-2 font-semibold text-white"><CreditCard className="h-4 w-4"/> Recebimento / Pix</h3>
     <p className="mt-1 text-xs text-slate-400">Provedores com adaptador implementado. O titular do recebimento deve ser validado fora do painel.</p>
@@ -117,7 +119,7 @@ export function ProviderConnectionPanel({tenantId,role}:{tenantId:string;role:st
      </label>
      <label className={label}>ID do recebedor no provedor
       <input className={field} value={recipientId} maxLength={140}
-       onChange={e=>setRecipientId(e.target.value)} placeholder="Identificador informado pelo PSP"/>
+       onChange={e=>setRecipientId(e.target.value)} placeholder="Identificador informado pelo provedor"/>
      </label>
      <button disabled={busy} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
       Solicitar vinculação segura
@@ -132,14 +134,14 @@ export function ProviderConnectionPanel({tenantId,role}:{tenantId:string;role:st
     </div>
    </article>
    <article className="rounded-xl border border-slate-800 p-4">
-    <h3 className="flex items-center gap-2 font-semibold text-white"><MessageCircle className="h-4 w-4"/> WhatsApp Cloud API</h3>
-    <p className="mt-1 text-xs text-slate-400">Use os IDs oficiais da conta Meta; a assinatura e os tokens serão configurados separadamente.</p>
+    <h3 className="flex items-center gap-2 font-semibold text-white"><MessageCircle className="h-4 w-4"/> WhatsApp oficial (Meta)</h3>
+    <p className="mt-1 text-xs text-slate-400">Opção alternativa ao QR Code. Use os identificadores da conta empresarial Meta.</p>
     <form className="mt-3 space-y-3" onSubmit={e=>void submit(e,'WHATSAPP')}>
-     <label className={label}>Phone Number ID
+     <label className={label}>ID do número de telefone
       <input className={field} value={phoneNumberId} maxLength={31}
        onChange={e=>setPhoneNumberId(e.target.value)}/>
      </label>
-     <label className={label}>WhatsApp Business Account ID (WABA)
+     <label className={label}>ID da conta empresarial WhatsApp (WABA)
       <input className={field} value={wabaId} maxLength={31}
        onChange={e=>setWabaId(e.target.value)}/>
      </label>
