@@ -99,14 +99,14 @@ async function run(){
  }
  const oldConfirm=window.confirm;
  try{
-  let dialogs=0;window.confirm=()=>{dialogs++;return false;};
+  let dialogs=0;const dialogCount=()=>dialogs;window.confirm=()=>{dialogs++;return false;};
   const before=evoCalls().length;
   flushSync(()=>button('Desconectar').click());
-  check(dialogs===1&&evoCalls().length===before&&idle()&&statusText()==='Sessão conectada','cancelled logout mutated');
+  check(dialogCount()===1&&evoCalls().length===before&&idle()&&statusText()==='Sessão conectada','cancelled logout mutated');
   window.confirm=()=>{dialogs++;return true;};
   await clickAction('Desconectar','POST','/main/disconnect');
   await settled(()=>statusText()==='Desconectado','logout did not settle');
-  check(dialogs===2,'logout confirmation not required');
+  check(dialogCount()===2,'logout confirmation not required');
  }finally{window.confirm=oldConfirm;}
  hold=true;await clickAction('Verificar conexão','GET','/main');await until(()=>!!held,'old request missing');
  mount('tenant-b','OWNER');
