@@ -322,3 +322,8 @@ A autorização de deploy anteriormente registrada não substitui a certificaç�
 - Pagamentos legados, T04 e T12: as novas operações com o resolver canônico registram hash de vínculo de tenant, provedor, destinatário, referência de cofre e versão. Operações antigas sem vínculo ou com conexão rotacionada passam a exigir investigação humana, jamais PSP GET/refund contra outra conta. A criação com adaptadores mock não substitui homologação.
 - Handoff fiscal: conflito de idempotência detectado e criação transacional em Firestore. Nenhuma emissão fiscal real foi habilitada.
 - **Não entregue:** AT-002 cobertura de consolidação multissetorial, AT-004 supply chain, AT-005 replay distribuído, AT-008 integração fiscal total, AT-009 testes e release; os gates completos e a revisão independente permanecem obrigatórios. Nenhum merge ou deploy autorizado por esta evidência.
+
+### 25/11/2026 — T13.7: reauditoria Evolution, PR #38 reprovada
+- Parecer independente sobre HEAD d527edc6005d82aa538765674f09b017c4f4b0b6 (CI 45730566599) registrou 3 altos, 4 médios e 4 baixos. Gate de merge BLOQUEADO.
+- Correções candidatas: preservação de sessão e exclusividade Meta, separação de leases, recuperação e backoff, ordenação inbound, UX, ADR-010, topologia, testes e pacote de auditoria. Não certificadas até CI do novo HEAD e reauditoria.
+- Preservar a imagem Evolution V4 auditada, serviços FM e flags comerciais false. Índices novos exigem implantação aditiva governada. Gateway/TLS/isolamento de tokens, QR real, backup/restore, E2E e tráfego comercial permanecem gates separados; raw Trivy V4 ainda precisa ser anexado ao pacote. T14 continua bloqueada.

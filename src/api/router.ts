@@ -12,6 +12,7 @@ import {createSchedulingRouter} from '../scheduling/routes';
 import {capabilityHttpGate} from '../capabilities/httpGuard';
 import { createChannelsRouter } from '../channels/routes';
 import {createWhatsAppWebhookRouter} from '../channels/whatsappWebhooks';
+import {createEvolutionRouter,createEvolutionWebhookRouter} from '../channels/evolutionPairing';
 import { createConversationRouter } from '../conversations/routes';
 import { createCustomersRouter } from '../customers/routes';
 import { createDashboardRouter } from '../dashboard/routes';
@@ -74,6 +75,8 @@ export function createApiRouter(): Router {
   router.use('/followups', authenticationMiddleware, tenantAuthorizationMiddleware, createFollowUpsRouter());
   router.use('/recovery', authenticationMiddleware, tenantAuthorizationMiddleware, createRecoveryRouter());
   router.use('/channels/webhooks/whatsapp', createWhatsAppWebhookRouter());
+  router.use('/channels/webhooks/evolution', createEvolutionWebhookRouter());
+  router.use('/channels/evolution', authenticationMiddleware, tenantAuthorizationMiddleware, createEvolutionRouter());
   router.use('/channels', authenticationMiddleware, tenantAuthorizationMiddleware, createChannelsRouter());
   router.use('/dashboard', authenticationMiddleware, tenantAuthorizationMiddleware, createDashboardRouter());
   router.use('/finance',authenticationMiddleware,tenantAuthorizationMiddleware,capabilityHttpGate('FOOD_FINANCE'),createFinanceRouter());

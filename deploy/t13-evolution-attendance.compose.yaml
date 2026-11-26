@@ -1,0 +1,39 @@
+# Optional future certified worker. This file is not included by the current T13 deployment.
+# All external traffic is denied until separately authorized by canonical pilot gates.
+services:
+  evolution-attendance:
+    image: "${ATENDEVENDE_IMAGE:?Signed OCI image required}"
+    profiles: [evolution-attendance]
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    environment:
+      NODE_ENV: production
+      FIREBASE_PROJECT_ID: "${FIREBASE_PROJECT_ID:?Project required}"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase/service-account.json
+      PUBLIC_APP_URL: https://app.atendevendeia.com.br
+      EVOLUTION_API_ORIGIN: https://evolution-app.atendevendeia.com.br
+      NODE_EXTRA_CA_CERTS: /run/evolution/ca.crt
+      EVOLUTION_GEMINI_SECRET_FILE: /run/evolution/gemini-key
+      GEMINI_MODEL: "${EVOLUTION_GEMINI_MODEL:-gemini-3.1-flash-lite}"
+      EVOLUTION_PAIRING_ENABLED: "false"
+      EVOLUTION_INBOUND_ENABLED: "false"
+      EVOLUTION_ATTENDANCE_ENABLED: "false"
+      ATENDEVENDE_PILOT_LIVE_ENABLED: "false"
+      ATENDEVENDE_PILOT_GO_LIVE_APPROVED: "false"
+      ATENDEVENDE_PILOT_ALLOWED_UNITS: "{}"
+    volumes:
+      - "${PAYMENT_FIREBASE_CREDENTIAL_FILE:?Credential required}:/run/secrets/firebase/service-account.json:ro"
+      - "${EVOLUTION_CA_FILE:?TLS CA required}:/run/evolution/ca.crt:ro"
+      - "${EVOLUTION_GEMINI_KEY_FILE:?Exclusive AI key required}:/run/evolution/gemini-key:ro"
+    command: ["node","dist/evolution-attendance-worker.cjs"]
+    healthcheck:
+      disable: true
+    networks: [default, evolution-private]
+networks:
+  evolution-private:
+    external: true
+    name: t13-evolution-commercial-private
