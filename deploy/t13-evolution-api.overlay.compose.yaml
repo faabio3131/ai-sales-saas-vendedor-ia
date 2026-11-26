@@ -1,0 +1,16 @@
+# Opt-in overlay only after operator approval and verified TLS/token isolation.
+# The existing production deploy script does not load this overlay.
+services:
+  atendevende-api:
+    environment:
+      EVOLUTION_PAIRING_ENABLED: "${EVOLUTION_PAIRING_ENABLED:-false}"
+      EVOLUTION_API_ORIGIN: https://evolution-app.atendevendeia.com.br
+      EVOLUTION_INBOUND_ENABLED: "false"
+      NODE_EXTRA_CA_CERTS: /run/evolution/ca.crt
+    volumes:
+      - "${EVOLUTION_CA_FILE:?Private TLS CA required}:/run/evolution/ca.crt:ro"
+    networks: [default, evolution-private]
+networks:
+  evolution-private:
+    external: true
+    name: t13-evolution-commercial-private

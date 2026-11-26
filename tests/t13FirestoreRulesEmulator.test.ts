@@ -9,7 +9,8 @@ describe.skipIf(!enabled)('T13 deployed-candidate Firestore client rules securit
  for(const collection of ['payments','merchantPaymentConnections','paymentWebhookEvents',
   'governanceToolReceipts','governanceApprovals','salesFiscalHandoffs',
   'fiscalPaymentEvents','multisectorFiscalIntents','orderPaymentOutbox',
-  'verifiedWebhookDeliveries','governanceRecoveryCursors']){
+  'verifiedWebhookDeliveries','governanceRecoveryCursors','merchantEvolutionConnections',
+  'evolutionPhoneReservations','evolutionInboundInbox','evolutionContactPreferences','evolutionAttendanceOutbox']){
   it('denies anonymous direct read/write: '+collection,async()=>{
    const url=base+'/'+collection+'/crossTenantRestricted';
    const read=await fetch(url);

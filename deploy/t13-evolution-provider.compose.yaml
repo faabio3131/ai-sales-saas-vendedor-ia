@@ -38,6 +38,11 @@ services:
     cpus: 1.5
     env_file:
       - "${EVOLUTION_PROVIDER_ENV_FILE:?Private environment file required}"
+    # Override provider-file defaults; the V4 image has its own audited log sanitization.
+    environment:
+      LOG_LEVEL: "ERROR"
+      LOG_BAILEYS: "error"
+      WEBHOOK_GLOBAL_ENABLED: "false"
     volumes:
       - evolution_instances:/evolution/instances
     depends_on:
@@ -67,6 +72,8 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     user: "101:101"
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "443"
     mem_limit: 128m
     cpus: 0.25
     entrypoint: ["nginx","-g","daemon off;"]
@@ -78,6 +85,11 @@ services:
     depends_on:
       evolution-provider:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t -q && test \"$(wget -qO- http://127.0.0.1:8081/healthz)\" = ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     networks:
       provider-backend: {}
       commercial-private:

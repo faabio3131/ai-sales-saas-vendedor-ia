@@ -29,23 +29,30 @@ export function validateEvolutionCredential(t:string,u:string,raw:unknown):Evolu
 }
 /** Per-unit credential. No global administrator key in the app. */
 export class GoogleEvolutionVault implements EvolutionVault{
- constructor(private readonly fetchImpl:typeof fetch=fetch){}
+ constructor(private readonly fetchImpl:typeof fetch=fetch,
+  private readonly accessToken:()=>Promise<string>=async()=>(await applicationDefault().getAccessToken()).access_token){}
  async load(t:string,u:string):Promise<EvolutionCredential|null>{
   const project=process.env.FIREBASE_PROJECT_ID;
   if(!project||!/^[a-z][a-z0-9-]{4,62}$/.test(project))throw channelError('EVOLUTION_PROJECT_INVALID');
   const ref='projects/'+project+'/secrets/'+evolutionSecretId(t,u)+'/versions/latest';
   let response:Response;
   try{
-   const token=(await applicationDefault().getAccessToken()).access_token;
+   const token=await this.accessToken();
    response=await this.fetchImpl('https://secretmanager.googleapis.com/v1/'+ref+':access',{
     headers:{Authorization:'Bearer '+token},redirect:'error',signal:AbortSignal.timeout(8000)});
   }catch{throw channelError('EVOLUTION_VAULT_UNAVAILABLE','PROVIDER');}
   if(response.status===404)return null;
   if(!response.ok)throw channelError('EVOLUTION_VAULT_DENIED','PROVIDER');
-  const data=object(await response.json());
-  const payload=object(data.payload);
-  if(typeof payload.data!=='string'||payload.data.length>20000)throw channelError('EVOLUTION_VAULT_INVALID');
-  return validateEvolutionCredential(t,u,JSON.parse(Buffer.from(payload.data,'base64').toString('utf8')));
+  let raw:unknown;
+  try{
+   const data=object(await response.json()),payload=object(data.payload);
+   if(typeof payload.data!=='string'||payload.data.length>20000)throw Error('invalid payload');
+   const decoded=Buffer.from(payload.data,'base64');
+   if(decoded.toString('base64')!==payload.data)throw Error('invalid encoding');
+   raw=JSON.parse(decoded.toString('utf8'));
+   if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('invalid credential shape');
+  }catch{throw channelError('EVOLUTION_VAULT_INVALID');}
+  return validateEvolutionCredential(t,u,raw);
  }
 }
 export function evolutionOrigin(value:string|undefined):string{

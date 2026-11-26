@@ -17,7 +17,7 @@ const groups=[
  ['03_FISCAL_AGENDAMENTO_VAREJO',/^src\/(?:fiscal|scheduling|retail)\//],
  ['04_RESTANTE_SRC',/^src\//],
  ['05_TESTES_T13',/^tests\/(?:t13|payment|fiscalHandoff|t07Governance|t04OrderPayments)/],
- ['06_SCRIPTS_SEGURANCA_CI_DEPLOY',/^(?:scripts\/|deploy\/|cognitive_service\/|\.github\/workflows\/|\.semgrep\/|Dockerfile$|firebase\.json$|package\.json$)/]
+ ['06_SCRIPTS_SEGURANCA_CI_DEPLOY',/^(?:scripts\/|deploy\/|cognitive_service\/|\.github\/workflows\/|\.semgrep\/|docs\/ADR-010_T13_EVOLUTION_PRIMARY_CHANNEL\.md$|docs\/CRONOGRAMA_MESTRE_ATENDEVENDEIA_COM_TRAVA\.md$|server\.ts$|Dockerfile$|firebase\.json$|package\.json$)/]
 ];
 function discover(dir,prefix){
  if(!fs.existsSync(dir))return[];
@@ -31,17 +31,20 @@ function discover(dir,prefix){
 function allowed(p){
  if(p.startsWith('src/'))return /\.(?:ts|tsx|css)$/.test(p);
  if(p.startsWith('tests/'))return /^tests\/(?:t13|payment|fiscalHandoff|t07Governance|t04OrderPayments).*\.test\.ts$/.test(p);
- if(p.startsWith('scripts/'))return /^scripts\/(?:t13|paymentReconciliationWorker|orderPaymentWorkers|fulfillmentWorker)/.test(p)&&/\.(?:mjs|js|ts|py|sh)$/.test(p);
+ if(p.startsWith('scripts/'))return /^scripts\/(?:t13|paymentReconciliationWorker|orderPaymentWorkers|fulfillmentWorker|evolutionAttendanceWorker)/.test(p)&&/\.(?:mjs|js|ts|py|sh)$/.test(p);
  if(p.startsWith('cognitive_service/'))return /\.py$/.test(p)||p==='cognitive_service/Dockerfile';
- if(p.startsWith('deploy/'))return /\.(?:yml|yaml|rules|json|sh)$/.test(p);
+ if(p.startsWith('deploy/'))return /\.(?:yml|yaml|rules|json|sh|conf)$/.test(p);
  if(p.startsWith('.github/workflows/'))return /\.ya?ml$/.test(p);
  if(p.startsWith('.semgrep/'))return /\.ya?ml$/.test(p);
- return ['Dockerfile','firebase.json','package.json'].includes(p);
+ return ['Dockerfile','firebase.json','package.json','server.ts','docs/ADR-010_T13_EVOLUTION_PRIMARY_CHANNEL.md','docs/CRONOGRAMA_MESTRE_ATENDEVENDEIA_COM_TRAVA.md'].includes(p);
 }
 function digest(bytes){return createHash('sha256').update(bytes).digest('hex');}
 const paths=['src','tests','scripts','deploy','cognitive_service','.github/workflows','.semgrep']
- .flatMap(x=>discover(x,x)).concat(['Dockerfile','firebase.json','package.json'].filter(fs.existsSync))
+ .flatMap(x=>discover(x,x)).concat(['Dockerfile','firebase.json','package.json','server.ts','docs/ADR-010_T13_EVOLUTION_PRIMARY_CHANNEL.md','docs/CRONOGRAMA_MESTRE_ATENDEVENDEIA_COM_TRAVA.md'].filter(fs.existsSync))
  .filter(allowed).sort();
+for(const required of ['server.ts','deploy/t13-evolution-gateway.conf','docs/ADR-010_T13_EVOLUTION_PRIMARY_CHANNEL.md','scripts/evolutionAttendanceWorker.ts']){
+ if(fs.existsSync(required)&&!paths.includes(required))throw Error('T13_REQUIRED_SOURCE_OMITTED:'+required);
+}
 if(paths.length<80||new Set(paths).size!==paths.length)
  throw Error('T13_INCOMPLETE_OR_DUPLICATE_AUDIT_FILES');
 fs.mkdirSync(OUT,{recursive:true});
@@ -88,6 +91,6 @@ fs.writeFileSync(path.join(OUT,'LEIA_PRIMEIRO.md'),
  'Repository: '+repo+'\nExact SHA: '+sha+'\n\n'+
  'Leia TODOS os arquivos de cada grupo, nao apenas o indice. Cada trecho possui caminhos e numeros de linha. '+
  'O MANIFEST_SHA256.json documenta integridade dos arquivos e das partes. '+
- 'Nao use exports da branch main para certificar a PR 29. '+
+ 'Nao use exports da branch main para certificar uma PR candidata. '+
  'Nao ha segredo real intencionalmente incluído; arquivos .env e credenciais nao sao selecionados.\n');
 console.log(JSON.stringify({status:'T13_SOURCE_EXPORT_NOT_A_CERTIFICATION',source_sha:sha,files:files.length,chunks:chunks.length}));

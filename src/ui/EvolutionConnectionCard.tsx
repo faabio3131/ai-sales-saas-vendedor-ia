@@ -19,6 +19,7 @@ const messages:Record<string,string>={
  EVOLUTION_LEASE_EXPIRED:'A operação expirou. Verifique o estado da conexão.',
  EVOLUTION_UNREACHABLE:'Evolution temporariamente indisponível. Tente novamente.',
  EVOLUTION_VAULT_UNAVAILABLE:'O cofre de credenciais está indisponível.',
+ EVOLUTION_VAULT_INVALID:'A credencial está inválida. Solicite revisão da configuração segura.',
  EVOLUTION_VAULT_BINDING_MISMATCH:'A credencial não corresponde a esta unidade.',
  EVOLUTION_LOGOUT_UNCONFIRMED:'O encerramento remoto não foi confirmado. Verifique o estado antes de tentar novamente.',
 };
@@ -62,7 +63,7 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
   <h3 className="flex items-center gap-2 text-lg font-semibold text-white"><QrCode className="h-5 w-5 text-emerald-400"/> WhatsApp por QR Code</h3>
   <p className="mt-1 text-sm font-medium text-emerald-300">Evolution API · opção principal</p>
   <p className="mt-2 text-sm text-slate-300">Conecte o número da sua empresa pelo celular. A sessão é exclusiva desta unidade.</p>
-  <p className="mt-3 text-sm text-slate-200" role="status">{busy?'Consultando Evolution...':data?labels[data.status]:'Estado não verificado'}</p>
+  <p className="mt-3 text-sm text-slate-200" role="status">{busy?'Consultando Evolution...':data?(error?'Último estado conhecido: ':'')+labels[data.status]:'Estado não verificado'}</p>
   {error&&<p role="alert" className="mt-2 text-sm text-rose-300">{error}</p>}
   {data?.qrCode&&remaining>0&&<div className="mt-3 rounded-lg bg-white p-3">
    <img alt="QR Code temporário para conectar o WhatsApp" src={data.qrCode} className="mx-auto h-48 w-48" />

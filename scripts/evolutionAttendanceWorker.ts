@@ -1,4 +1,4 @@
-import {readFileSync,statSync} from 'node:fs';
+import {readFileSync,lstatSync} from 'node:fs';
 import {createEvolutionAttendanceRuntime} from '../src/channels/evolutionAttendanceRuntime';
 async function main(){
  if(process.env.EVOLUTION_ATTENDANCE_ENABLED!=='true'){
@@ -7,8 +7,8 @@ async function main(){
  const env={...process.env};
  const file=env.EVOLUTION_GEMINI_SECRET_FILE;
  if(file){
-  const st=statSync(file);
-  if(!st.isFile()||(st.mode&0o077)!==0||st.size<20||st.size>1024)throw Error('EVOLUTION_AI_SECRET_FILE_INVALID');
+  const st=lstatSync(file);
+  if(!st.isFile()||st.isSymbolicLink()||(st.mode&0o077)!==0||st.size<20||st.size>1024)throw Error('EVOLUTION_AI_SECRET_FILE_INVALID');
   env.GEMINI_API_KEY=readFileSync(file,'utf8').trim();
  }
  const worker=createEvolutionAttendanceRuntime(env);

@@ -1,6 +1,6 @@
 import {readFileSync} from 'node:fs';
 import {describe,it,expect,vi} from 'vitest';
-import {EvolutionV2Client,evolutionInstance,evolutionSecretId,evolutionOrigin,evolutionQr,validateEvolutionCredential,
+import {GoogleEvolutionVault,EvolutionV2Client,evolutionInstance,evolutionSecretId,evolutionOrigin,evolutionQr,validateEvolutionCredential,
  type EvolutionCredential} from '../src/channels/evolutionClient';
 import {EvolutionPairingService,parseEvolutionInbound,type EvolutionStore} from '../src/channels/evolutionPairing';
 import type {TenantContext} from '../src/types/contracts';
@@ -23,7 +23,8 @@ function setup(){
     ...(binding?.ownerPhone?{ownerPhone:binding.ownerPhone}:{}),leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()};
   },
   async finish(s,leaseId,status,ownerPhone){if(!binding||binding.tenantId!==s.tenantId||binding.unitId!==s.unitId||binding.leaseId!==leaseId)throw Error('scope or lease');
-   binding={...binding,...(status===undefined?{}:{status}),leaseId:'',leaseUntil:0,...(ownerPhone?{ownerPhone}:{})};},
+   binding={...binding,...(status===undefined?{}:{status}),leaseId:'',leaseUntil:0,...(ownerPhone?{ownerPhone}:{})};
+   if(status==='DISCONNECTED')delete binding.ownerPhone;},
   async get(s){return binding?.tenantId===s.tenantId&&binding.unitId===s.unitId?binding:null;},
   async persist(s,id){const key=evolutionInstance(s.tenantId,s.unitId)+id;if(seen.has(key))return false;seen.add(key);return true;},
  };
@@ -48,6 +49,21 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   expect(()=>validateEvolutionCredential(t,u,{...c,webhookToken:c.apiKey})).toThrow();
   expect(()=>evolutionOrigin('https://api.atendevendeia.com.br')).toThrow();
   expect(()=>evolutionOrigin(origin+'/path')).toThrow();
+ });
+ it('distinguishes malformed vault payload, unavailable access and scoped credential mismatch',async()=>{
+  const prior=process.env.FIREBASE_PROJECT_ID;process.env.FIREBASE_PROJECT_ID='demo-evolution-ci';
+  try{
+   const load=vi.fn<typeof fetch>();
+   const vault=new GoogleEvolutionVault(load,async()=> 'fixture-access-token');
+   load.mockResolvedValueOnce(response({payload:{data:Buffer.from('not-json').toString('base64')}}));
+   await expect(vault.load(t,u)).rejects.toMatchObject({code:'EVOLUTION_VAULT_INVALID'});
+   load.mockResolvedValueOnce(response({payload:{data:Buffer.from(JSON.stringify(credentials('other-tenant',u))).toString('base64')}}));
+   await expect(vault.load(t,u)).rejects.toMatchObject({code:'EVOLUTION_VAULT_BINDING_MISMATCH'});
+   load.mockResolvedValueOnce(response({payload:{data:Buffer.from(JSON.stringify(c)).toString('base64')}}));
+   expect(await vault.load(t,u)).toEqual(c);
+   load.mockResolvedValueOnce(response({},404));expect(await vault.load(t,u)).toBeNull();
+   load.mockRejectedValueOnce(Error('transport'));await expect(vault.load(t,u)).rejects.toMatchObject({code:'EVOLUTION_VAULT_UNAVAILABLE'});
+  }finally{if(prior===undefined)delete process.env.FIREBASE_PROJECT_ID;else process.env.FIREBASE_PROJECT_ID=prior;}
  });
  it('requires exact verified owner number from an instance-scoped provider readback',async()=>{
   const mock=vi.fn<typeof fetch>().mockResolvedValueOnce(response([{name:c.instanceName,connectionStatus:'open',ownerJid:c.expectedOwnerPhone+':1@s.whatsapp.net'}]))
@@ -118,6 +134,15 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   x.client.state.mockRejectedValueOnce(Error('state timeout'));
   await expect(x.service.confirm(ctx(),u)).rejects.toThrow('state timeout');
   expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'CONNECTED',leaseId:'',leaseUntil:0});
+ });
+ it('does not turn a transient closed observation into a verified logout',async()=>{
+  const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);
+  x.client.state.mockResolvedValue('close');
+  expect(await x.service.confirm(ctx(),u)).toMatchObject({status:'UNKNOWN'});
+  expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'UNKNOWN',ownerPhone:c.expectedOwnerPhone});
+  await x.service.disconnect(ctx(),u);
+  expect(x.client.logout).toHaveBeenCalledWith(c);
+  expect(await x.store.get({tenantId:t,unitId:u})).not.toHaveProperty('ownerPhone');
  });
  it('drops authenticated status and outgoing echoes before provider readback',async()=>{
   const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);

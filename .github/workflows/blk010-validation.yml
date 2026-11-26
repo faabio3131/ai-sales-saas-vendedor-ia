@@ -94,12 +94,61 @@ jobs:
           a.equal(api.ports[0].host_ip,'127.0.0.1');
           for(const k of ['VITE_FIREBASE_API_KEY','VITE_FIREBASE_AUTH_DOMAIN','VITE_FIREBASE_PROJECT_ID','VITE_FIREBASE_APP_ID']) a.equal(api.environment[k],process.env[k]);
           a.equal(api.environment.VITE_FIREBASE_PROJECT_ID,api.environment.FIREBASE_PROJECT_ID);
+          a.equal(api.environment.EVOLUTION_PAIRING_ENABLED,'false');
+          a.equal(api.environment.EVOLUTION_INBOUND_ENABLED,'false');
           a.equal(api.environment.ATENDEVENDE_PILOT_LIVE_ENABLED,'false');
           a.equal(api.environment.ATENDEVENDE_PILOT_GO_LIVE_APPROVED,'false');
           a.equal(api.environment.ATENDEVENDE_PILOT_ALLOWED_UNITS,'{}');
           a.equal(api.environment.SESSION_SECRET_FILE,'/run/secrets/atendevende/session');
           a.ok(api.volumes.find(v=>v.target==='/run/secrets/atendevende/session'&&v.read_only));
           a.ok(worker.volumes.find(v=>v.target==='/run/secrets/firebase/service-account.json'&&v.read_only));
+          NODE
+      - name: Evolution candidate topology and disabled flags
+        env:
+          ATENDEVENDE_IMAGE: ghcr.io/example/atendevende@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          FIREBASE_PROJECT_ID: demo-t13
+          PUBLIC_APP_URL: https://staging.invalid
+          VITE_FIREBASE_API_KEY: ci-public-web-config
+          VITE_FIREBASE_AUTH_DOMAIN: demo-t13.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: demo-t13
+          VITE_FIREBASE_APP_ID: '1:123:web:abc'
+          T13_SESSION_SECRET_FILE: /tmp/ci-session-mount
+          PAYMENT_FIREBASE_CREDENTIAL_FILE: /tmp/ci-firebase-identity.json
+          EVOLUTION_POSTGRES_IMAGE: postgres@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          EVOLUTION_PROVIDER_IMAGE: candidate-evolution-ci
+          EVOLUTION_GATEWAY_IMAGE: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          EVOLUTION_PAIRING_ENABLED: 'false'
+        run: |
+          set -euo pipefail
+          TMP_EVO=$(mktemp -d)
+          trap 'rm -rf "$TMP_EVO"' EXIT
+          export EVOLUTION_PROVIDER_ENV_FILE="$TMP_EVO/provider.env"
+          export EVOLUTION_POSTGRES_PASSWORD_FILE="$TMP_EVO/pg" EVOLUTION_TLS_CERT_FILE="$TMP_EVO/server.crt" EVOLUTION_TLS_KEY_FILE="$TMP_EVO/server.key"
+          export EVOLUTION_CA_FILE="$TMP_EVO/ca.crt" EVOLUTION_GEMINI_KEY_FILE="$TMP_EVO/ai"
+          export EVOLUTION_GATEWAY_CONF="$PWD/deploy/t13-evolution-gateway.conf"
+          touch "$EVOLUTION_PROVIDER_ENV_FILE"
+          docker compose -f deploy/t13-evolution-provider.compose.yaml config --format json > "$TMP_EVO/provider.json"
+          docker compose --profile evolution-attendance -f deploy/t13-evolution-attendance.compose.yaml config --format json > "$TMP_EVO/worker.json"
+          docker compose -f deploy/t13-production.compose.yaml -f deploy/t13-evolution-api.overlay.compose.yaml config --format json > "$TMP_EVO/api.json"
+          node - "$TMP_EVO" <<'NODE'
+          const assert=require('node:assert/strict'),fs=require('node:fs'),root=process.argv[2];
+          const load=n=>JSON.parse(fs.readFileSync(root+'/'+n+'.json'));
+          const p=load('provider'),w=load('worker').services['evolution-attendance'],a=load('api').services['atendevende-api'];
+          assert.equal(p.networks['commercial-private'].internal,true);
+          assert.equal(p.networks['provider-backend'].internal,true);
+          for(const s of Object.values(p.services))assert.ok(!s.ports||s.ports.length===0);
+          assert.equal(p.services['evolution-provider'].environment.WEBHOOK_GLOBAL_ENABLED,'false');
+          assert.ok(p.services['evolution-gateway'].healthcheck.test.includes('CMD-SHELL'));
+          assert.equal(a.environment.EVOLUTION_PAIRING_ENABLED,'false');
+          assert.equal(a.environment.EVOLUTION_INBOUND_ENABLED,'false');
+          assert.equal(a.environment.NODE_EXTRA_CA_CERTS,'/run/evolution/ca.crt');
+          assert.ok(a.volumes.some(v=>v.target==='/run/evolution/ca.crt'&&v.read_only));
+          assert.ok(a.networks['evolution-private']);
+          for(const k of ['EVOLUTION_PAIRING_ENABLED','EVOLUTION_INBOUND_ENABLED','EVOLUTION_ATTENDANCE_ENABLED','ATENDEVENDE_PILOT_LIVE_ENABLED','ATENDEVENDE_PILOT_GO_LIVE_APPROVED'])assert.equal(w.environment[k],'false');
+          const conf=fs.readFileSync('deploy/t13-evolution-gateway.conf','utf8');
+          assert.ok(conf.includes('$http_apikey')&&conf.includes('return 401;')&&conf.includes('listen 127.0.0.1:8081;'));
+          // Config/contract proof only. Runtime nginx -t, TLS and cross-instance token proof
+          // must use the actual approved gateway image with the preserved Evolution V4.
           NODE
       - name: T13 independent Semgrep OSS SAST gate
         run: |
@@ -261,10 +310,12 @@ jobs:
           grep -qi '^x-frame-options: DENY' /tmp/headers.txt
           grep -qi '^x-request-id:' /tmp/headers.txt
           if grep -qi '^x-powered-by:' /tmp/headers.txt; then exit 1; fi
-          for PATHNAME in tenancy/context tenancy/memberships capabilities/units/main/assignment scheduling/units/main/config scheduling/units/main/bookings retail/units/main/catalog onboarding/units/main/templates onboarding/units/main/report catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness pilot/units/main/onboarding release/readiness operations/ai-readiness fulfillment/units/main/queue autonomy/units/main/policy; do
+          for PATHNAME in channels/evolution/units/main tenancy/context tenancy/memberships capabilities/units/main/assignment scheduling/units/main/config scheduling/units/main/bookings retail/units/main/catalog onboarding/units/main/templates onboarding/units/main/report catalog customers conversations leads followups recovery channels dashboard quotes payments revenue-expansion plans/plan pilot/readiness pilot/units/main/onboarding release/readiness operations/ai-readiness fulfillment/units/main/queue autonomy/units/main/policy; do
             STATUS=$(curl --silent --output /tmp/boundary.json --write-out '%{http_code}' -H 'x-tenant-id: tenant-spoofed' "http://127.0.0.1:3000/api/$PATHNAME")
             test "$STATUS" = "401"
           done
+          STATUS=$(curl --silent --output /tmp/evolution-boundary.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' http://127.0.0.1:3000/api/channels/webhooks/evolution/tenant-spoofed/main)
+          test "$STATUS" = "401"
           STATUS=$(curl --silent --output /tmp/booking-boundary.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"expectedVersion":1,"idempotencyKey":"attack"}' http://127.0.0.1:3000/api/scheduling/units/main/bookings/book_123/no-show)
           test "$STATUS" = "401"
           STATUS=$(curl --silent --output /tmp/autonomy.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-tenant-id: tenant-spoofed' -d '{"tool":"ORDER_STATUS","idempotencyKey":"attack_111","payload":{"orderId":"order_111"}}' http://127.0.0.1:3000/api/autonomy/units/main/execute)

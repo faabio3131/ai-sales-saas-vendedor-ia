@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {getFirestore} from 'firebase-admin/firestore';
+import {getFirestore,FieldValue} from 'firebase-admin/firestore';
 import {Router,type Request} from 'express';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {FirestoreBusinessProfileRepository} from '../business/firestoreRepository';
@@ -58,7 +58,17 @@ export class FirestoreEvolutionStore implements EvolutionStore{
      b.ownerPhone&&b.ownerPhone!==ownerPhone||other.get('status')==='ACTIVE')throw channelError('EVOLUTION_PHONE_OR_CHANNEL_CONFLICT','CONFLICT');
     tx.set(phone,{...s,instanceName:b.instanceName,ownerPhone,verifiedAt:new Date().toISOString()});
    }
-   tx.update(ref,{...(status===undefined?{}:{status}),leaseId:'',leaseUntil:0,updatedAt:new Date().toISOString(),...(ownerPhone?{ownerPhone}:{})});
+   // DISCONNECTED is settled only by an explicitly verified remote logout.
+   if(status==='DISCONNECTED'&&b.ownerPhone){
+    const phone=db().collection('evolutionPhoneReservations').doc(attendanceHash(b.ownerPhone));
+    const claim=await tx.get(phone);
+    if(!claim.exists||claim.get('tenantId')!==s.tenantId||claim.get('unitId')!==s.unitId||
+      claim.get('instanceName')!==b.instanceName||claim.get('ownerPhone')!==b.ownerPhone)
+     throw channelError('EVOLUTION_PHONE_OR_CHANNEL_CONFLICT','CONFLICT');
+    tx.delete(phone);
+   }
+   tx.update(ref,{...(status===undefined?{}:{status}),leaseId:'',leaseUntil:0,updatedAt:new Date().toISOString(),
+    ...(status==='DISCONNECTED'?{ownerPhone:FieldValue.delete()}:ownerPhone?{ownerPhone}:{})});
   });
  }
  async persist(s:Scope,id:string,event:EvolutionInbound){
@@ -146,7 +156,7 @@ export class EvolutionPairingService{
    await this.deps.client.verifyWebhook(c,this.deps.callback(s));
    return overview('CONNECTED');
   }
-  return overview(state==='connecting'?'PAIRING':binding?.status==='UNKNOWN'?'UNKNOWN':'DISCONNECTED');
+  return overview(state==='connecting'?'PAIRING':binding&&binding.status!=='DISCONNECTED'?'UNKNOWN':'DISCONNECTED');
  }
  async connect(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u);
@@ -179,7 +189,8 @@ export class EvolutionPairingService{
     const ownerPhone=await this.deps.client.ownerPhone(c);
     await this.deps.store.finish(s,lease,'CONNECTED',ownerPhone);return overview('CONNECTED');
    }
-   const status=state==='connecting'?'PAIRING':'DISCONNECTED';
+   // A closed observation is not an explicit logout; it could be a transient loss of connection.
+   const status=state==='connecting'?'PAIRING':'UNKNOWN';
    await this.deps.store.finish(s,lease,status);return overview(status);
   }catch(e){await this.releaseAfterFailure(s,lease);throw e;}
  }
@@ -189,7 +200,7 @@ export class EvolutionPairingService{
   const c=await this.credential(s);if(!c)return overview('NOT_PROVISIONED');
   const lease=randomUUID();await this.deps.store.acquire(s,lease,false);
   try{
-   if(await this.deps.client.state(c)!=='close')await this.deps.client.logout(c);
+   await this.deps.client.logout(c);
    // logout() itself verifies the remote close before returning.
    await this.deps.store.finish(s,lease,'DISCONNECTED');return overview('DISCONNECTED');
   }catch(e){await this.releaseAfterFailure(s,lease);throw e;}
