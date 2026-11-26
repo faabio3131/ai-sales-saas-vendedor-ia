@@ -201,6 +201,9 @@ jobs:
           ln -s "$D/test-key" "$D/test-link"
           if EVOLUTION_ATTENDANCE_ENABLED=true EVOLUTION_GEMINI_SECRET_FILE="$D/test-link" node dist/evolution-attendance-worker.cjs; then exit 1; fi
           echo EVOLUTION_WORKER_SECRET_SYMLINK_REJECTED
+          if EVOLUTION_ATTENDANCE_ENABLED=true node dist/evolution-attendance-worker.cjs --recover-only demo-atendevende-t10; then exit 1; fi
+          if EVOLUTION_ATTENDANCE_ENABLED=false node dist/evolution-attendance-worker.cjs --unknown-mode; then exit 1; fi
+          echo EVOLUTION_RECOVERY_INVALID_MODE_REJECTED
       - name: T13 upload quantitative source coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -255,6 +258,7 @@ jobs:
           # transaction contention, so CI cannot manufacture emulator lock timeouts.
           npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
           npm test -- tests/t13EvolutionFirestoreEmulator.test.ts --coverage --coverage.provider=v8 --coverage.include='src/channels/evolution*.ts' --coverage.reporter=json-summary --coverage.reportsDirectory=coverage/evolution-emulator
+          node scripts/t13CoverageGate.mjs --evolution-emulator coverage/evolution-emulator/coverage-summary.json
           npm test -- tests/t13FinancialEmulator.test.ts
       - name: Evolution upload emulator coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -1,14 +1,16 @@
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import {ProviderConnectionPanel} from '../src/ui/ProviderConnectionPanel';
-type Status='DISCONNECTED'|'PAIRING'|'CONNECTED';
+type Status='DISCONNECTED'|'PAIRING'|'CONNECTED'|'UNKNOWN';
 const root=createRoot(document.getElementById('app')!);
 const qr='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC1sAAAAASUVORK5CYII=';
 const calls:Array<{url:string;method:string;tenant:string;signal?:AbortSignal}>=[];
 let state:Status='DISCONNECTED',rejectConfirm=false,hold=false;
+let failure:'html'|'network'|'unmapped'|null=null;
+let rejectLogout=false,reconciling=false;
 let held:{resolve:(r:Response)=>void;signal?:AbortSignal}|undefined;
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
-const overview=(status:Status,withQr=false)=>json({ok:true,data:{status,connected:status==='CONNECTED',commercialEnabled:false,...(withQr?{qrCode:qr,expiresInSeconds:30}:{})}});
+const overview=(status:Status,withQr=false)=>json({ok:true,data:{status,connected:status==='CONNECTED',commercialEnabled:false,...(reconciling?{reconciliationRequired:true}:{}),...(withQr?{qrCode:qr,expiresInSeconds:30}:{})}});
 window.fetch=async(input,init)=>{
  const url=String(input),method=init?.method??'GET',tenant=new Headers(init?.headers).get('x-tenant-id')??'';
  calls.push({url,method,tenant,signal:init?.signal??undefined});
@@ -17,11 +19,21 @@ window.fetch=async(input,init)=>{
  if(url.startsWith('/api/channels/whatsapp/units/'))return json({ok:true,data:{status:'NOT_CONFIGURED',credentialConfigured:false}});
  if(!url.startsWith('/api/channels/evolution/units/'))throw Error('unexpected fixture URL');
  if(tenant==='tenant-b')return overview('DISCONNECTED');
+ if(failure){
+  const kind=failure;failure=null;
+  if(kind==='network')throw new TypeError('Failed to fetch');
+  if(kind==='html')return new Response('<html>502 Bad Gateway</html>',{status:502,headers:{'content-type':'text/html'}});
+  return json({ok:false,error:{code:'__proto__',message:'untrusted internal detail'}},500);
+ }
  if(hold&&method==='GET'){hold=false;return new Promise<Response>(resolve=>{held={resolve,signal:init?.signal??undefined};});}
  if(url.endsWith('/connect')&&method==='POST'){state='PAIRING';return overview(state,true);}
  if(url.endsWith('/confirm')&&method==='POST'){
   if(rejectConfirm){rejectConfirm=false;return json({ok:false,error:{code:'EVOLUTION_OWNER_UNVERIFIED'}},403);}
   state='CONNECTED';return overview(state);
+ }
+ if(url.endsWith('/disconnect')&&method==='POST'){
+  if(rejectLogout){rejectLogout=false;reconciling=true;state='UNKNOWN';return json({ok:false,error:{code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'}},409);}
+  state='DISCONNECTED';reconciling=false;return overview(state);
  }
  if(method==='GET')return overview(state);
  throw Error('unexpected fixture action');
@@ -64,6 +76,7 @@ async function run(){
  mount('tenant-a','STAFF');check(!card(),'staff can see owner card');
  mount('tenant-a','OWNER');
  await settled(()=>statusText()==='Desconectado','initial status');
+ check(!findButton('Desconectar')||findButton('Desconectar')?.disabled,'initial disconnected logout available');
  await clickAction('Verificar conexão','GET','/main');
  await settled(()=>statusText()==='Desconectado','read-only verify');
  await clickAction('Conectar WhatsApp','POST','/main/connect');
@@ -82,6 +95,35 @@ async function run(){
  await settled(()=>statusText()==='Sessão conectada','confirm did not connect');
  await clickAction('Verificar conexão','GET','/main');
  await settled(()=>statusText()==='Sessão conectada','connected GET');
+ for(const kind of ['html','network','unmapped'] as const){
+  failure=kind;await clickAction('Verificar conexão','GET','/main');
+  await settled(()=>card()?.querySelector('[role=alert]')?.textContent==='Não foi possível verificar a conexão. Tente novamente.','controlled Portuguese error '+kind);
+  check(statusText()==='Último estado conhecido: Sessão conectada','known state lost after '+kind);
+  await clickAction('Verificar conexão','GET','/main');
+  await settled(()=>statusText()==='Sessão conectada'&&!card()?.querySelector('[role=alert]'),'recovery after '+kind);
+ }
+ const oldConfirm=window.confirm;
+ try{
+  let dialogs=0;const dialogCount=()=>dialogs;window.confirm=()=>{dialogs++;return false;};
+  const before=evoCalls().length;
+  flushSync(()=>button('Desconectar').click());
+  check(dialogCount()===1&&evoCalls().length===before&&idle()&&statusText()==='Sessão conectada','cancelled logout mutated');
+  window.confirm=()=>{dialogs++;return true;};
+  rejectLogout=true;
+  await clickAction('Desconectar','POST','/main/disconnect');
+  await settled(()=>card()?.querySelector('[role=alert]')?.textContent?.includes('encerramento da sessão não foi comprovado'),'unsafe logout not explained');
+  check(statusText()==='Último estado conhecido: Estado remoto não confirmado','ambiguous logout falsely displayed disconnected');
+  check(card()?.textContent?.includes('A troca de canal permanece bloqueada'),'reconciliation guidance missing');
+  await clickAction('Conectar WhatsApp','POST','/main/connect');
+  await settled(()=>!!card()?.querySelector('img'),'reconciliation QR missing');
+  await clickAction('Verificar conexão','POST','/main/confirm');
+  await settled(()=>statusText()==='Sessão conectada','reconciliation did not confirm same fixture');
+  check(card()?.textContent?.includes('atendimento desta unidade fica pausado pelo servidor'),'pause guidance missing after reconnection');
+  await clickAction('Desconectar','POST','/main/disconnect');
+  await settled(()=>statusText()==='Desconectado','logout did not settle');
+  check(!findButton('Desconectar')||findButton('Desconectar')?.disabled,'final disconnected logout available');
+  check(dialogCount()===3,'logout confirmation not required');
+ }finally{window.confirm=oldConfirm;}
  hold=true;await clickAction('Verificar conexão','GET','/main');await until(()=>!!held,'old request missing');
  mount('tenant-b','OWNER');
  await settled(()=>statusText()==='Desconectado'&&evoCalls().at(-1)?.tenant==='tenant-b','new tenant status');

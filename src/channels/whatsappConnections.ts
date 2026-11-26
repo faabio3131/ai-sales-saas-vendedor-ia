@@ -20,6 +20,8 @@ export const META_ID=/^[1-9][0-9]{5,30}$/;
 export function channelError(code:string,category:'FORBIDDEN'|'CONFLICT'|'VALIDATION'|'PROVIDER'='FORBIDDEN'){
  return new ApplicationError({code,category,message:'WhatsApp channel is unavailable or its configuration is incomplete.'});
 }
+// Absent is the legacy unpaused state; malformed non-false values fail closed.
+export const evolutionReconciliationPending=(value:unknown)=>value!==undefined&&value!==false;
 export function requireExclusivePhoneClaim(
  claim:{tenantId:string;unitId:string}|undefined,tenantId:string,unitId:string){
  if(claim&&(claim.tenantId!==tenantId||claim.unitId!==unitId))
@@ -51,7 +53,7 @@ export class FirestoreWhatsAppConnectionStore implements WhatsAppConnectionStore
    if(next.status==='ACTIVE'){
     const evo=await tx.get(db().collection('merchantEvolutionConnections').doc(channelDocId(next.tenantId,next.unitId)));
     if(evo.exists&&(evo.get('tenantId')!==next.tenantId||evo.get('unitId')!==next.unitId||
-     evo.get('status')!=='DISCONNECTED'||evo.get('leaseUntil')>Date.now()||evo.get('outboundLeaseId')))
+     evo.get('status')!=='DISCONNECTED'||evo.get('ownerPhone')||evolutionReconciliationPending(evo.get('reconciliationRequired'))||evo.get('leaseUntil')>Date.now()||evo.get('outboundLeaseId')))
      throw channelError('CHANNEL_EVOLUTION_ACTIVE_CONFLICT','CONFLICT');
    }
    const data=prev.data() as WhatsAppConnection|undefined;
