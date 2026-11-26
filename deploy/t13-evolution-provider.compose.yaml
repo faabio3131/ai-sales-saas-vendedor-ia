@@ -45,11 +45,21 @@ services:
         condition: service_healthy
     networks: [provider-backend, provider-egress]
     healthcheck:
-      test: ["CMD","node","-e","fetch('http://127.0.0.1:8080/',{signal:AbortSignal.timeout(3000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      # Root GET / fetches the latest WhatsApp Web version; do not depend on internet for health.
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          const key=process.env.AUTHENTICATION_API_KEY;
+          if(!key)process.exit(1);
+          fetch('http://127.0.0.1:8080/instance/fetchInstances',{headers:{apikey:key},signal:AbortSignal.timeout(5000)})
+          .then(async r=>{if(!r.ok||!Array.isArray(await r.json()))process.exit(1)})
+          .catch(()=>process.exit(1));
       interval: 15s
-      timeout: 5s
+      timeout: 8s
       retries: 20
-      start_period: 30s
+      start_period: 120s
   evolution-gateway:
     image: "${EVOLUTION_GATEWAY_IMAGE:?Pinned gateway digest required}"
     restart: unless-stopped
