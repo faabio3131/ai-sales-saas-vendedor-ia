@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {describe,it,expect,vi} from 'vitest';
 import {EvolutionV2Client,evolutionInstance,evolutionSecretId,evolutionOrigin,evolutionQr,validateEvolutionCredential,
  type EvolutionCredential} from '../src/channels/evolutionClient';
@@ -138,5 +139,19 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   mock.mockResolvedValueOnce(response({instance:{instanceName:c.instanceName,state:'open'}}))
    .mockResolvedValueOnce(response({key:{fromMe:true,remoteJid:'5511888888888@s.whatsapp.net',id:'other'}}));
   await expect(api.sendText(c,'5511999999999','Resposta')).rejects.toMatchObject({code:'EVOLUTION_SEND_UNCERTAIN'});
+ });
+});
+
+
+describe('Evolution dedicated PostgreSQL startup gate',()=>{
+ it('waits for the final server and authenticated TCP SQL before releasing the provider',()=>{
+  const compose=readFileSync(new URL('../deploy/t13-evolution-provider.compose.yaml',import.meta.url),'utf8');
+  const postgres=compose.split('  evolution-postgres:\n')[1].split('  evolution-provider:\n')[0];
+  expect(postgres).toContain('test "$$(cat /proc/1/comm)" = postgres &&');
+  expect(postgres).toContain('PGPASSWORD="$$(cat /run/secrets/evolution-postgres-password)"');
+  expect(postgres).toContain('psql -X -h evolution-postgres -U evolution_commercial -d evolution_commercial -v ON_ERROR_STOP=1 -Atc "SELECT 1") &&');
+  expect(postgres).toContain('test "$$result" = 1');
+  expect(postgres).not.toContain('pg_isready');
+  expect(compose).toContain('evolution-postgres:\n        condition: service_healthy');
  });
 });
