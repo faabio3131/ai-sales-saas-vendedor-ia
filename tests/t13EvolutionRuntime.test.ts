@@ -7,6 +7,7 @@ import {FeatureEntitlementService} from '../src/plans/service';
 import {FirestoreWhatsAppConnectionStore,channelDocId} from '../src/channels/whatsappConnections';
 import {EvolutionV2Client,GoogleEvolutionVault,evolutionInstance} from '../src/channels/evolutionClient';
 import {attendanceHash,attendanceIds,type AttendanceJob} from '../src/channels/evolutionAttendance';
+import type {CapabilityId} from '../src/capabilities/model';
 import type {BusinessProfileRevision} from '../src/business/model';
 const fake=vi.hoisted(()=>({docs:new Map<string,Record<string,unknown>>(),reads:vi.fn()}));
 vi.mock('firebase-admin/firestore',async importOriginal=>{
@@ -47,7 +48,7 @@ function fixture(expiredFence=false){
  const finish=vi.spyOn(store,'finish').mockResolvedValue(undefined);
  vi.spyOn(store,'defer').mockResolvedValue(undefined);
  vi.spyOn(FirestoreBusinessProfileRepository.prototype,'effective').mockResolvedValue(profile);
- vi.spyOn(CapabilityRegistryService.prototype,'resolve').mockImplementation(async(ctx,unitId,capability)=>({tenantId:ctx.tenantId,unitId,capability,authorized:true,status:'ALLOWED_INTERNAL',assignmentVersion:1,commercialGoLiveAuthorized:false}));
+ vi.spyOn(CapabilityRegistryService.prototype,'resolve').mockImplementation(async(ctx,unitId,capability)=>({tenantId:ctx.tenantId,unitId,capability:capability as CapabilityId,authorized:true,status:'ALLOWED_INTERNAL',assignmentVersion:1,commercialGoLiveAuthorized:false}));
  const plan=vi.spyOn(FeatureEntitlementService.prototype,'canUse').mockResolvedValue(true);
  vi.spyOn(FirestoreWhatsAppConnectionStore.prototype,'get').mockResolvedValue(null);
  vi.spyOn(GoogleEvolutionVault.prototype,'load').mockResolvedValue(cred);
