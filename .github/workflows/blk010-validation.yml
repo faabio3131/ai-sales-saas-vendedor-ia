@@ -143,7 +143,11 @@ jobs:
           assert.equal(a.environment.EVOLUTION_INBOUND_ENABLED,'false');
           assert.equal(a.environment.NODE_EXTRA_CA_CERTS,'/run/evolution/ca.crt');
           assert.ok(a.volumes.some(v=>v.target==='/run/evolution/ca.crt'&&v.read_only));
-          assert.ok(a.networks['evolution-private']);
+          assert.ok(Object.hasOwn(a.networks,'evolution-private'));
+          assert.ok(Object.hasOwn(a.networks,'default'));
+          const privateNet=load('api').networks['evolution-private'];
+          assert.equal(privateNet.external,true);
+          assert.equal(privateNet.name,'t13-evolution-commercial-private');
           for(const k of ['EVOLUTION_PAIRING_ENABLED','EVOLUTION_INBOUND_ENABLED','EVOLUTION_ATTENDANCE_ENABLED','ATENDEVENDE_PILOT_LIVE_ENABLED','ATENDEVENDE_PILOT_GO_LIVE_APPROVED'])assert.equal(w.environment[k],'false');
           const conf=fs.readFileSync('deploy/t13-evolution-gateway.conf','utf8');
           assert.ok(conf.includes('$http_apikey')&&conf.includes('return 401;')&&conf.includes('listen 127.0.0.1:8081;'));
