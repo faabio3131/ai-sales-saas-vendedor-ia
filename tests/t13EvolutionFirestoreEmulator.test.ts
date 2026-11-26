@@ -1,11 +1,11 @@
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../src/infrastructure/firebaseAdmin';
-import {FirestoreEvolutionStore} from '../src/channels/evolutionPairing';
+import {FirestoreEvolutionStore,EvolutionPairingService} from '../src/channels/evolutionPairing';
 import {FirestoreEvolutionAttendanceStore,recoverEvolutionOnly} from '../src/channels/evolutionAttendanceStore';
 import {attendanceHash,attendanceIds,type AttendanceJob,type AttendanceAuthorization} from '../src/channels/evolutionAttendance';
-import {evolutionInstance} from '../src/channels/evolutionClient';
+import {evolutionInstance,EvolutionV2Client} from '../src/channels/evolutionClient';
 import {channelDocId,FirestoreWhatsAppConnectionStore,type WhatsAppConnection} from '../src/channels/whatsappConnections';
 import type {BusinessProfileRevision} from '../src/business/model';
 import {FirestoreConversationRepository} from '../src/conversations/firestoreRepository';
@@ -95,8 +95,18 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   expect((await binding.get()).get('status')).toBe('CONNECTED');
   await store.finish(s,'lease-timeout');
   await expect(meta.write(next,0)).rejects.toMatchObject({code:'CHANNEL_EVOLUTION_ACTIVE_CONFLICT'});
-  await store.acquire(s,'lease-confirm');
-  await store.finish(s,'lease-confirm','UNKNOWN');
+  const fixtureCredential={...s,instanceName,expectedOwnerPhone:ownerPhone,apiKey:'A'.repeat(40),webhookToken:'B'.repeat(40)};
+  const transport=vi.fn<typeof fetch>()
+   .mockResolvedValueOnce(new Response('{}',{status:400}))
+   .mockResolvedValueOnce(new Response(JSON.stringify({instance:{instanceName,state:'close'}})));
+  const client=new EvolutionV2Client('https://evolution-app.atendevendeia.com.br',transport);
+  const service=new EvolutionPairingService({store,client,vault:{load:async()=>fixtureCredential},
+   authorizeUnit:async()=>{},metaActive:async()=>false,pairingEnabled:()=>true,inboundEnabled:()=>false,
+   callback:()=> 'https://app.atendevendeia.com.br/fixture'});
+  await expect(service.disconnect({tenantId:s.tenantId,role:'OWNER',userId:'fixture',requestId:'fixture'},s.unitId))
+   .rejects.toMatchObject({code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'});
+  expect((await binding.get()).data()).toMatchObject({status:'UNKNOWN',ownerPhone,leaseId:'',leaseUntil:0});
+  expect((await phone.get()).data()).toMatchObject({...s,instanceName,ownerPhone});
   await expect(meta.write(next,0)).rejects.toMatchObject({code:'CHANNEL_EVOLUTION_ACTIVE_CONFLICT'});
   await store.acquire(s,'lease-logout',false);
   await store.finish(s,'lease-logout','DISCONNECTED');

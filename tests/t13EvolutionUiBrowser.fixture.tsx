@@ -7,6 +7,7 @@ const qr='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA
 const calls:Array<{url:string;method:string;tenant:string;signal?:AbortSignal}>=[];
 let state:Status='DISCONNECTED',rejectConfirm=false,hold=false;
 let failure:'html'|'network'|'unmapped'|null=null;
+let rejectLogout=false;
 let held:{resolve:(r:Response)=>void;signal?:AbortSignal}|undefined;
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
 const overview=(status:Status,withQr=false)=>json({ok:true,data:{status,connected:status==='CONNECTED',commercialEnabled:false,...(withQr?{qrCode:qr,expiresInSeconds:30}:{})}});
@@ -30,7 +31,10 @@ window.fetch=async(input,init)=>{
   if(rejectConfirm){rejectConfirm=false;return json({ok:false,error:{code:'EVOLUTION_OWNER_UNVERIFIED'}},403);}
   state='CONNECTED';return overview(state);
  }
- if(url.endsWith('/disconnect')&&method==='POST'){state='DISCONNECTED';return overview(state);}
+ if(url.endsWith('/disconnect')&&method==='POST'){
+  if(rejectLogout){rejectLogout=false;return json({ok:false,error:{code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'}},409);}
+  state='DISCONNECTED';return overview(state);
+ }
  if(method==='GET')return overview(state);
  throw Error('unexpected fixture action');
 };
@@ -104,9 +108,13 @@ async function run(){
   flushSync(()=>button('Desconectar').click());
   check(dialogCount()===1&&evoCalls().length===before&&idle()&&statusText()==='Sessão conectada','cancelled logout mutated');
   window.confirm=()=>{dialogs++;return true;};
+  rejectLogout=true;
+  await clickAction('Desconectar','POST','/main/disconnect');
+  await settled(()=>card()?.querySelector('[role=alert]')?.textContent?.includes('encerramento da sessão não foi comprovado'),'unsafe logout not explained');
+  check(statusText()==='Último estado conhecido: Sessão conectada','ambiguous logout falsely displayed disconnected');
   await clickAction('Desconectar','POST','/main/disconnect');
   await settled(()=>statusText()==='Desconectado','logout did not settle');
-  check(dialogCount()===2,'logout confirmation not required');
+  check(dialogCount()===3,'logout confirmation not required');
  }finally{window.confirm=oldConfirm;}
  hold=true;await clickAction('Verificar conexão','GET','/main');await until(()=>!!held,'old request missing');
  mount('tenant-b','OWNER');

@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {getFirestore,FieldValue} from 'firebase-admin/firestore';
 import {Router,type Request} from 'express';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
+import {ApplicationError} from '../infrastructure/errors';
 import {FirestoreBusinessProfileRepository} from '../business/firestoreRepository';
 import {FeatureEntitlementService} from '../plans/service';
 import {FirestoreSubscriptionRepository} from '../plans/firestoreRepository';
@@ -201,9 +202,17 @@ export class EvolutionPairingService{
   const lease=randomUUID();await this.deps.store.acquire(s,lease,false);
   try{
    await this.deps.client.logout(c);
-   // logout() itself verifies the remote close before returning.
+   // logout() requires a successful remote operation plus scoped close readback.
    await this.deps.store.finish(s,lease,'DISCONNECTED');return overview('DISCONNECTED');
-  }catch(e){await this.releaseAfterFailure(s,lease);throw e;}
+  }catch(e){
+   if(e instanceof ApplicationError&&e.code==='EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'){
+    // A close observation after HTTP 400 is ambiguous, not a revocation receipt.
+    // Keep ownerPhone/reservation and Meta exclusion; only settle the operation lease.
+    try{await this.deps.store.finish(s,lease,'UNKNOWN');}
+    catch{await this.releaseAfterFailure(s,lease);}
+   }else await this.releaseAfterFailure(s,lease);
+   throw e;
+  }
  }
  async inbound(t:string,u:string,auth:unknown,body:unknown):Promise<{accepted:number;duplicates:number}>{
   const s={tenantId:t,unitId:u};channelDocId(t,u);

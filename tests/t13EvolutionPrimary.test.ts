@@ -79,6 +79,36 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   await expect(api.ownerPhone(c)).rejects.toMatchObject({code:'EVOLUTION_OWNER_UNVERIFIED'});
   await expect(api.ownerPhone(c)).rejects.toMatchObject({code:'EVOLUTION_OWNER_UNVERIFIED'});
  });
+ it('never treats a V4 logout 400 and scoped close readback as successful revocation',async()=>{
+  const scoped=(state:'open'|'close'|'connecting')=>response({instance:{instanceName:c.instanceName,state}});
+  const mock=vi.fn<typeof fetch>()
+   .mockResolvedValueOnce(response({status:400,error:'Bad Request',response:{message:['instance is not connected']}},400))
+   .mockResolvedValueOnce(scoped('close'));
+  const api=new EvolutionV2Client(origin,mock);
+  await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED',statusCode:409});
+  expect(mock.mock.calls.map(([url,options])=>[url,options?.method])).toEqual([
+   [origin+'/instance/logout/'+c.instanceName,'DELETE'],
+   [origin+'/instance/connectionState/'+c.instanceName,'GET']]);
+  expect(mock.mock.calls.every(([,options])=>new Headers(options?.headers).get('apikey')===c.apiKey)).toBe(true);
+  for(const state of ['open','connecting'] as const){
+   mock.mockResolvedValueOnce(response({error:'fixture rejection'},400)).mockResolvedValueOnce(scoped(state));
+   await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_PROVIDER_REJECTED'});
+  }
+  mock.mockResolvedValueOnce(response({},400)).mockResolvedValueOnce(response({instance:{instanceName:'foreign',state:'close'}}));
+  await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_PROVIDER_REJECTED'});
+  mock.mockResolvedValueOnce(response({},400)).mockRejectedValueOnce(Error('readback failed'));
+  await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_PROVIDER_REJECTED'});
+  for(const status of [401,403,404,500]){
+   const before=mock.mock.calls.length;
+   mock.mockResolvedValueOnce(response({},status));
+   await expect(api.logout(c)).rejects.toMatchObject({code:status===404?'EVOLUTION_INSTANCE_NOT_PROVISIONED':'EVOLUTION_PROVIDER_REJECTED'});
+   expect(mock.mock.calls).toHaveLength(before+1);
+  }
+  mock.mockResolvedValueOnce(response({status:'SUCCESS',error:false,response:{message:'Instance logged out'}})).mockResolvedValueOnce(scoped('open'));
+  await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_UNCONFIRMED'});
+  mock.mockResolvedValueOnce(response({status:'SUCCESS',error:false,response:{message:'Instance logged out'}})).mockResolvedValueOnce(scoped('close'));
+  await expect(api.logout(c)).resolves.toBeUndefined();
+ });
  it('accepts only bounded PNG data and rejects invalid or non-image URLs',()=>{
   expect(evolutionQr({base64:qr})).toBe(qr);
   expect(evolutionQr({qrcode:{base64:image}})).toBe(qr);
@@ -147,6 +177,16 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   await x.service.disconnect(ctx(),u);
   expect(x.client.logout).toHaveBeenCalledWith(c);
   expect(await x.store.get({tenantId:t,unitId:u})).not.toHaveProperty('ownerPhone');
+ });
+ it('settles a 400/close logout as UNKNOWN without releasing the owner reservation',async()=>{
+  const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);
+  const transport=vi.fn<typeof fetch>().mockResolvedValueOnce(response({},400))
+   .mockResolvedValueOnce(response({instance:{instanceName:c.instanceName,state:'close'}}));
+  x.client.logout.mockImplementationOnce(async()=>new EvolutionV2Client(origin,transport).logout(c));
+  await expect(x.service.disconnect(ctx(),u)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'});
+  expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'UNKNOWN',ownerPhone:c.expectedOwnerPhone,leaseId:'',leaseUntil:0});
+  x.client.state.mockResolvedValue('close');
+  expect(await x.service.status(ctx(),u)).toMatchObject({status:'UNKNOWN',connected:false});
  });
  it('drops authenticated status and outgoing echoes before provider readback',async()=>{
   const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);

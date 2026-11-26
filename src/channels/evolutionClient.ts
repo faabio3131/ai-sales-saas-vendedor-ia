@@ -1,5 +1,6 @@
 import {createHash,timingSafeEqual} from 'node:crypto';
 import {applicationDefault} from 'firebase-admin/app';
+import {ApplicationError} from '../infrastructure/errors';
 import {channelDocId,channelError} from './whatsappConnections';
 
 export type EvolutionState='open'|'close'|'connecting';
@@ -90,7 +91,13 @@ export class EvolutionV2Client{
   try{response=await this.fetchImpl(url,{method,headers:{apikey:c.apiKey,'Content-Type':'application/json'},
    ...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(8000)});}
   catch{throw channelError('EVOLUTION_UNREACHABLE','PROVIDER');}
-  if(!response.ok)throw channelError(response.status===404?'EVOLUTION_INSTANCE_NOT_PROVISIONED':'EVOLUTION_PROVIDER_REJECTED','PROVIDER');
+  if(!response.ok){
+   // Only distinguish the observed logout failure for a safe readback.
+   // A provider 400, including an "already closed" message, never proves revocation.
+   if(method==='DELETE'&&route==='/instance/logout'&&response.status===400)
+    throw channelError('EVOLUTION_LOGOUT_HTTP_400','PROVIDER');
+   throw channelError(response.status===404?'EVOLUTION_INSTANCE_NOT_PROVISIONED':'EVOLUTION_PROVIDER_REJECTED','PROVIDER');
+  }
   if(!response.body)throw channelError('EVOLUTION_RESPONSE_INVALID','PROVIDER');
   const reader=response.body.getReader();let size=0;const chunks:Uint8Array[]=[];
   try{while(true){const item=await reader.read();if(item.done)break;
@@ -136,7 +143,15 @@ export class EvolutionV2Client{
   return evolutionQr(await this.call(c,'GET','/instance/connect'));
  }
  async logout(c:EvolutionCredential):Promise<void>{
-  await this.call(c,'DELETE','/instance/logout');
+  try{await this.call(c,'DELETE','/instance/logout');}
+  catch(e){
+   if(!(e instanceof ApplicationError)||e.code!=='EVOLUTION_LOGOUT_HTTP_400')throw e;
+   let observed:EvolutionState|undefined;
+   // A readback failure, an open session or a foreign scope is NOT a logout.
+   try{observed=await this.state(c);}catch{/* preserve rejection; never expose provider body */}
+   if(observed==='close')throw channelError('EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED','CONFLICT');
+   throw channelError('EVOLUTION_PROVIDER_REJECTED','PROVIDER');
+  }
   if(await this.state(c)!=='close')throw channelError('EVOLUTION_LOGOUT_UNCONFIRMED','PROVIDER');
  }
  /** No public send route. Caller must enforce contact consent and durable outbox. */

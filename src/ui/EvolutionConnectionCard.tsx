@@ -21,6 +21,7 @@ const messages:Record<string,string>={
  EVOLUTION_VAULT_UNAVAILABLE:'O cofre de credenciais está indisponível.',
  EVOLUTION_VAULT_INVALID:'A credencial está inválida. Solicite revisão da configuração segura.',
  EVOLUTION_VAULT_BINDING_MISMATCH:'A credencial não corresponde a esta unidade.',
+ EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED:'A conexão está fechada, mas o encerramento da sessão não foi comprovado. Solicite reconciliação segura antes de trocar de canal.',
  EVOLUTION_LOGOUT_UNCONFIRMED:'O encerramento remoto não foi confirmado. Verifique o estado antes de tentar novamente.',
 };
 const genericError='Não foi possível verificar a conexão. Tente novamente.';
