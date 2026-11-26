@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {QrCode} from 'lucide-react';
 type Status='DISABLED'|'NOT_PROVISIONED'|'DISCONNECTED'|'PAIRING'|'CONNECTED'|'UNKNOWN';
-type Overview={status:Status;connected:boolean;qrCode?:string;expiresInSeconds?:number;commercialEnabled:false};
+type Overview={status:Status;connected:boolean;qrCode?:string;expiresInSeconds?:number;commercialEnabled:false;reconciliationRequired?:boolean};
 const labels:Record<Status,string>={DISABLED:'Homologação pendente',NOT_PROVISIONED:'Aguardando configuração segura',DISCONNECTED:'Desconectado',PAIRING:'Aguardando leitura ou confirmação',CONNECTED:'Sessão conectada',UNKNOWN:'Estado remoto não confirmado'};
 const messages:Record<string,string>={
  EVOLUTION_OWNER_REQUIRED:'Somente o proprietário pode configurar o WhatsApp.',
@@ -22,6 +22,7 @@ const messages:Record<string,string>={
  EVOLUTION_VAULT_INVALID:'A credencial está inválida. Solicite revisão da configuração segura.',
  EVOLUTION_VAULT_BINDING_MISMATCH:'A credencial não corresponde a esta unidade.',
  EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED:'A conexão está fechada, mas o encerramento da sessão não foi comprovado. Solicite reconciliação segura antes de trocar de canal.',
+ EVOLUTION_NO_ACTIVE_BINDING:'Não há sessão registrada para encerrar. Verifique a conexão antes de tentar novamente.',
  EVOLUTION_LOGOUT_UNCONFIRMED:'O encerramento remoto não foi confirmado. Verifique o estado antes de tentar novamente.',
 };
 const genericError='Não foi possível verificar a conexão. Tente novamente.';
@@ -44,10 +45,10 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
    const result=await response.json().catch(()=>null) as {ok:boolean;data?:Overview;error?:{code:string}}|null;
    if(ctrl.signal.aborted)return;
    if(!response.ok||result?.ok!==true||!result.data||typeof result.data.status!=='string'||!Object.hasOwn(labels,result.data.status)||
-    result.data.connected!==(result.data.status==='CONNECTED')||result.data.commercialEnabled!==false){
+    result.data.connected!==(result.data.status==='CONNECTED')||result.data.commercialEnabled!==false||result.data.reconciliationRequired!==undefined&&typeof result.data.reconciliationRequired!=='boolean'){
     const code=result?.error?.code;
     if(action==='disconnect'&&(code==='EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'||code==='EVOLUTION_LOGOUT_UNCONFIRMED'))
-     setData(old=>old?{status:'UNKNOWN',connected:false,commercialEnabled:false}:old);
+     setData(old=>old?{status:'UNKNOWN',connected:false,commercialEnabled:false,reconciliationRequired:true}:old);
     setError(typeof code==='string'&&Object.hasOwn(messages,code)?messages[code]:genericError);return;
    }
    const d=result.data;
@@ -71,7 +72,7 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
   <p className="mt-2 text-sm text-slate-300">Conecte o número da sua empresa pelo celular. A sessão é exclusiva desta unidade.</p>
   <p className="mt-3 text-sm text-slate-200" role="status">{busy?'Consultando Evolution...':data?(error?'Último estado conhecido: ':'')+labels[data.status]:'Estado não verificado'}</p>
   {error&&<p role="alert" className="mt-2 text-sm text-rose-300">{error}</p>}
-  {data?.status==='UNKNOWN'&&<p className="mt-2 text-sm text-amber-200">A troca de canal permanece bloqueada. Com o atendimento pausado pela operação, reconecte somente o mesmo número autorizado, confirme a sessão e solicite um novo encerramento. Se não for possível, solicite reconciliação segura à operação.</p>}
+  {(data?.status==='UNKNOWN'||data?.reconciliationRequired)&&<p className="mt-2 text-sm text-amber-200">A troca de canal permanece bloqueada. Durante a reconciliação, o atendimento desta unidade fica pausado pelo servidor. Reconecte somente o mesmo número autorizado, confirme a sessão e solicite um novo encerramento. Se o plano estiver inativo ou a reconexão não for possível, solicite revogação assistida à operação.</p>}
   {data?.qrCode&&remaining>0&&<div className="mt-3 rounded-lg bg-white p-3">
    <img alt="QR Code temporário para conectar o WhatsApp" src={data.qrCode} className="mx-auto h-48 w-48" />
    <p className="mt-2 text-center text-sm text-slate-950">WhatsApp → Aparelhos conectados → Conectar aparelho. Expira em {remaining}s.</p>
@@ -79,7 +80,7 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
   <div className="mt-3 flex flex-wrap gap-2">
    <button type="button" disabled={busy||!available||data?.connected} onClick={()=>void request('connect')} className="min-h-11 rounded-lg bg-emerald-500 px-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{data?.status==='PAIRING'?'Gerar novo QR Code':'Conectar WhatsApp'}</button>
    <button type="button" disabled={busy} onClick={()=>void request(data?.status==='PAIRING'||data?.status==='UNKNOWN'?'confirm':'')} className="min-h-11 rounded-lg border border-slate-600 px-3 text-sm text-white disabled:opacity-50">Verificar conexão</button>
-   {available&&<button type="button" disabled={busy} onClick={()=>{if(window.confirm('Desconectar o WhatsApp desta unidade?'))void request('disconnect');}} className="min-h-11 rounded-lg border border-slate-600 px-3 text-sm text-white disabled:opacity-50">Desconectar</button>}
+   {available&&data?.status!=='DISCONNECTED'&&<button type="button" disabled={busy} onClick={()=>{if(window.confirm('Desconectar o WhatsApp desta unidade?'))void request('disconnect');}} className="min-h-11 rounded-lg border border-slate-600 px-3 text-sm text-white disabled:opacity-50">Desconectar</button>}
   </div>
   <p className="mt-3 text-sm text-slate-400">Pareamento não libera atendimento automático, mensagens comerciais nem cobrança.</p>
  </article>;

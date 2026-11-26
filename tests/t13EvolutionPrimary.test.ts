@@ -4,6 +4,7 @@ import {once} from 'node:events';
 import type {AddressInfo} from 'node:net';
 import {errorHandler} from '../src/api/middleware/errorHandler';
 import {describe,it,expect,vi} from 'vitest';
+import {channelError,evolutionReconciliationPending} from '../src/channels/whatsappConnections';
 import {GoogleEvolutionVault,EvolutionV2Client,evolutionInstance,evolutionSecretId,evolutionOrigin,evolutionQr,validateEvolutionCredential,
  type EvolutionCredential} from '../src/channels/evolutionClient';
 import {EvolutionPairingService,parseEvolutionInbound,createEvolutionRouter,createEvolutionWebhookRouter,type EvolutionStore} from '../src/channels/evolutionPairing';
@@ -22,13 +23,19 @@ function setup(){
  let binding:Awaited<ReturnType<EvolutionStore['get']>>=null;
  const seen=new Set<string>();
  const store:EvolutionStore={
-  async acquire(s,leaseId){
+  async acquire(s,leaseId,_exclusive,purpose){
+   if(purpose==='logout'&&(!binding||binding.status==='DISCONNECTED'&&!binding.ownerPhone&&!evolutionReconciliationPending(binding.reconciliationRequired)))
+    throw channelError('EVOLUTION_NO_ACTIVE_BINDING','CONFLICT');
+   const pause=evolutionReconciliationPending(binding?.reconciliationRequired)||purpose==='logout'||
+    (!!binding?.ownerPhone&&(purpose==='connect'||purpose==='confirm'&&binding.status!=='CONNECTED'));
    binding={...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status:binding?.status==='CONNECTED'||binding?.status==='PAIRING'?binding.status:'UNKNOWN',
-    ...(binding?.ownerPhone?{ownerPhone:binding.ownerPhone}:{}),leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()};
+    ...(binding?.ownerPhone?{ownerPhone:binding.ownerPhone}:{}),...(pause?{reconciliationRequired:true}:{}),leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()};
+   return pause;
   },
   async finish(s,leaseId,status,ownerPhone){if(!binding||binding.tenantId!==s.tenantId||binding.unitId!==s.unitId||binding.leaseId!==leaseId)throw Error('scope or lease');
    binding={...binding,...(status===undefined?{}:{status}),leaseId:'',leaseUntil:0,...(ownerPhone?{ownerPhone}:{})};
-   if(status==='DISCONNECTED')delete binding.ownerPhone;},
+   if(status==='DISCONNECTED'){delete binding.ownerPhone;delete binding.reconciliationRequired;}
+   else if(status==='UNKNOWN'&&binding.ownerPhone)binding.reconciliationRequired=true;},
   async get(s){return binding?.tenantId===s.tenantId&&binding.unitId===s.unitId?binding:null;},
   async persist(s,id){const key=evolutionInstance(s.tenantId,s.unitId)+id;if(seen.has(key))return false;seen.add(key);return true;},
  };
@@ -171,6 +178,15 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   expect(await x.service.disconnect(ctx(),u)).toMatchObject({connected:false,status:'DISCONNECTED'});
   expect(x.client.logout).toHaveBeenCalledWith(c);
  });
+ it('rejects a repeated or unregistered logout without mutating the binding or calling the provider',async()=>{
+  const x=setup(),s={tenantId:t,unitId:u};
+  await expect(x.service.disconnect(ctx(),u)).rejects.toMatchObject({code:'EVOLUTION_NO_ACTIVE_BINDING'});
+  expect(await x.store.get(s)).toBeNull();expect(x.client.logout).not.toHaveBeenCalled();
+  x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);await x.service.disconnect(ctx(),u);
+  const before=await x.store.get(s);x.client.logout.mockClear();
+  await expect(x.service.disconnect(ctx(),u)).rejects.toMatchObject({code:'EVOLUTION_NO_ACTIVE_BINDING'});
+  expect(await x.store.get(s)).toEqual(before);expect(x.client.logout).not.toHaveBeenCalled();
+ });
  it('preserves connected state on ambiguous logout/confirm and never masks the provider error',async()=>{
   const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);
   x.client.logout.mockRejectedValueOnce(Error('logout timeout'));
@@ -198,11 +214,20 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'UNKNOWN',ownerPhone:c.expectedOwnerPhone,leaseId:'',leaseUntil:0});
   x.client.state.mockResolvedValue('close');
   expect(await x.service.status(ctx(),u)).toMatchObject({status:'UNKNOWN',connected:false});
+  // Plan expiry cannot bypass the pause or release the owner reservation.
+  x.authorizeUnit.mockRejectedValueOnce(channelError('EVOLUTION_PLAN_REQUIRED'));
+  await expect(x.service.connect(ctx(),u)).rejects.toMatchObject({code:'EVOLUTION_PLAN_REQUIRED'});
+  x.authorizeUnit.mockRejectedValueOnce(channelError('EVOLUTION_PLAN_REQUIRED'));
+  await expect(x.service.confirm(ctx(),u)).rejects.toMatchObject({code:'EVOLUTION_PLAN_REQUIRED'});
+  expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'UNKNOWN',ownerPhone:c.expectedOwnerPhone,reconciliationRequired:true});
   // Reconnect and confirm only the existing authorized number before explicit logout.
-  expect(await x.service.connect(ctx(),u)).toMatchObject({status:'PAIRING'});
+  expect(await x.service.connect(ctx(),u)).toMatchObject({status:'PAIRING',reconciliationRequired:true});
   expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({ownerPhone:c.expectedOwnerPhone});
   x.client.state.mockResolvedValue('open');
-  expect(await x.service.confirm(ctx(),u)).toMatchObject({status:'CONNECTED'});
+  expect(await x.service.confirm(ctx(),u)).toMatchObject({status:'CONNECTED',reconciliationRequired:true});
+  expect(await x.service.status(ctx(),u)).toMatchObject({status:'CONNECTED',reconciliationRequired:true});
+  x.inboundEnabled.mockReturnValue(true);
+  await expect(x.service.inbound(t,u,c.webhookToken,payload())).rejects.toMatchObject({code:'EVOLUTION_SESSION_BUSY'});
   const falseReceipt=vi.fn<typeof fetch>().mockResolvedValueOnce(response({}));
   x.client.logout.mockImplementationOnce(async()=>new EvolutionV2Client(origin,falseReceipt).logout(c));
   await expect(x.service.disconnect(ctx(),u)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_UNCONFIRMED'});
@@ -213,6 +238,7 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   x.client.logout.mockImplementationOnce(async()=>new EvolutionV2Client(origin,validReceipt).logout(c));
   expect(await x.service.disconnect(ctx(),u)).toMatchObject({status:'DISCONNECTED'});
   expect(await x.store.get({tenantId:t,unitId:u})).not.toHaveProperty('ownerPhone');
+  expect(await x.store.get({tenantId:t,unitId:u})).not.toHaveProperty('reconciliationRequired');
  });
  it('drops authenticated status and outgoing echoes before provider readback',async()=>{
   const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);

@@ -84,6 +84,15 @@ describe('Evolution composed runtime (isolated ports)',()=>{
   await createEvolutionAttendanceRuntime({...env,ATENDEVENDE_PILOT_ALLOWED_UNITS:'{}'}).runOnce();
   expect(f.finish).toHaveBeenCalledWith(expect.objectContaining(s),'SUPPRESSED',expect.any(Number));expect(f.send).not.toHaveBeenCalled();
  });
+ it('suppresses an explicitly paused or malformed reconciliation binding even with all global flags enabled',async()=>{
+  const f=fixture();
+  for(const value of [true,'invalid']){
+   fake.docs.set(key,{...fake.docs.get(key),reconciliationRequired:value});
+   const result=await createEvolutionAttendanceRuntime(env).runOnce();
+   expect(result.sent).toBe(0);expect(f.finish).toHaveBeenCalledWith(expect.objectContaining(s),'SUPPRESSED',expect.any(Number));
+  }
+  expect(f.send).not.toHaveBeenCalled();
+ });
  it('fails closed on expired outbound fencing and never retries an uncertain send',async()=>{
   const f=fixture(true),result=await createEvolutionAttendanceRuntime(env).runOnce();
   expect(result.uncertain).toBe(1);expect(f.send).not.toHaveBeenCalled();

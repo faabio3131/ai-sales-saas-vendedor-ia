@@ -8,7 +8,7 @@ import {FirestoreSubscriptionRepository} from '../plans/firestoreRepository';
 import {FeatureEntitlementService} from '../plans/service';
 import {pilotLiveFeatureEnabled,requirePilotLiveFeature} from '../operations/pilotFlags';
 import {createRuntimeAIRouter} from '../ai/runtime';
-import {channelDocId,channelError,FirestoreWhatsAppConnectionStore} from './whatsappConnections';
+import {channelDocId,channelError,evolutionReconciliationPending,FirestoreWhatsAppConnectionStore} from './whatsappConnections';
 import {EvolutionV2Client,GoogleEvolutionVault} from './evolutionClient';
 import {FirestoreEvolutionAttendanceStore} from './evolutionAttendanceStore';
 import {EvolutionAttendanceWorker,attendanceHash,assertAttendanceJob,recentAttendance,type AttendanceJob} from './evolutionAttendance';
@@ -30,7 +30,7 @@ export function createEvolutionAttendanceRuntime(env:NodeJS.ProcessEnv=process.e
   const ref=db.collection('merchantEvolutionConnections').doc(channelDocId(j.tenantId,j.unitId));
   const b=await ref.get();
   if(b.get('tenantId')!==j.tenantId||b.get('unitId')!==j.unitId||b.get('instanceName')!==j.instanceName||
-   b.get('status')!=='CONNECTED'||typeof b.get('ownerPhone')!=='string'||b.get('ownerPhone')===j.sender||
+   b.get('status')!=='CONNECTED'||evolutionReconciliationPending(b.get('reconciliationRequired'))||typeof b.get('ownerPhone')!=='string'||b.get('ownerPhone')===j.sender||
    (lease&&(b.get('leaseUntil')>Date.now()||b.get('outboundLeaseId')!==lease||b.get('outboundLeaseUntil')<=Date.now())))return null;
   const c=await vault.load(j.tenantId,j.unitId);
   if(!c||c.expectedOwnerPhone!==b.get('ownerPhone'))return null;
@@ -71,7 +71,7 @@ export function createEvolutionAttendanceRuntime(env:NodeJS.ProcessEnv=process.e
     out.get('payloadHash')!==attendanceHash(j.id,j.sender,text))throw channelError('EVOLUTION_ATTENDANCE_RESERVATION_INVALID');
    const fence=await db.collection('merchantEvolutionConnections').doc(channelDocId(j.tenantId,j.unitId)).get();
    if(fence.get('outboundLeaseId')!==j.claimId||fence.get('outboundLeaseUntil')<=Date.now()||
-    fence.get('status')!=='CONNECTED'||fence.get('leaseUntil')>Date.now())throw channelError('EVOLUTION_ATTENDANCE_RESERVATION_INVALID');
+    fence.get('status')!=='CONNECTED'||evolutionReconciliationPending(fence.get('reconciliationRequired'))||fence.get('leaseUntil')>Date.now())throw channelError('EVOLUTION_ATTENDANCE_RESERVATION_INVALID');
    return client.sendText(c,j.sender,text);
   },
  },randomUUID);

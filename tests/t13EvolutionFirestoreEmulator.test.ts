@@ -47,6 +47,9 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
    db.collection('unitCapabilityAssignments').doc(key).create({...s,latestVersion:1}),
    db.collection('subscriptions').doc(t).create({id:t,tenantId:t,status:'ACTIVE',planCode:'BASIC',periodStart:'2020-01-01T00:00:00Z',periodEnd:'2099-01-01T00:00:00Z',createdAt:at,updatedAt:at})
   ]);
+  await b.update({reconciliationRequired:true});
+  expect(await store.reserve(j,{text:'Olá! Como posso ajudar?',source:'GREETING',profileVersion:1},auth,now+20)).toBe('SUPPRESSED');
+  await b.update({reconciliationRequired:false});
   expect(await store.reserve(j,{text:'Olá! Como posso ajudar?',source:'GREETING',profileVersion:1},auth,now+20)).toBe('RESERVED');
   expect(await store.reserve(j,{text:'Olá!',source:'GREETING',profileVersion:1},auth,now+21)).toBe('STALE');
   const concurrent={...event,sender:'5511988888888',externalMessageId:'fixture_concurrent',occurredAt:new Date(now+22).toISOString()};
@@ -108,10 +111,24 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   expect((await binding.get()).data()).toMatchObject({status:'UNKNOWN',ownerPhone,leaseId:'',leaseUntil:0});
   expect((await phone.get()).data()).toMatchObject({...s,instanceName,ownerPhone});
   await expect(meta.write(next,0)).rejects.toMatchObject({code:'CHANNEL_EVOLUTION_ACTIVE_CONFLICT'});
-  await store.acquire(s,'lease-logout',false);
+  // The remote session may be open during reconciliation, but the pause is sticky.
+  await store.acquire(s,'lease-reconnect',true,'connect');
+  await store.finish(s,'lease-reconnect','CONNECTED',ownerPhone);
+  expect((await binding.get()).data()).toMatchObject({status:'CONNECTED',reconciliationRequired:true,ownerPhone});
+  const event={externalMessageId:'paused',sender:ownerPhone==='5511999999999'?'5511888888888':'5511999999999',text:'Oi',occurredAt:at};
+  await expect(store.persist(s,event.externalMessageId,event)).rejects.toMatchObject({code:'EVOLUTION_SESSION_BUSY'});
+  await expect(meta.write(next,0)).rejects.toMatchObject({code:'CHANNEL_EVOLUTION_ACTIVE_CONFLICT'});
+  await store.acquire(s,'lease-logout',false,'logout');
   await store.finish(s,'lease-logout','DISCONNECTED');
   expect((await phone.get()).exists).toBe(false);
   expect((await binding.get()).get('ownerPhone')).toBeUndefined();
+  expect((await binding.get()).get('reconciliationRequired')).toBeUndefined();
+  const before=(await binding.get()).data();
+  await expect(store.acquire(s,'stale-logout',false,'logout')).rejects.toMatchObject({code:'EVOLUTION_NO_ACTIVE_BINDING'});
+  expect((await binding.get()).data()).toEqual(before);
+  const absent={tenantId:s.tenantId,unitId:'absent'};
+  await expect(store.acquire(absent,'absent-logout',false,'logout')).rejects.toMatchObject({code:'EVOLUTION_NO_ACTIVE_BINDING'});
+  expect(await store.get(absent)).toBeNull();
   await meta.write(next,0);
   expect((await meta.get(s.tenantId,s.unitId))?.status).toBe('ACTIVE');
  },60000);
@@ -136,11 +153,11 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   const project='demo-atendevende-t10';
   const env={...process.env,EVOLUTION_PAIRING_ENABLED:'false',EVOLUTION_INBOUND_ENABLED:'false',
    EVOLUTION_ATTENDANCE_ENABLED:'false',ATENDEVENDE_PILOT_LIVE_ENABLED:'false',ATENDEVENDE_PILOT_GO_LIVE_APPROVED:'false'};
-  const mk=async(expired:boolean)=>{
+  const mk=async(expired:boolean,corrupt=false)=>{
    const s={tenantId:'evo_reserved_'+randomUUID().replace(/-/g,''),unitId:'main'};
    const event={externalMessageId:'reserved',sender:'5511999999999',text:'Oi',occurredAt:at};
    const j:AttendanceJob={...s,...event,...attendanceIds(s,event),receivedAt:at,state:'RESERVED',
-    claimId:'claim-'+randomUUID(),leaseUntil:now+(expired?-1000:3600000)};
+    claimId:'claim-'+randomUUID(),leaseUntil:now+(expired?(corrupt?-10000:-1000):3600000)};
    const row=db.collection('evolutionInboundInbox').doc(j.id),out=db.collection('evolutionAttendanceOutbox').doc(j.id),
     binding=db.collection('merchantEvolutionConnections').doc(channelDocId(s.tenantId,s.unitId)),
     conv=db.collection('conversations').doc(j.conversationId);
@@ -150,13 +167,23 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
     binding.create({...s,instanceName:j.instanceName,status:'CONNECTED',leaseId:'',leaseUntil:0,
      outboundLeaseId:j.claimId,outboundLeaseUntil:j.leaseUntil,updatedAt:at}),
     conv.create({id:j.conversationId,tenantId:s.tenantId,customerId:j.customerId,handlingMode:'AI',status:'OPEN',lastMessageAt:at})]);
+   if(corrupt)await out.delete(); // fixture only: simulate missing durable reservation
    return {j,row,out,binding,conv};
   };
   const expired=await mk(true),active=await mk(false);
+  const corrupt=await Promise.all(Array.from({length:10},()=>mk(true,true)));
   await expect(recoverEvolutionOnly('different-project',env,now)).rejects.toMatchObject({code:'EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID'});
-  await expect(recoverEvolutionOnly(project,{...env,EVOLUTION_ATTENDANCE_ENABLED:'true'},now)).rejects.toMatchObject({code:'EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID'});
+  for(const flag of ['EVOLUTION_PAIRING_ENABLED','EVOLUTION_INBOUND_ENABLED','EVOLUTION_ATTENDANCE_ENABLED','ATENDEVENDE_PILOT_LIVE_ENABLED','ATENDEVENDE_PILOT_GO_LIVE_APPROVED']){
+   for(const value of ['true',undefined])await expect(recoverEvolutionOnly(project,{...env,[flag]:value},now)).rejects.toMatchObject({code:'EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID'});
+  }
+  await expect(recoverEvolutionOnly(project,{...env,NODE_ENV:'development'},now)).rejects.toMatchObject({code:'EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID'});
   expect((await expired.row.get()).get('state')).toBe('RESERVED');
-  await recoverEvolutionOnly(project,env,now);
+  await Promise.all([recoverEvolutionOnly(project,env,now),recoverEvolutionOnly(project,env,now)]);
+  for(const x of corrupt){
+   expect((await x.row.get()).data()).toMatchObject({state:'QUARANTINED',quarantineReason:'RECOVERY_OUTBOX_CONFLICT'});
+   expect((await x.binding.get()).get('outboundLeaseId')).toBe(x.j.claimId);
+   expect((await x.out.get()).exists).toBe(false);
+  }
   expect((await expired.row.get()).data()).toMatchObject({state:'UNKNOWN',leaseUntil:0});
   expect((await expired.out.get()).get('status')).toBe('UNKNOWN');
   expect((await expired.out.get()).get('externalMessageId')).toBeUndefined();

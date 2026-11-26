@@ -1,7 +1,15 @@
 /** T13 cumulative source coverage gate. Fails closed on missing data and regressions. */
 import fs from 'node:fs';
 
-const source = process.argv[2] || 'coverage/coverage-summary.json';
+function parseArgs(args){
+ if(args.length===0)return {mode:'source',path:'coverage/coverage-summary.json'};
+ const isPath=v=>typeof v==='string'&&v.trim().length>0&&!v.startsWith('-');
+ if(args.length===1&&args[0]==='--self-test')return {mode:'self-test'};
+ if(args.length===2&&args[0]==='--evolution-emulator'&&isPath(args[1]))return {mode:'emulator',path:args[1]};
+ if(args.length===1&&isPath(args[0]))return {mode:'source',path:args[0]};
+ throw Error('COVERAGE_GATE_ARGUMENTS_INVALID');
+}
+const invocation=parseArgs(process.argv.slice(2));
 // Calibrated against actual certified baseline CI #45017274525, retaining
 // ~4-5 percentage-point regression headroom per metric.
 const thresholds = Object.freeze({lines:55, statements:50, branches:50, functions:43});
@@ -95,7 +103,14 @@ function inspect(report) {
   if(failed.length)throw new Error('COVERAGE_GATE_FAILED:'+failed.join(','));
   return files.length;
 }
-if(process.argv.includes('--self-test')){
+if(invocation.mode==='self-test'){
+  if(parseArgs([]).path!=='coverage/coverage-summary.json'||parseArgs(['custom.json']).path!=='custom.json'||
+   parseArgs(['--evolution-emulator','emulator.json']).path!=='emulator.json'||parseArgs(['--self-test']).mode!=='self-test')
+   throw Error('COVERAGE_GATE_ARGUMENTS_SELFTEST_FAILED');
+  for(const args of [['--evolution-emulator'],['ignored','--evolution-emulator','emulator.json'],['--self-test','x'],['--evolution-emulator','--self-test'],['--unknown'],['a','b']]){
+   let rejected=false;try{parseArgs(args);}catch(e){rejected=String(e).includes('COVERAGE_GATE_ARGUMENTS_INVALID');}
+   if(!rejected)throw Error('COVERAGE_GATE_INVALID_ARGUMENTS_ACCEPTED');
+  }
   const rows={total:{},'/repo/src/core.ts':null};
   for(const metric of Object.keys(thresholds))rows.total[metric]={pct:100,total:10,covered:10};
   for(let i=0;i<20;i++)rows['/repo/src/core'+i+'.ts']={};
@@ -128,13 +143,11 @@ if(process.argv.includes('--self-test')){
   try{inspectEvolutionEmulator(emuBad);}catch(e){caught=String(e).includes('EVOLUTION_EMULATOR_COVERAGE_FILE_MISSING');}
   if(!caught)throw Error('EVOLUTION_EMULATOR_MISSING_FILE_NOT_REJECTED');
   console.info('t13_coverage_gate_self_test_passed');
-} else if(process.argv.includes('--evolution-emulator')){
-  const path=process.argv[3];
-  if(!path)throw Error('EVOLUTION_EMULATOR_COVERAGE_PATH_REQUIRED');
-  inspectEvolutionEmulator(JSON.parse(fs.readFileSync(path,'utf8')));
+} else if(invocation.mode==='emulator'){
+  inspectEvolutionEmulator(JSON.parse(fs.readFileSync(invocation.path,'utf8')));
   console.info('t13_evolution_emulator_coverage_gate_success');
 } else {
-  const report=JSON.parse(fs.readFileSync(source,'utf8'));
+  const report=JSON.parse(fs.readFileSync(invocation.path,'utf8'));
   const count=inspect(report);
   console.info('t13_coverage_gate_success:source_files='+count);
 }

@@ -7,10 +7,10 @@ const qr='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA
 const calls:Array<{url:string;method:string;tenant:string;signal?:AbortSignal}>=[];
 let state:Status='DISCONNECTED',rejectConfirm=false,hold=false;
 let failure:'html'|'network'|'unmapped'|null=null;
-let rejectLogout=false;
+let rejectLogout=false,reconciling=false;
 let held:{resolve:(r:Response)=>void;signal?:AbortSignal}|undefined;
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
-const overview=(status:Status,withQr=false)=>json({ok:true,data:{status,connected:status==='CONNECTED',commercialEnabled:false,...(withQr?{qrCode:qr,expiresInSeconds:30}:{})}});
+const overview=(status:Status,withQr=false)=>json({ok:true,data:{status,connected:status==='CONNECTED',commercialEnabled:false,...(reconciling?{reconciliationRequired:true}:{}),...(withQr?{qrCode:qr,expiresInSeconds:30}:{})}});
 window.fetch=async(input,init)=>{
  const url=String(input),method=init?.method??'GET',tenant=new Headers(init?.headers).get('x-tenant-id')??'';
  calls.push({url,method,tenant,signal:init?.signal??undefined});
@@ -32,8 +32,8 @@ window.fetch=async(input,init)=>{
   state='CONNECTED';return overview(state);
  }
  if(url.endsWith('/disconnect')&&method==='POST'){
-  if(rejectLogout){rejectLogout=false;state='UNKNOWN';return json({ok:false,error:{code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'}},409);}
-  state='DISCONNECTED';return overview(state);
+  if(rejectLogout){rejectLogout=false;reconciling=true;state='UNKNOWN';return json({ok:false,error:{code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'}},409);}
+  state='DISCONNECTED';reconciling=false;return overview(state);
  }
  if(method==='GET')return overview(state);
  throw Error('unexpected fixture action');
@@ -76,6 +76,7 @@ async function run(){
  mount('tenant-a','STAFF');check(!card(),'staff can see owner card');
  mount('tenant-a','OWNER');
  await settled(()=>statusText()==='Desconectado','initial status');
+ check(!findButton('Desconectar')||findButton('Desconectar')?.disabled,'initial disconnected logout available');
  await clickAction('Verificar conexão','GET','/main');
  await settled(()=>statusText()==='Desconectado','read-only verify');
  await clickAction('Conectar WhatsApp','POST','/main/connect');
@@ -117,8 +118,10 @@ async function run(){
   await settled(()=>!!card()?.querySelector('img'),'reconciliation QR missing');
   await clickAction('Verificar conexão','POST','/main/confirm');
   await settled(()=>statusText()==='Sessão conectada','reconciliation did not confirm same fixture');
+  check(card()?.textContent?.includes('atendimento desta unidade fica pausado pelo servidor'),'pause guidance missing after reconnection');
   await clickAction('Desconectar','POST','/main/disconnect');
   await settled(()=>statusText()==='Desconectado','logout did not settle');
+  check(!findButton('Desconectar')||findButton('Desconectar')?.disabled,'final disconnected logout available');
   check(dialogCount()===3,'logout confirmation not required');
  }finally{window.confirm=oldConfirm;}
  hold=true;await clickAction('Verificar conexão','GET','/main');await until(()=>!!held,'old request missing');

@@ -1,6 +1,6 @@
 import {getFirestore,type Firestore,type Transaction} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
-import {channelDocId,channelError} from './whatsappConnections';
+import {channelDocId,channelError,evolutionReconciliationPending} from './whatsappConnections';
 import {attendanceHash,attendanceIds,assertAttendanceJob,contactCommand,recentAttendance,
  type AttendanceEvent,type AttendanceScope,type AttendanceJob,type AttendanceStore,
  type AttendanceReply,type AttendanceAuthorization,type AttendanceReservation} from './evolutionAttendance';
@@ -31,7 +31,7 @@ function sameScope(x:FirebaseFirestore.DocumentData|undefined,j:AttendanceScope)
  return !!x&&x.tenantId===j.tenantId&&x.unitId===j.unitId;
 }
 function bound(b:FirebaseFirestore.DocumentData|undefined,j:AttendanceJob){
- return sameScope(b,j)&&b!.instanceName===j.instanceName&&b!.status==='CONNECTED';
+ return sameScope(b,j)&&b!.instanceName===j.instanceName&&b!.status==='CONNECTED'&&!evolutionReconciliationPending(b!.reconciliationRequired);
 }
 /** Called only from the authenticated Evolution webhook transaction.
  * No Meta trust proof, memory consent, booking or payment authorization is created. */
@@ -83,6 +83,9 @@ function currentJob(row:FirebaseFirestore.DocumentSnapshot,expected:AttendanceJo
  if(!j||j.id!==expected.id||j.tenantId!==expected.tenantId||j.unitId!==expected.unitId||
   j.text!==expected.text||j.sender!==expected.sender||j.externalMessageId!==expected.externalMessageId)throw bad();
  assertAttendanceJob(j);return j;
+}
+function reservedOutboxMatches(out:FirebaseFirestore.DocumentSnapshot,j:AttendanceJob){
+ return sameScope(out.data(),j)&&out.get('status')==='RESERVED'&&typeof j.claimId==='string'&&j.claimId.length>0&&out.get('claimId')===j.claimId;
 }
 function superseded(c:FirebaseFirestore.DocumentSnapshot,j:AttendanceJob){
  const at=c.get('lastInboundAt'),id=c.get('lastInboundMessageId');
@@ -168,8 +171,7 @@ export class FirestoreEvolutionAttendanceStore implements AttendanceStore{
    if(j.claimId!==input.claimId||!['PROCESSING','RESERVED'].includes(j.state))throw bad();
    const [out,b,c]=await Promise.all([tx.get(r.outbox),tx.get(r.binding),tx.get(r.conversation)]);
    if(j.state==='RESERVED'){
-    if(!sameScope(out.data(),j)||out.get('status')!=='RESERVED'||out.get('claimId')!==j.claimId||
-     !['SENT','UNKNOWN'].includes(state))throw bad();
+    if(!reservedOutboxMatches(out,j)||!['SENT','UNKNOWN'].includes(state))throw bad();
     if(state==='SENT'){
      if(typeof externalId!=='string'||!/^[A-Za-z0-9_-]{1,200}$/.test(externalId))throw bad();
      const id='evo_'+attendanceHash(j.tenantId,j.unitId,'out',externalId);
@@ -200,21 +202,55 @@ export class FirestoreEvolutionAttendanceStore implements AttendanceStore{
    if(invalid)tx.update(ref,{state:'QUARANTINED',quarantinedAt:new Date(now).toISOString(),quarantineReason:'INVALID_JOB_IDENTITY'});
   });
  }
+ private async quarantineRecoveryConflict(input:AttendanceJob,state:'PROCESSING'|'RESERVED',now:number){
+  const r=refs(this.db,input);
+  return this.db.runTransaction(async tx=>{
+   const row=await tx.get(r.inbox);
+   if(!row.exists||row.get('state')!==state||row.get('claimId')!==input.claimId||
+    typeof row.get('leaseUntil')!=='number'||row.get('leaseUntil')>now)return 'changed' as const;
+   const j=currentJob(row,input),out=await tx.get(r.outbox);
+   const inconsistent=state==='PROCESSING'?out.exists:!reservedOutboxMatches(out,j);
+   if(!inconsistent)return 'retained' as const; // transient error: keep for later retry
+   // Quarantine only the inbox row after proving the conflict transactionally.
+   // Keep outbox, binding fence and reservations intact for operator investigation.
+   tx.update(r.inbox,{state:'QUARANTINED',quarantinedAt:new Date(now).toISOString(),
+    quarantineReason:'RECOVERY_OUTBOX_CONFLICT'});
+   return 'quarantined' as const;
+  });
+ }
  async recover(now:number,limit:number){
+  if(!Number.isSafeInteger(limit)||limit<1||limit>100)throw bad();
   let count=0;
   for(const state of ['PROCESSING','RESERVED'] as const){
-   const rows=await this.db.collection('evolutionInboundInbox').where('state','==',state)
-    .where('leaseUntil','<=',now).orderBy('leaseUntil','asc').limit(limit).get();
-   for(const row of rows.docs){
-    const j=row.data() as AttendanceJob;
-    try{assertAttendanceJob(j);if(row.id!==j.id)throw bad();}
-    catch{await this.quarantineInvalid(row.ref,state,now).catch(()=>{});continue;}
-    try{
-     if(state==='PROCESSING')await this.defer(j,now); // no outbound was reserved
-     else await this.finish(j,'UNKNOWN',now); // never retry an uncertain send
-     count++;
-    }catch{/* raced settlement or inconsistency: retain evidence */}
+   let cursor:FirebaseFirestore.QueryDocumentSnapshot|undefined;
+   let settled=0,retained=0,quarantined=0,scanned=0;
+   // Bounded cursor scan lets later rows progress even if a page cannot settle.
+   // Deterministic conflicts leave the queue permanently; transient errors stay.
+   for(let page=0;page<4&&settled<limit;page++){
+    const query=this.db.collection('evolutionInboundInbox').where('state','==',state)
+     .where('leaseUntil','<=',now).orderBy('leaseUntil','asc').limit(limit);
+    const rows=await (cursor?query.startAfter(cursor):query).get();
+    for(const row of rows.docs){
+     if(settled>=limit)break;
+     scanned++;
+     const j=row.data() as AttendanceJob;
+     try{assertAttendanceJob(j);if(row.id!==j.id)throw bad();}
+     catch{try{await this.quarantineInvalid(row.ref,state,now);quarantined++;}catch{retained++;}continue;}
+     try{
+      if(state==='PROCESSING')await this.defer(j,now);
+      else await this.finish(j,'UNKNOWN',now);
+      settled++;count++;
+     }catch{
+      const disposition=await this.quarantineRecoveryConflict(j,state,now).catch(()=> 'retained' as const);
+      if(disposition==='quarantined')quarantined++;
+      if(disposition==='retained')retained++;
+     }
+    }
+    if(rows.size<limit)break;
+    cursor=rows.docs.at(-1);
    }
+   if(retained||quarantined||scanned===4*limit)
+    console.warn(JSON.stringify({event:'evolution_recovery_attention',state,retained,quarantined,scanned,settled}));
   }
   return count;
  }
