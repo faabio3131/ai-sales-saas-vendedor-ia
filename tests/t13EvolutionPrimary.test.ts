@@ -155,3 +155,17 @@ describe('Evolution dedicated PostgreSQL startup gate',()=>{
   expect(compose).toContain('evolution-postgres:\n        condition: service_healthy');
  });
 });
+
+
+describe('Evolution offline provider readiness',()=>{
+ it('does not depend on external WhatsApp version retrieval and requires authenticated local API response',()=>{
+  const compose=readFileSync(new URL('../deploy/t13-evolution-provider.compose.yaml',import.meta.url),'utf8');
+  const provider=compose.split('  evolution-provider:\n')[1].split('  evolution-gateway:\n')[0];
+  expect(provider).toContain('const key=process.env.AUTHENTICATION_API_KEY;');
+  expect(provider).toContain("fetch('http://127.0.0.1:8080/instance/fetchInstances'");
+  expect(provider).toContain('headers:{apikey:key}');
+  expect(provider).toContain('!Array.isArray(await r.json())');
+  expect(provider).not.toContain("fetch('http://127.0.0.1:8080/'");
+  expect(compose).toContain('evolution-provider:\n        condition: service_healthy');
+ });
+});
