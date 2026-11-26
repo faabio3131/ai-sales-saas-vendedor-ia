@@ -1,8 +1,12 @@
 import {readFileSync} from 'node:fs';
+import express from 'express';
+import {once} from 'node:events';
+import type {AddressInfo} from 'node:net';
+import {errorHandler} from '../src/api/middleware/errorHandler';
 import {describe,it,expect,vi} from 'vitest';
 import {GoogleEvolutionVault,EvolutionV2Client,evolutionInstance,evolutionSecretId,evolutionOrigin,evolutionQr,validateEvolutionCredential,
  type EvolutionCredential} from '../src/channels/evolutionClient';
-import {EvolutionPairingService,parseEvolutionInbound,type EvolutionStore} from '../src/channels/evolutionPairing';
+import {EvolutionPairingService,parseEvolutionInbound,createEvolutionRouter,createEvolutionWebhookRouter,type EvolutionStore} from '../src/channels/evolutionPairing';
 import type {TenantContext} from '../src/types/contracts';
 
 const t='tenant-evo-a',u='main',origin='https://evolution-app.atendevendeia.com.br';
@@ -211,4 +215,37 @@ describe('Evolution offline provider readiness',()=>{
   expect(provider).not.toContain("fetch('http://127.0.0.1:8080/'");
   expect(compose).toContain('evolution-provider:\n        condition: service_healthy');
  });
+});
+
+describe('Evolution HTTP router contracts',()=>{
+ it('requires owner scope and authenticates webhook, returns no-store and never exposes a send route',async()=>{
+  const x=setup(),app=express();
+  app.use(express.json());
+  app.use('/manage',(req,_res,next)=>{if(req.header('x-test-member'))req.tenantContext=ctx(t,req.header('x-test-role')??'OWNER');next();},createEvolutionRouter(x.service));
+  app.use('/hook',createEvolutionWebhookRouter(x.service));app.use(errorHandler);
+  const server=app.listen(0,'127.0.0.1');await once(server,'listening');
+  try{
+   const root='http://127.0.0.1:'+(server.address() as AddressInfo).port;
+   const headers={'x-test-member':'fixture','content-type':'application/json'};
+   expect((await fetch(root+'/manage/units/main')).status).toBe(403);
+   expect((await fetch(root+'/manage/units/main/connect',{method:'POST',headers:{...headers,'x-test-role':'STAFF'}})).status).toBe(403);
+   expect(x.client.configureWebhook).not.toHaveBeenCalled();
+   x.client.state.mockResolvedValue('open');
+   const connected=await fetch(root+'/manage/units/main/connect',{method:'POST',headers});
+   expect(connected.status).toBe(200);expect(connected.headers.get('cache-control')).toBe('no-store');
+   expect((await connected.json()).data).toMatchObject({status:'CONNECTED',commercialEnabled:false});
+   expect((await fetch(root+'/manage/units/main',{headers})).status).toBe(200);
+   expect((await fetch(root+'/manage/units/main/confirm',{method:'POST',headers})).status).toBe(200);
+   expect((await fetch(root+'/manage/units/main/send',{method:'POST',headers})).status).toBe(404);
+   const hook=(token:string)=>fetch(root+'/hook/'+t+'/'+u,{method:'POST',headers:{'content-type':'application/json','x-av-evolution-auth':token},body:JSON.stringify(payload())});
+   expect((await hook(c.webhookToken)).status).toBe(401);
+   x.inboundEnabled.mockReturnValue(true);
+   expect((await hook('Z'.repeat(40))).status).toBe(401);
+   const accepted=await hook(c.webhookToken);expect(accepted.status).toBe(200);
+   expect(await accepted.json()).toEqual({ok:true,accepted:1,duplicates:0});
+   expect((await fetch(root+'/manage/units/main/disconnect',{method:'POST',headers})).status).toBe(200);
+  }finally{
+   await new Promise<void>((resolve,reject)=>{server.close(e=>e?reject(e):resolve());server.closeAllConnections();});
+  }
+ },15000);
 });

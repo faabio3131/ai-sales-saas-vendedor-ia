@@ -14,6 +14,9 @@ export interface Conversation {
   status: ConversationStatus;
   handlingMode: ConversationHandlingMode;
   lastMessageAt: string;
+  /** Server-owned inbound ordering projection; never supplied by UI updates. */
+  lastInboundAt?: string;
+  lastInboundMessageId?: string;
   createdAt: string;
   updatedAt: string;
 }

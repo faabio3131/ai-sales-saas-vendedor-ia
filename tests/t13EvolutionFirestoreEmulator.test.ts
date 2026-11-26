@@ -8,6 +8,7 @@ import {attendanceHash,attendanceIds,type AttendanceJob,type AttendanceAuthoriza
 import {evolutionInstance} from '../src/channels/evolutionClient';
 import {channelDocId,FirestoreWhatsAppConnectionStore,type WhatsAppConnection} from '../src/channels/whatsappConnections';
 import type {BusinessProfileRevision} from '../src/business/model';
+import {FirestoreConversationRepository} from '../src/conversations/firestoreRepository';
 
 const enabled=process.env.T10_FIRESTORE_EMULATOR==='true';
 if(enabled&&(process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:8089'||
@@ -61,6 +62,15 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   expect((await db.collection('evolutionAttendanceOutbox').doc(ids.id).get()).data()).toMatchObject({tenantId:t,status:'SENT',externalMessageId:'provider-out-1'});
   expect((await b.get()).get('outboundLeaseId')).toBe('');
   expect(await store.claim(job,'claim-c',now+40)).toBeNull();
+  const conversations=new FirestoreConversationRepository();
+  const before=(await conversations.findById(t,ids.conversationId))!;
+  const newer={...event,externalMessageId:'fixture_newer',occurredAt:event.occurredAt,text:'Nova mensagem no mesmo segundo'};
+  expect(await inbound.persist(s,newer.externalMessageId,newer)).toBe(true);
+  const newerIds=attendanceIds(s,newer);
+  await conversations.update({...before,updatedAt:new Date().toISOString()});
+  expect((await conversations.findById(t,ids.conversationId))?.lastInboundMessageId).toBe(newerIds.messageId);
+  const latestJob=(await db.collection('evolutionInboundInbox').doc(newerIds.id).get()).data() as AttendanceJob;
+  expect(await store.claim(latestJob,'claim-newer',Date.now())).not.toBeNull();
   const second={...event,externalMessageId:'fixture_2',occurredAt:new Date(now+100).toISOString(),text:'PARAR'};
   expect(await inbound.persist(s,second.externalMessageId,second)).toBe(true);
   const secondId=attendanceIds(s,second).id;

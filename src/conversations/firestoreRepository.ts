@@ -2,6 +2,7 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { ConversationRepository, MessageRepository } from './contracts';
 import { Conversation, Message } from './model';
+import { ApplicationError } from '../infrastructure/errors';
 
 function db() {
   if (!getApps().length) {
@@ -40,8 +41,20 @@ export class FirestoreConversationRepository implements ConversationRepository {
   }
 
   async update(conversation: Conversation): Promise<Conversation> {
-    await db().collection('conversations').doc(conversation.id).set(conversation, { merge: false });
-    return conversation;
+    const database=db(),ref=database.collection('conversations').doc(conversation.id);
+    return database.runTransaction(async tx=>{
+      const current=(await tx.get(ref)).data() as Conversation|undefined;
+      if(!current||current.tenantId!==conversation.tenantId||current.id!==conversation.id||
+       current.customerId!==conversation.customerId||current.channel!==conversation.channel||
+       current.externalConversationId!==conversation.externalConversationId)
+        throw new ApplicationError({category:'CONFLICT',code:'CONVERSATION_SCOPE_CONFLICT',message:'Conversation changed concurrently.'});
+      // The inbound transaction owns this projection. A stale general UI update
+      // cannot roll it back or replace it with an outbound timestamp.
+      const next={...conversation,lastMessageAt:current.lastMessageAt>conversation.lastMessageAt?current.lastMessageAt:conversation.lastMessageAt};
+      if(current.lastInboundAt!==undefined)next.lastInboundAt=current.lastInboundAt;else delete next.lastInboundAt;
+      if(current.lastInboundMessageId!==undefined)next.lastInboundMessageId=current.lastInboundMessageId;else delete next.lastInboundMessageId;
+      tx.set(ref,next,{merge:false});return next;
+    });
   }
 }
 

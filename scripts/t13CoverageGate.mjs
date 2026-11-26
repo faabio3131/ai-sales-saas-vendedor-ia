@@ -22,6 +22,10 @@ const criticalBranchFloors=Object.freeze({
  'src/orderPayments/reconciliation.ts':13,
  'src/governance/service.ts':75,
 });
+// Minimum nonzero executed lines, distinct from adequacy of branch coverage.
+const requiredEvolutionFiles=['src/channels/evolutionAttendanceRuntime.ts','src/channels/evolutionClient.ts',
+ 'src/channels/evolutionPairing.ts','src/channels/evolutionAttendance.ts',
+ 'src/ui/EvolutionConnectionCard.tsx','src/ui/ProviderConnectionPanel.tsx'];
 function inspect(report) {
   if (!report || !report.total || typeof report.total !== 'object')
     throw new Error('COVERAGE_SUMMARY_MISSING');
@@ -49,6 +53,11 @@ function inspect(report) {
     console.info(JSON.stringify({criticalFile:filename,branchCoverage:result.pct,minimum}));
     if(result.pct<minimum)failed.push(filename+':'+result.pct+'<'+minimum);
   }
+  for(const file of requiredEvolutionFiles){
+    const matches=normalized.filter(([name])=>name.endsWith('/'+file));
+    if(matches.length!==1||!Number.isSafeInteger(matches[0][1]?.lines?.covered)||matches[0][1].lines.covered<=0)
+      failed.push(file+':no executed source lines');
+  }
   if(failed.length)throw new Error('COVERAGE_GATE_FAILED:'+failed.join(','));
   return files.length;
 }
@@ -58,6 +67,7 @@ if(process.argv.includes('--self-test')){
   for(let i=0;i<20;i++)rows['/repo/src/core'+i+'.ts']={};
   for(const file of Object.keys(criticalBranchFloors))
     rows['/repo/'+file]={branches:{pct:100,total:10,covered:10}};
+  for(const file of requiredEvolutionFiles)rows['/repo/'+file]={lines:{pct:100,total:10,covered:10}};
   if(inspect(rows)<20)throw Error('Self test failed.');
   // Prove the guard detects a real file-level regression, even while global
   // coverage stays 100%, and never accepts a missing critical file.

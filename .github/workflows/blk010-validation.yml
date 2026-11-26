@@ -184,6 +184,23 @@ jobs:
           npm test -- --coverage --coverage.provider=v8 --coverage.include='src/**/*.{ts,tsx}' --coverage.reporter=json-summary
           node scripts/t13CoverageGate.mjs --self-test
           node scripts/t13CoverageGate.mjs coverage/coverage-summary.json
+      - name: Evolution browser interaction and worker entrypoint (synthetic)
+        run: |
+          set -euo pipefail
+          D=$(mktemp -d)
+          trap 'rm -rf "$D"' EXIT
+          ./node_modules/.bin/esbuild tests/t13EvolutionUiBrowser.fixture.tsx --bundle --platform=browser --format=iife --define:process.env.NODE_ENV='"production"' --outfile="$D/fixture.js"
+          printf '%s\n' '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"></head><body><div id="app"></div><script src="fixture.js"></script></body></html>' > "$D/index.html"
+          CHROME=$(command -v google-chrome || command -v chromium)
+          timeout 60 "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --disable-background-networking --disable-sync --no-first-run --no-default-browser-check --user-data-dir="$D/profile" --virtual-time-budget=15000 --dump-dom "file://$D/index.html" > "$D/result.html" 2>"$D/browser.log"
+          if ! grep -qF 'data-evolution-ui="PASS"' "$D/result.html"; then cat "$D/result.html" "$D/browser.log"; exit 1; fi
+          echo EVOLUTION_BROWSER_FIXTURE_PASS
+          EVOLUTION_ATTENDANCE_ENABLED=false node dist/evolution-attendance-worker.cjs | grep -x evolution_attendance_disabled
+          printf '%s' 'synthetic-only-fixture-value' > "$D/test-key"
+          chmod 600 "$D/test-key"
+          ln -s "$D/test-key" "$D/test-link"
+          if EVOLUTION_ATTENDANCE_ENABLED=true EVOLUTION_GEMINI_SECRET_FILE="$D/test-link" node dist/evolution-attendance-worker.cjs; then exit 1; fi
+          echo EVOLUTION_WORKER_SECRET_SYMLINK_REJECTED
       - name: T13 upload quantitative source coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -237,8 +254,14 @@ jobs:
           # Keep new T13 recovery emulator tests isolated from T10's 8-way
           # transaction contention, so CI cannot manufacture emulator lock timeouts.
           npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
-          npm test -- tests/t13EvolutionFirestoreEmulator.test.ts
+          npm test -- tests/t13EvolutionFirestoreEmulator.test.ts --coverage --coverage.provider=v8 --coverage.include='src/channels/evolution*.ts' --coverage.reporter=json-summary --coverage.reportsDirectory=coverage/evolution-emulator
           npm test -- tests/t13FinancialEmulator.test.ts
+      - name: Evolution upload emulator coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: t13-evolution-emulator-coverage
+          path: coverage/evolution-emulator/coverage-summary.json
+          retention-days: 30
       - name: T13 Firestore candidate rules deny direct client access
         env:
           NODE_ENV: test

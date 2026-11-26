@@ -30,7 +30,7 @@ function discover(dir,prefix){
 }
 function allowed(p){
  if(p.startsWith('src/'))return /\.(?:ts|tsx|css)$/.test(p);
- if(p.startsWith('tests/'))return /^tests\/(?:t13|payment|fiscalHandoff|t07Governance|t04OrderPayments).*\.test\.ts$/.test(p);
+ if(p.startsWith('tests/'))return p==='tests/t13EvolutionUiBrowser.fixture.tsx'||/^tests\/(?:t13|payment|fiscalHandoff|t07Governance|t04OrderPayments).*\.test\.tsx?$/.test(p);
  if(p.startsWith('scripts/'))return /^scripts\/(?:t13|paymentReconciliationWorker|orderPaymentWorkers|fulfillmentWorker|evolutionAttendanceWorker)/.test(p)&&/\.(?:mjs|js|ts|py|sh)$/.test(p);
  if(p.startsWith('cognitive_service/'))return /\.py$/.test(p)||p==='cognitive_service/Dockerfile';
  if(p.startsWith('deploy/'))return /\.(?:yml|yaml|rules|json|sh|conf)$/.test(p);
