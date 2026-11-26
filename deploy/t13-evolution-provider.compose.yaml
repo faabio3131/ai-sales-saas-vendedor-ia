@@ -16,10 +16,17 @@ services:
       - "${EVOLUTION_POSTGRES_PASSWORD_FILE:?Private secret file required}:/run/secrets/evolution-postgres-password:ro"
     networks: [provider-backend]
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U evolution_commercial -d evolution_commercial"]
+      # Initdb starts a temporary socket-only server before the final PostgreSQL process.
+      test:
+        - CMD-SHELL
+        - >-
+          test "$$(cat /proc/1/comm)" = postgres &&
+          result=$$(PGPASSWORD="$$(cat /run/secrets/evolution-postgres-password)" PGCONNECT_TIMEOUT=4 psql -X -h evolution-postgres -U evolution_commercial -d evolution_commercial -v ON_ERROR_STOP=1 -Atc "SELECT 1") &&
+          test "$$result" = 1
       interval: 10s
-      timeout: 5s
-      retries: 12
+      timeout: 8s
+      retries: 18
+      start_period: 180s
   evolution-provider:
     image: "${EVOLUTION_PROVIDER_IMAGE:?Verified candidate image required}"
     pull_policy: never
