@@ -26,7 +26,7 @@ jobs:
           const fs=require('node:fs');
           const source=fs.readFileSync('.github/workflows/blk010-validation.yml','utf8');
           const refs=[...source.matchAll(/^\s+uses:\s+([^\s#]+)/gm)].map(x=>x[1]);
-          if(refs.length!==5||refs.some(r=>!/^[-\w]+\/[-\w]+@[0-9a-f]{40}$/.test(r)))
+          if(refs.length!==6||refs.some(r=>!/^[-\w]+\/[-\w]+@[0-9a-f]{40}$/.test(r)))
             throw new Error('Unpinned or unexpected GitHub Actions references');
           console.log('t13_github_actions_immutable_refs_verified:'+refs.length);
           NODE
