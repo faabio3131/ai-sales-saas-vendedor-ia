@@ -31,7 +31,7 @@ export function createEvolutionAttendanceRuntime(env:NodeJS.ProcessEnv=process.e
   const b=await ref.get();
   if(b.get('tenantId')!==j.tenantId||b.get('unitId')!==j.unitId||b.get('instanceName')!==j.instanceName||
    b.get('status')!=='CONNECTED'||typeof b.get('ownerPhone')!=='string'||b.get('ownerPhone')===j.sender||
-   (lease?(b.get('leaseId')!==lease||b.get('leaseUntil')<=Date.now()):b.get('leaseUntil')>Date.now()))return null;
+   (lease&&(b.get('leaseUntil')>Date.now()||b.get('outboundLeaseId')!==lease||b.get('outboundLeaseUntil')<=Date.now())))return null;
   const c=await vault.load(j.tenantId,j.unitId);
   if(!c||c.expectedOwnerPhone!==b.get('ownerPhone'))return null;
   const claim=await db.collection('evolutionPhoneReservations').doc(attendanceHash(c.expectedOwnerPhone)).get();
@@ -53,7 +53,9 @@ export function createEvolutionAttendanceRuntime(env:NodeJS.ProcessEnv=process.e
    const [profile,cap,customers,knowledge,canUse]=await Promise.all([
     profiles.effective(j.tenantId,j.unitId,new Date().toISOString()),
     caps.resolve(ctx,j.unitId,'CORE_AI_ASSIST'),caps.resolve(ctx,j.unitId,'CORE_CUSTOMERS'),
-    caps.resolve(ctx,j.unitId,'CORE_KNOWLEDGE'),plans.canUse(j.tenantId,'AI_CHAT')]);
+    caps.resolve(ctx,j.unitId,'CORE_KNOWLEDGE'),plans.canUse(j.tenantId,'AI_CHAT').catch((e:unknown)=>{
+     if(['SUBSCRIPTION_INACTIVE','SUBSCRIPTION_OUT_OF_PERIOD'].includes((e as {code?:string})?.code??''))return false;throw e;
+    })]);
    if(!profile||!cap.authorized||!customers.authorized||!knowledge.authorized||!cap.assignmentVersion||!canUse||
     !await binding(j))return null;
    return {profile,capabilityVersion:cap.assignmentVersion};
@@ -67,6 +69,9 @@ export function createEvolutionAttendanceRuntime(env:NodeJS.ProcessEnv=process.e
    if(!c||out.get('status')!=='RESERVED'||out.get('claimId')!==j.claimId||
     out.get('tenantId')!==j.tenantId||out.get('unitId')!==j.unitId||out.get('recipient')!==j.sender||
     out.get('payloadHash')!==attendanceHash(j.id,j.sender,text))throw channelError('EVOLUTION_ATTENDANCE_RESERVATION_INVALID');
+   const fence=await db.collection('merchantEvolutionConnections').doc(channelDocId(j.tenantId,j.unitId)).get();
+   if(fence.get('outboundLeaseId')!==j.claimId||fence.get('outboundLeaseUntil')<=Date.now()||
+    fence.get('status')!=='CONNECTED'||fence.get('leaseUntil')>Date.now())throw channelError('EVOLUTION_ATTENDANCE_RESERVATION_INVALID');
    return client.sendText(c,j.sender,text);
   },
  },randomUUID);

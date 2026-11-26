@@ -3,7 +3,7 @@ import {ensureFirebaseAdminApp} from '../infrastructure/firebaseAdmin';
 import {channelDocId,channelError} from './whatsappConnections';
 import {attendanceHash,attendanceIds,assertAttendanceJob,contactCommand,recentAttendance,
  type AttendanceEvent,type AttendanceScope,type AttendanceJob,type AttendanceStore,
- type AttendanceReply,type AttendanceAuthorization} from './evolutionAttendance';
+ type AttendanceReply,type AttendanceAuthorization,type AttendanceReservation} from './evolutionAttendance';
 import type {Customer} from '../customers/model';
 import type {Conversation,Message} from '../conversations/model';
 import type {Subscription} from '../plans/model';
@@ -37,7 +37,7 @@ function bound(b:FirebaseFirestore.DocumentData|undefined,j:AttendanceJob){
  * No Meta trust proof, memory consent, booking or payment authorization is created. */
 export async function stageEvolutionAttendance(db:Firestore,tx:Transaction,s:AttendanceScope,e:AttendanceEvent,now:number):Promise<void>{
  const ids=attendanceIds(s,e),timestamp=new Date(now).toISOString();
- const job:AttendanceJob={...s,...e,...ids,receivedAt:timestamp,state:'RECEIVED'};
+ const job:AttendanceJob={...s,...e,...ids,receivedAt:timestamp,state:'RECEIVED',nextAttemptAt:now};
  const r=refs(db,job);
  const [customerDoc,conversationDoc,messageDoc,preferenceDoc]=await Promise.all([
   tx.get(r.customer),tx.get(r.conversation),tx.get(r.message),tx.get(r.preference)]);
@@ -66,10 +66,11 @@ export async function stageEvolutionAttendance(db:Firestore,tx:Transaction,s:Att
   const next:Conversation={id:job.conversationId,tenantId:s.tenantId,customerId:job.customerId,
    channel:'WHATSAPP',externalConversationId:job.conversationId,status:'OPEN',
    handlingMode:cmd==='OPT_OUT'?'HUMAN':'AI',lastMessageAt:e.occurredAt,createdAt:timestamp,updatedAt:timestamp};
-  tx.create(r.conversation,next);
+  tx.create(r.conversation,{...next,lastInboundAt:e.occurredAt,lastInboundMessageId:job.messageId});
  }else{
   tx.update(r.conversation,{lastMessageAt:conversation.lastMessageAt>e.occurredAt?conversation.lastMessageAt:e.occurredAt,
-   updatedAt:timestamp,...(cmd==='OPT_OUT'?{handlingMode:'HUMAN'}:{})});
+   updatedAt:timestamp,...(e.occurredAt>=(conversationDoc.get('lastInboundAt')??'')?{lastInboundAt:e.occurredAt,lastInboundMessageId:job.messageId}:{}),
+   ...(cmd==='OPT_OUT'?{handlingMode:'HUMAN'}:{})});
  }
  const message:Message={id:job.messageId,tenantId:s.tenantId,customerId:job.customerId,
   conversationId:job.conversationId,direction:'INBOUND',senderType:'CUSTOMER',type:'TEXT',
@@ -83,59 +84,81 @@ function currentJob(row:FirebaseFirestore.DocumentSnapshot,expected:AttendanceJo
   j.text!==expected.text||j.sender!==expected.sender||j.externalMessageId!==expected.externalMessageId)throw bad();
  assertAttendanceJob(j);return j;
 }
+function superseded(c:FirebaseFirestore.DocumentSnapshot,j:AttendanceJob){
+ const at=c.get('lastInboundAt'),id=c.get('lastInboundMessageId');
+ // Compare only inbound ordering; an outbound timestamp cannot suppress a new message.
+ return typeof at==='string'&&(at>j.occurredAt||at===j.occurredAt&&id!==j.messageId);
+}
 export class FirestoreEvolutionAttendanceStore implements AttendanceStore{
  constructor(private readonly db:Firestore=database()){}
- async pending(limit:number){
-  const rows=await this.db.collection('evolutionInboundInbox').where('state','==','RECEIVED').limit(limit).get();
-  return rows.docs.map(d=>d.data() as AttendanceJob);
+ async pending(limit:number,now:number){
+  const rows=await this.db.collection('evolutionInboundInbox').where('state','==','RECEIVED')
+   .where('nextAttemptAt','<=',now).orderBy('nextAttemptAt','asc').limit(limit).get();
+  const jobs:AttendanceJob[]=[];
+  for(const row of rows.docs){
+   try{const j=row.data() as AttendanceJob;assertAttendanceJob(j);if(row.id!==j.id)throw bad();jobs.push(j);}
+   catch{await this.quarantineInvalid(row.ref,'RECEIVED',now).catch(()=>{});}
+  }
+  return jobs;
  }
  async claim(input:AttendanceJob,claimId:string,now:number){
   const r=refs(this.db,input);
   return this.db.runTransaction(async tx=>{
    const j=currentJob(await tx.get(r.inbox),input);
-   if(j.state!=='RECEIVED')return null;
+   if(j.state!=='RECEIVED'||(j.nextAttemptAt??0)>now)return null;
    const [c,p,customer]=await Promise.all([tx.get(r.conversation),tx.get(r.preference),tx.get(r.customer)]);
    if(c.get('tenantId')!==j.tenantId||c.get('customerId')!==j.customerId||
     customer.get('tenantId')!==j.tenantId||customer.get('phone')!==j.sender)throw bad();
    if(p.exists&&(!sameScope(p.data(),j)||p.get('recipient')!==j.sender))throw bad();
    if(c.get('handlingMode')!=='AI'||c.get('status')!=='OPEN'||customer.get('status')!=='ACTIVE'||
     p.get('preference')==='OPT_OUT'||!recentAttendance(j,now)||contactCommand(j.text)||
-    c.get('lastMessageAt')>j.occurredAt){
+    superseded(c,j)){
     tx.update(r.inbox,{state:'SUPPRESSED',finishedAt:new Date(now).toISOString()});return null;
    }
    const next:AttendanceJob={...j,state:'PROCESSING',claimId,leaseUntil:now+120000};
    tx.update(r.inbox,{state:next.state,claimId,leaseUntil:next.leaseUntil});return next;
   });
  }
- async reserve(input:AttendanceJob,reply:AttendanceReply,authorization:AttendanceAuthorization,now:number){
+ async reserve(input:AttendanceJob,reply:AttendanceReply,authorization:AttendanceAuthorization,now:number):Promise<AttendanceReservation>{
   const r=refs(this.db,input),timestamp=new Date(now).toISOString();
   return this.db.runTransaction(async tx=>{
    const j=currentJob(await tx.get(r.inbox),input);
-   if(j.state!=='PROCESSING'||j.claimId!==input.claimId||(j.leaseUntil??0)<=now)return false;
+   if(j.state!=='PROCESSING'||j.claimId!==input.claimId||(j.leaseUntil??0)<=now)return 'STALE';
    const [b,m,c,p,customer,o,profile,cap,sub]=await Promise.all([
     tx.get(r.binding),tx.get(r.meta),tx.get(r.conversation),tx.get(r.preference),
     tx.get(r.customer),tx.get(r.outbox),tx.get(r.profile),tx.get(r.capabilities),tx.get(r.subscription)]);
    if(o.exists)throw bad();
-   if(!bound(b.data(),j)||b.get('leaseUntil')>now||m.get('status')==='ACTIVE'||
+   if(!bound(b.data(),j)||m.get('status')==='ACTIVE'||
     c.get('tenantId')!==j.tenantId||c.get('customerId')!==j.customerId||c.get('handlingMode')!=='AI'||
-    c.get('status')!=='OPEN'||c.get('lastMessageAt')>j.occurredAt||customer.get('tenantId')!==j.tenantId||
+    c.get('status')!=='OPEN'||superseded(c,j)||customer.get('tenantId')!==j.tenantId||
     customer.get('phone')!==j.sender||customer.get('status')!=='ACTIVE'||
     p.exists&&(!sameScope(p.data(),j)||p.get('recipient')!==j.sender||p.get('preference')==='OPT_OUT')||
     !recentAttendance(j,now)||!sameScope(profile.data(),j)||!sameScope(cap.data(),j)||
     profile.get('latestVersion')!==authorization.profile.version||cap.get('latestVersion')!==authorization.capabilityVersion||
-    reply.profileVersion!==authorization.profile.version)return false;
+    reply.profileVersion!==authorization.profile.version)return 'SUPPRESSED';
    const plan=sub.data() as Subscription|undefined;
    if(!plan||plan.tenantId!==j.tenantId||plan.status!=='ACTIVE'||
     !(Date.parse(plan.periodStart)<=now&&Date.parse(plan.periodEnd)>now)||
     !['BASIC','STANDARD','PRO','PREMIUM'].includes(plan.planCode)||
-    !getPlanDefinition(plan.planCode).features.includes('AI_CHAT'))return false;
-   // Serialize outbound with disconnect/re-pair and competing sends.
-   tx.update(r.binding,{leaseId:j.claimId,leaseUntil:now+60000,updatedAt:timestamp});
+    !getPlanDefinition(plan.planCode).features.includes('AI_CHAT'))return 'SUPPRESSED';
+   if(b.get('leaseUntil')>now||b.get('outboundLeaseId'))return 'DEFERRED';
+   // Separate outbound fencing from lifecycle: inbound can proceed during a send.
+   // Do not acquire another send until even an expired reservation is settled.
+   tx.update(r.binding,{outboundLeaseId:j.claimId,outboundLeaseUntil:now+60000,updatedAt:timestamp});
    tx.create(r.outbox,{tenantId:j.tenantId,unitId:j.unitId,jobId:j.id,claimId:j.claimId,
     conversationId:j.conversationId,customerId:j.customerId,recipient:j.sender,
     payloadHash:attendanceHash(j.id,j.sender,reply.text),text:reply.text,source:reply.source,
     profileVersion:reply.profileVersion,status:'RESERVED',createdAt:timestamp});
-   tx.update(r.inbox,{state:'RESERVED',leaseUntil:now+60000});return true;
+   tx.update(r.inbox,{state:'RESERVED',leaseUntil:now+60000});return 'RESERVED';
+  });
+ }
+ async defer(input:AttendanceJob,now:number){
+  const r=refs(this.db,input);
+  await this.db.runTransaction(async tx=>{
+   const j=currentJob(await tx.get(r.inbox),input);
+   if(j.state!=='PROCESSING'||j.claimId!==input.claimId)return;
+   const out=await tx.get(r.outbox);if(out.exists)throw bad();
+   tx.update(r.inbox,{state:'RECEIVED',claimId:'',leaseUntil:0,nextAttemptAt:now+3000});
   });
  }
  async finish(input:AttendanceJob,state:'SENT'|'UNKNOWN'|'HANDOFF'|'SUPPRESSED',now:number,externalId?:string){
@@ -156,7 +179,8 @@ export class FirestoreEvolutionAttendanceStore implements AttendanceStore{
      tx.create(this.db.collection('messages').doc(id),msg);
     }
     tx.update(r.outbox,{status:state,updatedAt:timestamp,...(externalId?{externalMessageId:externalId}:{})});
-    if(bound(b.data(),j)&&b.get('leaseId')===j.claimId)tx.update(r.binding,{leaseId:'',leaseUntil:0,updatedAt:timestamp});
+    if(sameScope(b.data(),j)&&b.get('instanceName')===j.instanceName&&b.get('outboundLeaseId')===j.claimId)
+     tx.update(r.binding,{outboundLeaseId:'',outboundLeaseUntil:0,updatedAt:timestamp});
    }else if(state==='SENT'||state==='UNKNOWN'||out.exists)throw bad();
    if(c.get('tenantId')===j.tenantId&&c.get('customerId')===j.customerId){
     if((state==='HANDOFF'||state==='UNKNOWN')&&c.get('handlingMode')==='AI')tx.update(r.conversation,{handlingMode:'HANDOFF',updatedAt:timestamp});
@@ -165,14 +189,31 @@ export class FirestoreEvolutionAttendanceStore implements AttendanceStore{
    tx.update(r.inbox,{state,finishedAt:timestamp,leaseUntil:0});
   });
  }
+ private async quarantineInvalid(ref:FirebaseFirestore.DocumentReference,state:string,now:number){
+  await this.db.runTransaction(async tx=>{
+   const row=await tx.get(ref),j=row.data() as AttendanceJob|undefined;
+   if(!j||j.state!==state)return;
+   if(state!=='RECEIVED'&&(typeof j.leaseUntil!=='number'||j.leaseUntil>now))return;
+   let invalid=false;
+   try{assertAttendanceJob(j);if(row.id!==j.id)invalid=true;}catch{invalid=true;}
+   // No tenant-derived writes from a malformed job; only quarantine its own row.
+   if(invalid)tx.update(ref,{state:'QUARANTINED',quarantinedAt:new Date(now).toISOString(),quarantineReason:'INVALID_JOB_IDENTITY'});
+  });
+ }
  async recover(now:number,limit:number){
   let count=0;
   for(const state of ['PROCESSING','RESERVED'] as const){
-   const rows=await this.db.collection('evolutionInboundInbox').where('state','==',state).limit(limit).get();
+   const rows=await this.db.collection('evolutionInboundInbox').where('state','==',state)
+    .where('leaseUntil','<=',now).orderBy('leaseUntil','asc').limit(limit).get();
    for(const row of rows.docs){
     const j=row.data() as AttendanceJob;
-    if((j.leaseUntil??Infinity)<=now){assertAttendanceJob(j);
-     try{await this.finish(j,state==='RESERVED'?'UNKNOWN':'HANDOFF',now);count++;}catch{/* raced settlement */}}
+    try{assertAttendanceJob(j);if(row.id!==j.id)throw bad();}
+    catch{await this.quarantineInvalid(row.ref,state,now).catch(()=>{});continue;}
+    try{
+     if(state==='PROCESSING')await this.defer(j,now); // no outbound was reserved
+     else await this.finish(j,'UNKNOWN',now); // never retry an uncertain send
+     count++;
+    }catch{/* raced settlement or inconsistency: retain evidence */}
    }
   }
   return count;

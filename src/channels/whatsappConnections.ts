@@ -50,7 +50,8 @@ export class FirestoreWhatsAppConnectionStore implements WhatsAppConnectionStore
    const prev=await tx.get(ref),reservation=await tx.get(phoneRef);
    if(next.status==='ACTIVE'){
     const evo=await tx.get(db().collection('merchantEvolutionConnections').doc(channelDocId(next.tenantId,next.unitId)));
-    if(evo.exists&&(evo.get('status')==='CONNECTED'||evo.get('status')==='PAIRING'||evo.get('leaseUntil')>Date.now()))
+    if(evo.exists&&(evo.get('tenantId')!==next.tenantId||evo.get('unitId')!==next.unitId||
+     evo.get('status')!=='DISCONNECTED'||evo.get('leaseUntil')>Date.now()||evo.get('outboundLeaseId')))
      throw channelError('CHANNEL_EVOLUTION_ACTIVE_CONFLICT','CONFLICT');
    }
    const data=prev.data() as WhatsAppConnection|undefined;

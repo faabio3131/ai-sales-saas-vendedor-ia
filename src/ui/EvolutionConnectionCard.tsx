@@ -1,8 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {QrCode} from 'lucide-react';
-type Status='DISABLED'|'NOT_PROVISIONED'|'DISCONNECTED'|'PAIRING'|'CONNECTED';
+type Status='DISABLED'|'NOT_PROVISIONED'|'DISCONNECTED'|'PAIRING'|'CONNECTED'|'UNKNOWN';
 type Overview={status:Status;connected:boolean;qrCode?:string;expiresInSeconds?:number;commercialEnabled:false};
-const labels:Record<Status,string>={DISABLED:'Homologação pendente',NOT_PROVISIONED:'Aguardando configuração segura',DISCONNECTED:'Desconectado',PAIRING:'Aguardando leitura ou confirmação',CONNECTED:'Sessão conectada'};
+const labels:Record<Status,string>={DISABLED:'Homologação pendente',NOT_PROVISIONED:'Aguardando configuração segura',DISCONNECTED:'Desconectado',PAIRING:'Aguardando leitura ou confirmação',CONNECTED:'Sessão conectada',UNKNOWN:'Estado remoto não confirmado'};
 const messages:Record<string,string>={
  EVOLUTION_OWNER_REQUIRED:'Somente o proprietário pode configurar o WhatsApp.',
  EVOLUTION_UNIT_NOT_CONFIGURED:'Cadastre a empresa e a unidade primeiro.',
@@ -14,6 +14,12 @@ const messages:Record<string,string>={
  EVOLUTION_INSTANCE_NOT_PROVISIONED:'A instância comercial ainda precisa ser provisionada.',
  EVOLUTION_VAULT_DENIED:'A credencial exclusiva ainda não foi liberada.',
  EVOLUTION_WEBHOOK_MISMATCH:'Não foi possível confirmar a configuração segura do webhook.',
+ EVOLUTION_OWNER_UNVERIFIED:'O número conectado não corresponde ao número autorizado da unidade.',
+ EVOLUTION_PHONE_OR_CHANNEL_CONFLICT:'O número ou canal já possui um vínculo incompatível.',
+ EVOLUTION_LEASE_EXPIRED:'A operação expirou. Verifique o estado da conexão.',
+ EVOLUTION_UNREACHABLE:'Evolution temporariamente indisponível. Tente novamente.',
+ EVOLUTION_VAULT_UNAVAILABLE:'O cofre de credenciais está indisponível.',
+ EVOLUTION_VAULT_BINDING_MISMATCH:'A credencial não corresponde a esta unidade.',
  EVOLUTION_LOGOUT_UNCONFIRMED:'O encerramento remoto não foi confirmado. Verifique o estado antes de tentar novamente.',
 };
 export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitId:string}){
@@ -41,7 +47,7 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
    setData(d);
    const seconds=d.status==='PAIRING'&&d.qrCode?.startsWith('data:image/png;base64,')?Math.min(30,d.expiresInSeconds??0):0;
    setRemaining(seconds);setExpires(seconds?Date.now()+seconds*1000:0);
-  }catch(e){if(!ctrl.signal.aborted){setData(null);setError(e instanceof Error?e.message:'Não foi possível consultar a Evolution.');}}
+  }catch(e){if(!ctrl.signal.aborted){setError(e instanceof Error?e.message:'Não foi possível consultar a Evolution.');}}
   finally{if(active.current===ctrl){active.current=null;if(!ctrl.signal.aborted)setBusy(false);}}
  }
  useEffect(()=>{void request('');return ()=>{active.current?.abort();active.current=null;};},[root,tenantId]);
@@ -64,7 +70,7 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
   </div>}
   <div className="mt-3 flex flex-wrap gap-2">
    <button type="button" disabled={busy||!available||data?.connected} onClick={()=>void request('connect')} className="min-h-11 rounded-lg bg-emerald-500 px-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{data?.status==='PAIRING'?'Gerar novo QR Code':'Conectar WhatsApp'}</button>
-   <button type="button" disabled={busy} onClick={()=>void request(available?'confirm':'')} className="min-h-11 rounded-lg border border-slate-600 px-3 text-sm text-white disabled:opacity-50">Verificar conexão</button>
+   <button type="button" disabled={busy} onClick={()=>void request(data?.status==='PAIRING'||data?.status==='UNKNOWN'?'confirm':'')} className="min-h-11 rounded-lg border border-slate-600 px-3 text-sm text-white disabled:opacity-50">Verificar conexão</button>
    {available&&<button type="button" disabled={busy} onClick={()=>{if(window.confirm('Desconectar o WhatsApp desta unidade?'))void request('disconnect');}} className="min-h-11 rounded-lg border border-slate-600 px-3 text-sm text-white disabled:opacity-50">Desconectar</button>}
   </div>
   <p className="mt-3 text-sm text-slate-400">Pareamento não libera atendimento automático, mensagens comerciais nem cobrança.</p>

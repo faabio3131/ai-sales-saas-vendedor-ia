@@ -19,11 +19,11 @@ function setup(){
  const seen=new Set<string>();
  const store:EvolutionStore={
   async acquire(s,leaseId){
-   binding={...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status:'DISCONNECTED',
-    leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()};
+   binding={...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status:binding?.status==='CONNECTED'||binding?.status==='PAIRING'?binding.status:'UNKNOWN',
+    ...(binding?.ownerPhone?{ownerPhone:binding.ownerPhone}:{}),leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()};
   },
   async finish(s,leaseId,status,ownerPhone){if(!binding||binding.tenantId!==s.tenantId||binding.unitId!==s.unitId||binding.leaseId!==leaseId)throw Error('scope or lease');
-   binding={...binding,status,leaseId:'',leaseUntil:0,...(ownerPhone?{ownerPhone}:{})};},
+   binding={...binding,...(status===undefined?{}:{status}),leaseId:'',leaseUntil:0,...(ownerPhone?{ownerPhone}:{})};},
   async get(s){return binding?.tenantId===s.tenantId&&binding.unitId===s.unitId?binding:null;},
   async persist(s,id){const key=evolutionInstance(s.tenantId,s.unitId)+id;if(seen.has(key))return false;seen.add(key);return true;},
  };
@@ -109,6 +109,24 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   await x.service.connect(ctx(),u);
   expect(await x.service.disconnect(ctx(),u)).toMatchObject({connected:false,status:'DISCONNECTED'});
   expect(x.client.logout).toHaveBeenCalledWith(c);
+ });
+ it('preserves connected state on ambiguous logout/confirm and never masks the provider error',async()=>{
+  const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);
+  x.client.logout.mockRejectedValueOnce(Error('logout timeout'));
+  await expect(x.service.disconnect(ctx(),u)).rejects.toThrow('logout timeout');
+  expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'CONNECTED',leaseId:'',leaseUntil:0});
+  x.client.state.mockRejectedValueOnce(Error('state timeout'));
+  await expect(x.service.confirm(ctx(),u)).rejects.toThrow('state timeout');
+  expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'CONNECTED',leaseId:'',leaseUntil:0});
+ });
+ it('drops authenticated status and outgoing echoes before provider readback',async()=>{
+  const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);
+  x.inboundEnabled.mockReturnValue(true);
+  x.client.state.mockClear();x.client.verifyWebhook.mockClear();x.client.ownerPhone.mockClear();
+  expect(await x.service.inbound(t,u,c.webhookToken,{instance:c.instanceName,event:'MESSAGES_UPDATE'})).toEqual({accepted:0,duplicates:0});
+  const echo=payload();echo.data.key.fromMe=true;
+  expect(await x.service.inbound(t,u,c.webhookToken,echo)).toEqual({accepted:0,duplicates:0});
+  expect(x.client.state).not.toHaveBeenCalled();expect(x.client.verifyWebhook).not.toHaveBeenCalled();expect(x.client.ownerPhone).not.toHaveBeenCalled();
  });
  it('rejects forged instance, groups, outgoing messages, old timestamps and unresolved LID',()=>{
   expect(()=>parseEvolutionInbound(payload('wrong'),c.instanceName)).toThrow();

@@ -12,13 +12,13 @@ import {EvolutionV2Client,GoogleEvolutionVault,evolutionInstance,evolutionTokenE
 import {stageEvolutionAttendance} from './evolutionAttendanceStore';
 import {attendanceHash} from './evolutionAttendance';
 
-export type EvolutionStatus='DISABLED'|'NOT_PROVISIONED'|'DISCONNECTED'|'PAIRING'|'CONNECTED';
+export type EvolutionStatus='DISABLED'|'NOT_PROVISIONED'|'DISCONNECTED'|'PAIRING'|'CONNECTED'|'UNKNOWN';
 export type EvolutionOverview={status:EvolutionStatus;connected:boolean;qrCode?:string;expiresInSeconds?:number;commercialEnabled:false};
 type Scope={tenantId:string;unitId:string};
-type Binding=Scope&{instanceName:string;status:EvolutionStatus;leaseId:string;leaseUntil:number;updatedAt:string;ownerPhone?:string};
+type Binding=Scope&{instanceName:string;status:EvolutionStatus;leaseId:string;leaseUntil:number;updatedAt:string;ownerPhone?:string;outboundLeaseId?:string;outboundLeaseUntil?:number};
 export interface EvolutionStore{
  acquire(s:Scope,leaseId:string,requireExclusive?:boolean):Promise<void>;
- finish(s:Scope,leaseId:string,status:EvolutionStatus,ownerPhone?:string):Promise<void>;
+ finish(s:Scope,leaseId:string,status?:EvolutionStatus,ownerPhone?:string):Promise<void>;
  get(s:Scope):Promise<Binding|null>;
  persist(s:Scope,id:string,event:EvolutionInbound):Promise<boolean>;
 }
@@ -33,16 +33,19 @@ export class FirestoreEvolutionStore implements EvolutionStore{
  async acquire(s:Scope,leaseId:string,requireExclusive=true){
   const ref=scopeRef(s);await db().runTransaction(async tx=>{
    const b=(await tx.get(ref)).data() as Binding|undefined;assertBinding(s,b);
-   if(b&&b.leaseUntil>Date.now())throw channelError('EVOLUTION_BUSY','CONFLICT');
+   if(b&&(b.leaseUntil>Date.now()||b.outboundLeaseId))throw channelError('EVOLUTION_BUSY','CONFLICT');
    if(requireExclusive){
     const meta=await tx.get(db().collection('merchantWhatsAppConnections').doc(channelDocId(s.tenantId,s.unitId)));
     if(meta.get('status')==='ACTIVE')throw channelError('EVOLUTION_META_ACTIVE_CONFLICT','CONFLICT');
    }
-   tx.set(ref,{...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status:'DISCONNECTED',
-    leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString(),...(b?.ownerPhone?{ownerPhone:b.ownerPhone}:{})} satisfies Binding);
+   // Preserve confirmed active state. An operation from a closed/new binding can
+   // change the remote session before settlement; UNKNOWN blocks Meta even after a crash.
+   const status:EvolutionStatus=b?.status==='CONNECTED'||b?.status==='PAIRING'?b.status:'UNKNOWN';
+   tx.set(ref,{...b,...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status,
+    leaseId,leaseUntil:Date.now()+120000,updatedAt:new Date().toISOString()} satisfies Binding);
   });
  }
- async finish(s:Scope,leaseId:string,status:EvolutionStatus,ownerPhone?:string){
+ async finish(s:Scope,leaseId:string,status?:EvolutionStatus,ownerPhone?:string){
   const ref=scopeRef(s);await db().runTransaction(async tx=>{
    const b=(await tx.get(ref)).data() as Binding|undefined;assertBinding(s,b);
    if(!b||b.leaseId!==leaseId||b.leaseUntil<=Date.now())throw channelError('EVOLUTION_LEASE_EXPIRED','CONFLICT');
@@ -55,7 +58,7 @@ export class FirestoreEvolutionStore implements EvolutionStore{
      b.ownerPhone&&b.ownerPhone!==ownerPhone||other.get('status')==='ACTIVE')throw channelError('EVOLUTION_PHONE_OR_CHANNEL_CONFLICT','CONFLICT');
     tx.set(phone,{...s,instanceName:b.instanceName,ownerPhone,verifiedAt:new Date().toISOString()});
    }
-   tx.update(ref,{status,leaseId:'',leaseUntil:0,updatedAt:new Date().toISOString(),...(ownerPhone?{ownerPhone}:{})});
+   tx.update(ref,{...(status===undefined?{}:{status}),leaseId:'',leaseUntil:0,updatedAt:new Date().toISOString(),...(ownerPhone?{ownerPhone}:{})});
   });
  }
  async persist(s:Scope,id:string,event:EvolutionInbound){
@@ -126,6 +129,10 @@ export class EvolutionPairingService{
   return s;
  }
  private async credential(s:Scope){return this.deps.vault.load(s.tenantId,s.unitId);}
+ private async releaseAfterFailure(s:Scope,lease:string){
+  // A settlement failure must never erase the original provider failure or unlock Meta.
+  try{await this.deps.store.finish(s,lease);}catch{/* expired/failed lease remains conservative */}
+ }
  async status(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u,false);
   if(!this.deps.pairingEnabled())return overview('DISABLED');
@@ -139,7 +146,7 @@ export class EvolutionPairingService{
    await this.deps.client.verifyWebhook(c,this.deps.callback(s));
    return overview('CONNECTED');
   }
-  return overview(state==='connecting'?'PAIRING':'DISCONNECTED');
+  return overview(state==='connecting'?'PAIRING':binding?.status==='UNKNOWN'?'UNKNOWN':'DISCONNECTED');
  }
  async connect(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u);
@@ -147,14 +154,17 @@ export class EvolutionPairingService{
   if(await this.deps.metaActive(s))throw channelError('EVOLUTION_META_ACTIVE_CONFLICT','CONFLICT');
   const c=await this.credential(s);if(!c)return overview('NOT_PROVISIONED');
   const lease=randomUUID();await this.deps.store.acquire(s,lease);
-  let status:EvolutionStatus='DISCONNECTED',ownerPhone:string|undefined;
   try{
    await this.deps.client.configureWebhook(c,this.deps.callback(s));
    const state=await this.deps.client.state(c);
-   if(state==='open'){ownerPhone=await this.deps.client.ownerPhone(c);status='CONNECTED';return overview(status);}
-   const qrCode=await this.deps.client.qr(c);status='PAIRING';
-   return {...overview(status),qrCode,expiresInSeconds:30};
-  }finally{await this.deps.store.finish(s,lease,status,ownerPhone);}
+   if(state==='open'){
+    const ownerPhone=await this.deps.client.ownerPhone(c);
+    await this.deps.store.finish(s,lease,'CONNECTED',ownerPhone);return overview('CONNECTED');
+   }
+   const qrCode=await this.deps.client.qr(c);
+   await this.deps.store.finish(s,lease,'PAIRING');
+   return {...overview('PAIRING'),qrCode,expiresInSeconds:30};
+  }catch(e){await this.releaseAfterFailure(s,lease);throw e;}
  }
  async confirm(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u);
@@ -162,23 +172,27 @@ export class EvolutionPairingService{
   if(await this.deps.metaActive(s))throw channelError('EVOLUTION_META_ACTIVE_CONFLICT','CONFLICT');
   const c=await this.credential(s);if(!c)return overview('NOT_PROVISIONED');
   const lease=randomUUID();await this.deps.store.acquire(s,lease);
-  let status:EvolutionStatus='DISCONNECTED',ownerPhone:string|undefined;
   try{
    const state=await this.deps.client.state(c);
    if(state==='open'){
-    await this.deps.client.verifyWebhook(c,this.deps.callback(s));ownerPhone=await this.deps.client.ownerPhone(c);status='CONNECTED';
-   }else if(state==='connecting')status='PAIRING';
-   return overview(status);
-  }finally{await this.deps.store.finish(s,lease,status,ownerPhone);}
+    await this.deps.client.verifyWebhook(c,this.deps.callback(s));
+    const ownerPhone=await this.deps.client.ownerPhone(c);
+    await this.deps.store.finish(s,lease,'CONNECTED',ownerPhone);return overview('CONNECTED');
+   }
+   const status=state==='connecting'?'PAIRING':'DISCONNECTED';
+   await this.deps.store.finish(s,lease,status);return overview(status);
+  }catch(e){await this.releaseAfterFailure(s,lease);throw e;}
  }
  async disconnect(ctx:TenantContext|undefined,u:string):Promise<EvolutionOverview>{
   const s=await this.scope(ctx,u,false);
   if(!this.deps.pairingEnabled())return overview('DISABLED');
   const c=await this.credential(s);if(!c)return overview('NOT_PROVISIONED');
   const lease=randomUUID();await this.deps.store.acquire(s,lease,false);
-  let status:EvolutionStatus='DISCONNECTED';
-  try{if(await this.deps.client.state(c)!=='close')await this.deps.client.logout(c);return overview(status);}
-  finally{await this.deps.store.finish(s,lease,status);}
+  try{
+   if(await this.deps.client.state(c)!=='close')await this.deps.client.logout(c);
+   // logout() itself verifies the remote close before returning.
+   await this.deps.store.finish(s,lease,'DISCONNECTED');return overview('DISCONNECTED');
+  }catch(e){await this.releaseAfterFailure(s,lease);throw e;}
  }
  async inbound(t:string,u:string,auth:unknown,body:unknown):Promise<{accepted:number;duplicates:number}>{
   const s={tenantId:t,unitId:u};channelDocId(t,u);
@@ -188,6 +202,10 @@ export class EvolutionPairingService{
   if(!existing)throw channelError('EVOLUTION_SESSION_NOT_VERIFIED');
   const c=await this.credential(s);
   if(!c||!evolutionTokenEqual(auth,c.webhookToken))throw channelError('EVOLUTION_WEBHOOK_UNAUTHORIZED');
+  const events=parseEvolutionInbound(body,c.instanceName);
+  // Authenticate and validate instance before dropping echoes/status events;
+  // no remote readback for events which cannot create an inbound message.
+  if(!events.length)return {accepted:0,duplicates:0};
   if(existing.status!=='CONNECTED'||existing.leaseUntil>Date.now())throw channelError('EVOLUTION_SESSION_BUSY','CONFLICT');
   await this.deps.authorizeUnit(s,true);
   if(await this.deps.metaActive(s))throw channelError('EVOLUTION_META_ACTIVE_CONFLICT');
@@ -196,7 +214,6 @@ export class EvolutionPairingService{
    throw channelError('EVOLUTION_SESSION_BUSY','CONFLICT');
   await this.deps.client.verifyWebhook(c,this.deps.callback(s));
   if(!b.ownerPhone||await this.deps.client.ownerPhone(c)!==b.ownerPhone)throw channelError('EVOLUTION_OWNER_UNVERIFIED');
-  const events=parseEvolutionInbound(body,c.instanceName);
   let accepted=0,duplicates=0;
   for(const e of events){if(await this.deps.store.persist(s,e.externalMessageId,e))accepted++;else duplicates++;}
   return {accepted,duplicates};

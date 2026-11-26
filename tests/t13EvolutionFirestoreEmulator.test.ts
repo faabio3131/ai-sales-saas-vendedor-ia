@@ -45,12 +45,19 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
    db.collection('unitCapabilityAssignments').doc(key).create({...s,latestVersion:1}),
    db.collection('subscriptions').doc(t).create({id:t,tenantId:t,status:'ACTIVE',planCode:'BASIC',periodStart:'2020-01-01T00:00:00Z',periodEnd:'2099-01-01T00:00:00Z',createdAt:at,updatedAt:at})
   ]);
-  expect(await store.reserve(j,{text:'Olá! Como posso ajudar?',source:'GREETING',profileVersion:1},auth,now+20)).toBe(true);
-  expect(await store.reserve(j,{text:'Olá!',source:'GREETING',profileVersion:1},auth,now+21)).toBe(false);
+  expect(await store.reserve(j,{text:'Olá! Como posso ajudar?',source:'GREETING',profileVersion:1},auth,now+20)).toBe('RESERVED');
+  expect(await store.reserve(j,{text:'Olá!',source:'GREETING',profileVersion:1},auth,now+21)).toBe('STALE');
+  const concurrent={...event,sender:'5511988888888',externalMessageId:'fixture_concurrent',occurredAt:new Date(now+22).toISOString()};
+  expect(await inbound.persist(s,concurrent.externalMessageId,concurrent)).toBe(true);
+  const concurrentJob=(await db.collection('evolutionInboundInbox').doc(attendanceIds(s,concurrent).id).get()).data() as AttendanceJob;
+  const claimed=await store.claim(concurrentJob,'claim-concurrent',now+23);expect(claimed).not.toBeNull();
+  expect(await store.reserve(claimed!,{text:'Olá!',source:'GREETING',profileVersion:1},auth,now+24)).toBe('DEFERRED');
+  await store.defer(claimed!,now+25);
+  expect((await db.collection('conversations').doc(concurrentJob.conversationId).get()).get('handlingMode')).toBe('AI');
   await store.finish(j,'SENT',now+30,'provider-out-1');
   expect((await row.get()).get('state')).toBe('SENT');
   expect((await db.collection('evolutionAttendanceOutbox').doc(ids.id).get()).data()).toMatchObject({tenantId:t,status:'SENT',externalMessageId:'provider-out-1'});
-  expect((await b.get()).get('leaseId')).toBe('');
+  expect((await b.get()).get('outboundLeaseId')).toBe('');
   expect(await store.claim(job,'claim-c',now+40)).toBeNull();
   const second={...event,externalMessageId:'fixture_2',occurredAt:new Date(now+100).toISOString(),text:'PARAR'};
   expect(await inbound.persist(s,second.externalMessageId,second)).toBe(true);

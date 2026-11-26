@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {attendanceIds,attendanceReply,assertAttendanceJob,contactCommand,EvolutionAttendanceWorker,
- type AttendanceJob,type AttendanceStore,type AttendancePorts,type AttendanceReply} from '../src/channels/evolutionAttendance';
+ type AttendanceJob,type AttendanceStore,type AttendancePorts,type AttendanceReply,type AttendanceReservation} from '../src/channels/evolutionAttendance';
 import type {BusinessProfileRevision} from '../src/business/model';
 import type {AIRouterInterface} from '../src/ai/contracts';
 
@@ -26,7 +26,8 @@ function harness(item=job()){
  const store:AttendanceStore={
   pending:vi.fn(async()=>state==='RECEIVED'?[item]:[]),
   claim:vi.fn(async(j,claimId)=>{if(state!=='RECEIVED')return null;state='PROCESSING';return {...j,state,claimId,leaseUntil:now+120000};}),
-  reserve:vi.fn(async(_j:AttendanceJob,_reply:AttendanceReply)=>{if(state!=='PROCESSING'||reserved)return false;state='RESERVED';reserved=true;return true;}),
+  reserve:vi.fn(async(_j:AttendanceJob,_reply:AttendanceReply):Promise<AttendanceReservation>=>{if(state!=='PROCESSING'||reserved)return 'STALE';state='RESERVED';reserved=true;return 'RESERVED';}),
+  defer:vi.fn(async()=>{state='RECEIVED';}),
   finish:vi.fn(async(_j,next)=>{state=next;}),
   recover:vi.fn(async()=>0),
  };
@@ -94,13 +95,20 @@ describe('Evolution attendance bridge',()=>{
     .mockResolvedValueOnce({profile:{...profile,version:2},capabilityVersion:1});
    if(variant==='unknown')vi.mocked(h.ports.ai.execute).mockResolvedValue({ok:false});
    await h.worker.runOnce();
-   expect(h.state()).toBe('HANDOFF');expect(h.ports.send).not.toHaveBeenCalled();
+   expect(h.state()).toBe(variant==='unknown'?'HANDOFF':variant==='profile-changed'?'RECEIVED':'SUPPRESSED');expect(h.ports.send).not.toHaveBeenCalled();
   }
  });
  it('does not send after expiry or an opt-out',async()=>{
   for(const j of [job('PARAR'),{...job(),occurredAt:new Date(now-90000000).toISOString(),receivedAt:new Date(now-90000000).toISOString()}]){
    const h=harness(j);await h.worker.runOnce();expect(h.state()).toBe('SUPPRESSED');expect(h.ports.send).not.toHaveBeenCalled();
   }
+ });
+ it('defers benign contention and suppresses obsolete jobs without permanent handoff',async()=>{
+  const deferred=harness();vi.mocked(deferred.store.reserve).mockResolvedValueOnce('DEFERRED');
+  expect((await deferred.worker.runOnce()).handoff).toBe(0);expect(deferred.state()).toBe('RECEIVED');
+  expect(deferred.ports.send).not.toHaveBeenCalled();
+  const suppressed=harness();vi.mocked(suppressed.store.reserve).mockResolvedValueOnce('SUPPRESSED');
+  expect((await suppressed.worker.runOnce()).handoff).toBe(0);expect(suppressed.state()).toBe('SUPPRESSED');
  });
  it('retains an UNKNOWN outbox result on ambiguous provider failure and never retries',async()=>{
   const h=harness();vi.mocked(h.ports.send).mockRejectedValue(Error('timeout'));

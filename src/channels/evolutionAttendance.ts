@@ -11,7 +11,7 @@ export interface AttendanceEvent {externalMessageId:string;sender:string;text:st
 export type AttendanceState='RECEIVED'|'PROCESSING'|'RESERVED'|'SENT'|'UNKNOWN'|'HANDOFF'|'SUPPRESSED';
 export interface AttendanceJob extends AttendanceScope,AttendanceEvent {
  id:string;instanceName:string;customerId:string;conversationId:string;messageId:string;
- receivedAt:string;state:AttendanceState;claimId?:string;leaseUntil?:number;
+ receivedAt:string;state:AttendanceState;claimId?:string;leaseUntil?:number;nextAttemptAt?:number;
 }
 export interface AttendanceReply {text:string;source:'APPROVED_FACT'|'GREETING'|'HANDOFF';profileVersion:number;}
 export interface AttendanceAuthorization {profile:BusinessProfileRevision;capabilityVersion:number;}
@@ -82,10 +82,12 @@ export async function attendanceReply(j:AttendanceJob,profile:BusinessProfileRev
  }catch{/* Fall back without disclosing private provider errors. */}
  return result(fallback,'HANDOFF');
 }
+export type AttendanceReservation='RESERVED'|'DEFERRED'|'SUPPRESSED'|'STALE';
 export interface AttendanceStore {
- pending(limit:number):Promise<AttendanceJob[]>;
+ pending(limit:number,now:number):Promise<AttendanceJob[]>;
  claim(j:AttendanceJob,claimId:string,now:number):Promise<AttendanceJob|null>;
- reserve(j:AttendanceJob,reply:AttendanceReply,authorization:AttendanceAuthorization,now:number):Promise<boolean>;
+ reserve(j:AttendanceJob,reply:AttendanceReply,authorization:AttendanceAuthorization,now:number):Promise<AttendanceReservation>;
+ defer(j:AttendanceJob,now:number):Promise<void>;
  finish(j:AttendanceJob,state:'SENT'|'UNKNOWN'|'HANDOFF'|'SUPPRESSED',now:number,externalId?:string):Promise<void>;
  recover(now:number,limit:number):Promise<number>;
 }
@@ -102,7 +104,7 @@ export class EvolutionAttendanceWorker {
   const counters={processed:0,sent:0,handoff:0,uncertain:0,recovered:0,failed:0};
   if(!this.ports.enabled())return counters;
   counters.recovered=await this.store.recover(this.now(),limit);
-  for(const item of await this.store.pending(Math.min(25,Math.max(1,limit)))){
+  for(const item of await this.store.pending(Math.min(25,Math.max(1,limit)),this.now())){
    let job:AttendanceJob|null=null,reserved=false;
    try{
     assertAttendanceJob(item);
@@ -113,15 +115,21 @@ export class EvolutionAttendanceWorker {
      await this.store.finish(job,'SUPPRESSED',this.now());continue;
     }
     const auth=await this.ports.authorize(job);
-    if(!auth){await this.store.finish(job,'HANDOFF',this.now());counters.handoff++;continue;}
+    if(!auth){await this.store.finish(job,'SUPPRESSED',this.now());continue;}
     const reply=await attendanceReply(job,auth.profile,this.ports.ai);
     // Never send a generic or speculative response automatically. Human handoff is durable.
     if(reply.source==='HANDOFF'){await this.store.finish(job,'HANDOFF',this.now());counters.handoff++;continue;}
     const fresh=await this.ports.authorize(job);
-    if(!fresh||fresh.profile.version!==auth.profile.version||fresh.capabilityVersion!==auth.capabilityVersion||
-     !recentAttendance(job,this.now())||!await this.store.reserve(job,reply,fresh,this.now())){
-     await this.store.finish(job,'HANDOFF',this.now());counters.handoff++;continue;
+    if(!fresh||!recentAttendance(job,this.now())){
+     await this.store.finish(job,'SUPPRESSED',this.now());continue;
     }
+    if(fresh.profile.version!==auth.profile.version||fresh.capabilityVersion!==auth.capabilityVersion){
+     await this.store.defer(job,this.now());continue;
+    }
+    const decision=await this.store.reserve(job,reply,fresh,this.now());
+    if(decision==='STALE')continue;
+    if(decision==='DEFERRED'){await this.store.defer(job,this.now());continue;}
+    if(decision==='SUPPRESSED'){await this.store.finish(job,'SUPPRESSED',this.now());continue;}
     reserved=true;
     const externalId=await this.ports.send(job,reply.text);
     await this.store.finish(job,'SENT',this.now(),externalId);counters.sent++;
