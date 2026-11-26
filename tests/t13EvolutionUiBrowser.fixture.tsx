@@ -28,52 +28,74 @@ window.fetch=async(input,init)=>{
 };
 const card=()=>document.querySelector<HTMLElement>('article[aria-label="WhatsApp por QR Code"]');
 function check(value:unknown,reason:string):asserts value{if(!value)throw Error(reason);}
+function findButton(label:string){
+ return Array.from(card()?.querySelectorAll<HTMLButtonElement>('button')??[]).find(x=>x.textContent?.trim()===label);
+}
 function button(label:string){
- const b=Array.from(card()?.querySelectorAll<HTMLButtonElement>('button')??[]).find(x=>x.textContent?.trim()===label);
+ const b=findButton(label);
  check(b&&!b.disabled,'button unavailable: '+label);return b;
 }
 const realNow=Date.now.bind(Date);
 async function until(predicate:()=>unknown,reason:string){
  for(let i=0;i<100;i++){if(predicate())return;await new Promise(r=>setTimeout(r,20));}
- throw Error(reason);
+ throw Error(reason+'; status='+card()?.querySelector('[role=status]')?.textContent+'; calls='+JSON.stringify(evoCalls().map(({url,method,tenant})=>({url,method,tenant}))));
 }
 const evoCalls=()=>calls.filter(c=>c.url.startsWith('/api/channels/evolution/'));
+const statusText=()=>card()?.querySelector('[role=status]')?.textContent??'';
+const idle=()=>findButton('Verificar conexão')?.disabled===false&&!statusText().includes('Consultando Evolution...');
 function mount(tenantId:string,role:string){flushSync(()=>root.render(<ProviderConnectionPanel tenantId={tenantId} role={role}/>));}
+// A recorded fetch alone is not proof React committed the busy state. Force
+// the click's synchronous update, assert the actual disabled button, then
+// wait for the matching request and its final committed DOM state.
+async function clickAction(label:string,method:string,suffix:string,tenant='tenant-a'){
+ await until(()=>idle()&&findButton(label)?.disabled===false,'ready for '+label);
+ const before=evoCalls().length;
+ flushSync(()=>button(label).click());
+ const issued=evoCalls();
+ check(issued.length===before+1,'expected exactly one request for '+label);
+ const last=issued.at(-1);
+ check(last?.method===method&&last.url.endsWith(suffix)&&last.tenant===tenant,'wrong request for '+label);
+ check(findButton('Verificar conexão')?.disabled===true,'busy not committed for '+label);
+}
+async function settled(predicate:()=>unknown,reason:string){
+ await until(()=>idle()&&predicate(),reason);
+}
 async function run(){
  mount('tenant-a','STAFF');check(!card(),'staff can see owner card');
- mount('tenant-a','OWNER');await until(()=>card()?.textContent?.includes('Desconectado'),'initial status');
- let n=evoCalls().length;button('Verificar conexão').click();
- await until(()=>evoCalls().length>n&&!buttonBusy(),'read-only verify');
- check(evoCalls().at(-1)?.method==='GET','disconnected verification mutated');
- button('Conectar WhatsApp').click();await until(()=>!!card()?.querySelector('img'),'QR not rendered');
- check(evoCalls().at(-1)?.method==='POST','connect not POST');
- rejectConfirm=true;button('Verificar conexão').click();
- await until(()=>card()?.querySelector('[role=alert]')?.textContent?.includes('número conectado'),'specific owner error missing');
- check(card()?.textContent?.includes('Último estado conhecido'),'last state lost');
+ mount('tenant-a','OWNER');
+ await settled(()=>statusText()==='Desconectado','initial status');
+ await clickAction('Verificar conexão','GET','/main');
+ await settled(()=>statusText()==='Desconectado','read-only verify');
+ await clickAction('Conectar WhatsApp','POST','/main/connect');
+ await settled(()=>!!card()?.querySelector('img'),'QR not rendered');
+ rejectConfirm=true;await clickAction('Verificar conexão','POST','/main/confirm');
+ await settled(()=>card()?.querySelector('[role=alert]')?.textContent?.includes('número conectado'),'specific owner error missing');
+ check(statusText().includes('Último estado conhecido'),'last state lost');
  button('Gerar novo QR Code');button('Desconectar');
- button('Gerar novo QR Code').click();await until(()=>!!card()?.querySelector('img'),'second QR absent');
- Date.now=()=>realNow()+31000;
- await until(()=>!card()?.querySelector('img'),'QR not expired');
- Date.now=realNow;
- button('Verificar conexão').click();
- await until(()=>card()?.textContent?.includes('Sessão conectada'),'confirm did not connect');
- n=evoCalls().length;button('Verificar conexão').click();
- await until(()=>evoCalls().length>n&&!buttonBusy(),'connected GET');
- check(evoCalls().at(-1)?.method==='GET','connected verification mutated');
- hold=true;button('Verificar conexão').click();await until(()=>!!held,'old request missing');
- mount('tenant-b','OWNER');await until(()=>card()?.textContent?.includes('Desconectado'),'new tenant status');
+ await clickAction('Gerar novo QR Code','POST','/main/connect');
+ await settled(()=>!!card()?.querySelector('img'),'second QR absent');
+ try{
+  Date.now=()=>realNow()+31000;
+  await settled(()=>!card()?.querySelector('img'),'QR not expired');
+ }finally{Date.now=realNow;}
+ await clickAction('Verificar conexão','POST','/main/confirm');
+ await settled(()=>statusText()==='Sessão conectada','confirm did not connect');
+ await clickAction('Verificar conexão','GET','/main');
+ await settled(()=>statusText()==='Sessão conectada','connected GET');
+ hold=true;await clickAction('Verificar conexão','GET','/main');await until(()=>!!held,'old request missing');
+ mount('tenant-b','OWNER');
+ await settled(()=>statusText()==='Desconectado'&&evoCalls().at(-1)?.tenant==='tenant-b','new tenant status');
  check(held?.signal?.aborted,'old request not aborted');
  held?.resolve(overview('CONNECTED'));await new Promise(r=>setTimeout(r,100));
- check(card()?.textContent?.includes('Desconectado'),'stale tenant result overwritten');
+ check(idle()&&statusText()==='Desconectado','stale tenant result overwritten');
  const unit=document.querySelector<HTMLInputElement>('section[aria-label="Integrações e credenciais externas"] form input');
  check(unit,'unit input missing');
  const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;check(setter,'native input setter');
- setter.call(unit,'filial');unit.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(r=>setTimeout(r,50));
- const select=Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(b=>b.textContent?.trim()==='Selecionar');check(select,'unit select missing');select.click();
- await until(()=>evoCalls().some(c=>c.tenant==='tenant-b'&&c.url.endsWith('/filial')),'unit change not scoped');
- check(card()?.textContent?.includes('Desconectado'),'unit status wrong');
+ flushSync(()=>{setter.call(unit,'filial');unit.dispatchEvent(new Event('input',{bubbles:true}));});
+ const select=Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(b=>b.textContent?.trim()==='Selecionar');check(select,'unit select missing');
+ flushSync(()=>select.click());
+ await settled(()=>evoCalls().some(c=>c.tenant==='tenant-b'&&c.url.endsWith('/filial'))&&statusText()==='Desconectado','unit change not scoped or status wrong');
 }
-function buttonBusy(){return card()?.textContent?.includes('Consultando Evolution...')===true;}
 run().then(()=>{document.body.dataset.evolutionUi='PASS';}).catch(e=>{
  document.body.dataset.evolutionUi='FAIL';const out=document.createElement('pre');out.id='fixture-error';out.textContent=String(e);document.body.append(out);
 });
