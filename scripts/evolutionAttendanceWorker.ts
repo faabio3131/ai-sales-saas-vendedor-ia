@@ -1,6 +1,13 @@
 import {readFileSync,lstatSync} from 'node:fs';
 import {createEvolutionAttendanceRuntime} from '../src/channels/evolutionAttendanceRuntime';
+import {recoverEvolutionOnly} from '../src/channels/evolutionAttendanceStore';
 async function main(){
+ const args=process.argv.slice(2);
+ if(args.length){
+  if(args.length!==2||args[0]!=='--recover-only')throw Error('EVOLUTION_WORKER_ARGUMENTS_INVALID');
+  const recovered=await recoverEvolutionOnly(args[1]);
+  console.info(JSON.stringify({event:'evolution_recovery_only_completed',recovered}));return;
+ }
  if(process.env.EVOLUTION_ATTENDANCE_ENABLED!=='true'){
   console.info('evolution_attendance_disabled');return;
  }

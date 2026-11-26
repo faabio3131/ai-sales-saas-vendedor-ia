@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {getFirestore} from 'firebase-admin/firestore';
 import {ensureFirebaseAdminApp} from '../src/infrastructure/firebaseAdmin';
 import {FirestoreEvolutionStore} from '../src/channels/evolutionPairing';
-import {FirestoreEvolutionAttendanceStore} from '../src/channels/evolutionAttendanceStore';
+import {FirestoreEvolutionAttendanceStore,recoverEvolutionOnly} from '../src/channels/evolutionAttendanceStore';
 import {attendanceHash,attendanceIds,type AttendanceJob,type AttendanceAuthorization} from '../src/channels/evolutionAttendance';
 import {evolutionInstance} from '../src/channels/evolutionClient';
 import {channelDocId,FirestoreWhatsAppConnectionStore,type WhatsAppConnection} from '../src/channels/whatsappConnections';
@@ -120,5 +120,46 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   expect((await inbox.doc(valid.id).get()).get('state')).toBe('RECEIVED');
   expect((await inbox.doc(valid.id).get()).get('nextAttemptAt')).toBe(now+3000);
   expect((await invalid.get()).get('state')).toBe('QUARANTINED');
+ },60000);
+ it('recovers only expired RESERVED while all traffic flags are off; never creates an outbound message',async()=>{
+  const db=getFirestore(ensureFirebaseAdminApp()),now=Date.now(),at=new Date(now).toISOString();
+  const project='demo-atendevende-t10';
+  const env={...process.env,EVOLUTION_PAIRING_ENABLED:'false',EVOLUTION_INBOUND_ENABLED:'false',
+   EVOLUTION_ATTENDANCE_ENABLED:'false',ATENDEVENDE_PILOT_LIVE_ENABLED:'false',ATENDEVENDE_PILOT_GO_LIVE_APPROVED:'false'};
+  const mk=async(expired:boolean)=>{
+   const s={tenantId:'evo_reserved_'+randomUUID().replace(/-/g,''),unitId:'main'};
+   const event={externalMessageId:'reserved',sender:'5511999999999',text:'Oi',occurredAt:at};
+   const j:AttendanceJob={...s,...event,...attendanceIds(s,event),receivedAt:at,state:'RESERVED',
+    claimId:'claim-'+randomUUID(),leaseUntil:now+(expired?-1000:3600000)};
+   const row=db.collection('evolutionInboundInbox').doc(j.id),out=db.collection('evolutionAttendanceOutbox').doc(j.id),
+    binding=db.collection('merchantEvolutionConnections').doc(channelDocId(s.tenantId,s.unitId)),
+    conv=db.collection('conversations').doc(j.conversationId);
+   await Promise.all([row.create(j),out.create({...s,jobId:j.id,claimId:j.claimId,
+    conversationId:j.conversationId,customerId:j.customerId,recipient:j.sender,text:'Resposta fixture',
+    payloadHash:attendanceHash(j.id,j.sender,'Resposta fixture'),status:'RESERVED',createdAt:at}),
+    binding.create({...s,instanceName:j.instanceName,status:'CONNECTED',leaseId:'',leaseUntil:0,
+     outboundLeaseId:j.claimId,outboundLeaseUntil:j.leaseUntil,updatedAt:at}),
+    conv.create({id:j.conversationId,tenantId:s.tenantId,customerId:j.customerId,handlingMode:'AI',status:'OPEN',lastMessageAt:at})]);
+   return {j,row,out,binding,conv};
+  };
+  const expired=await mk(true),active=await mk(false);
+  await expect(recoverEvolutionOnly('different-project',env,now)).rejects.toMatchObject({code:'EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID'});
+  await expect(recoverEvolutionOnly(project,{...env,EVOLUTION_ATTENDANCE_ENABLED:'true'},now)).rejects.toMatchObject({code:'EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID'});
+  expect((await expired.row.get()).get('state')).toBe('RESERVED');
+  await recoverEvolutionOnly(project,env,now);
+  expect((await expired.row.get()).data()).toMatchObject({state:'UNKNOWN',leaseUntil:0});
+  expect((await expired.out.get()).get('status')).toBe('UNKNOWN');
+  expect((await expired.out.get()).get('externalMessageId')).toBeUndefined();
+  expect((await expired.binding.get()).data()).toMatchObject({outboundLeaseId:'',outboundLeaseUntil:0,status:'CONNECTED'});
+  expect((await expired.conv.get()).get('handlingMode')).toBe('HANDOFF');
+  expect((await active.row.get()).get('state')).toBe('RESERVED');
+  expect((await active.out.get()).get('status')).toBe('RESERVED');
+  expect((await active.binding.get()).get('outboundLeaseId')).toBe(active.j.claimId);
+  const store=new FirestoreEvolutionAttendanceStore(db);
+  expect(await store.claim(expired.j,'no-retry',now+1)).toBeNull();
+  await recoverEvolutionOnly(project,env,now+1);
+  expect((await expired.out.get()).get('status')).toBe('UNKNOWN');
+  expect((await db.collection('messages').where('tenantId','==',expired.j.tenantId).get()).empty).toBe(true);
+  expect((await db.collection('messages').where('tenantId','==',active.j.tenantId).get()).empty).toBe(true);
  },60000);
 });

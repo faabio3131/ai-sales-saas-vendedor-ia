@@ -220,3 +220,20 @@ export class FirestoreEvolutionAttendanceStore implements AttendanceStore{
  }
 }
 function evolutionExternalId(j:AttendanceJob,id:string){return attendanceHash(j.tenantId,j.unitId,'out',id);}
+
+/** Operator-only recovery. Reuse the canonical transactional store, never build
+ * the attendance runtime, read an AI secret or call the provider. The scheduler
+ * must already be stopped; only expired claims are eligible for settlement. */
+export async function recoverEvolutionOnly(expectedProject:string,env:NodeJS.ProcessEnv=process.env,now=Date.now()){
+ const project=env.FIREBASE_PROJECT_ID;
+ const off=['EVOLUTION_PAIRING_ENABLED','EVOLUTION_INBOUND_ENABLED','EVOLUTION_ATTENDANCE_ENABLED',
+  'ATENDEVENDE_PILOT_LIVE_ENABLED','ATENDEVENDE_PILOT_GO_LIVE_APPROVED'];
+ if(!project||! /^[a-z][a-z0-9-]{4,62}$/.test(project)||project!==expectedProject||
+  off.some(flag=>env[flag]!=='false')||
+  (env.NODE_ENV==='test'?(env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:8089'||project!=='demo-atendevende-t10'):
+   (env.NODE_ENV!=='production'||!!env.FIRESTORE_EMULATOR_HOST)))
+  throw channelError('EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID','VALIDATION');
+ const app=ensureFirebaseAdminApp(env);
+ if(app.options.projectId!==project)throw channelError('EVOLUTION_RECOVERY_PROJECT_MISMATCH','VALIDATION');
+ return new FirestoreEvolutionAttendanceStore(getFirestore(app)).recover(now,10);
+}

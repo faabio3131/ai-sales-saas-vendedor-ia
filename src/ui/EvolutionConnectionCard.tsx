@@ -23,6 +23,7 @@ const messages:Record<string,string>={
  EVOLUTION_VAULT_BINDING_MISMATCH:'A credencial não corresponde a esta unidade.',
  EVOLUTION_LOGOUT_UNCONFIRMED:'O encerramento remoto não foi confirmado. Verifique o estado antes de tentar novamente.',
 };
+const genericError='Não foi possível verificar a conexão. Tente novamente.';
 export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitId:string}){
  const [data,setData]=useState<Overview|null>(null);
  const [busy,setBusy]=useState(false);
@@ -39,16 +40,18 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
    const response=await fetch(root+(action?'/'+action:''),{
     method:action?'POST':'GET',credentials:'same-origin',cache:'no-store',
     headers:{'x-tenant-id':tenantId},signal:ctrl.signal});
-   const result=await response.json() as {ok:boolean;data?:Overview;error?:{code:string}};
-   if(!response.ok||!result.ok||!result.data||!(result.data.status in labels)||
-    result.data.connected!==(result.data.status==='CONNECTED')||result.data.commercialEnabled!==false)
-    throw new Error(messages[result.error?.code??'']??'Não foi possível verificar a conexão. Tente novamente.');
+   const result=await response.json().catch(()=>null) as {ok:boolean;data?:Overview;error?:{code:string}}|null;
    if(ctrl.signal.aborted)return;
+   if(!response.ok||result?.ok!==true||!result.data||typeof result.data.status!=='string'||!Object.hasOwn(labels,result.data.status)||
+    result.data.connected!==(result.data.status==='CONNECTED')||result.data.commercialEnabled!==false){
+    const code=result?.error?.code;
+    setError(typeof code==='string'&&Object.hasOwn(messages,code)?messages[code]:genericError);return;
+   }
    const d=result.data;
    setData(d);
    const seconds=d.status==='PAIRING'&&d.qrCode?.startsWith('data:image/png;base64,')?Math.min(30,d.expiresInSeconds??0):0;
    setRemaining(seconds);setExpires(seconds?Date.now()+seconds*1000:0);
-  }catch(e){if(!ctrl.signal.aborted){setError(e instanceof Error?e.message:'Não foi possível consultar a Evolution.');}}
+  }catch{if(!ctrl.signal.aborted)setError(genericError);}
   finally{if(active.current===ctrl){active.current=null;if(!ctrl.signal.aborted)setBusy(false);}}
  }
  useEffect(()=>{void request('');return ()=>{active.current?.abort();active.current=null;};},[root,tenantId]);
