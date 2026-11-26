@@ -46,6 +46,8 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
    if(!response.ok||result?.ok!==true||!result.data||typeof result.data.status!=='string'||!Object.hasOwn(labels,result.data.status)||
     result.data.connected!==(result.data.status==='CONNECTED')||result.data.commercialEnabled!==false){
     const code=result?.error?.code;
+    if(action==='disconnect'&&(code==='EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'||code==='EVOLUTION_LOGOUT_UNCONFIRMED'))
+     setData(old=>old?{status:'UNKNOWN',connected:false,commercialEnabled:false}:old);
     setError(typeof code==='string'&&Object.hasOwn(messages,code)?messages[code]:genericError);return;
    }
    const d=result.data;
@@ -69,6 +71,7 @@ export function EvolutionConnectionCard({tenantId,unitId}:{tenantId:string;unitI
   <p className="mt-2 text-sm text-slate-300">Conecte o número da sua empresa pelo celular. A sessão é exclusiva desta unidade.</p>
   <p className="mt-3 text-sm text-slate-200" role="status">{busy?'Consultando Evolution...':data?(error?'Último estado conhecido: ':'')+labels[data.status]:'Estado não verificado'}</p>
   {error&&<p role="alert" className="mt-2 text-sm text-rose-300">{error}</p>}
+  {data?.status==='UNKNOWN'&&<p className="mt-2 text-sm text-amber-200">A troca de canal permanece bloqueada. Com o atendimento pausado pela operação, reconecte somente o mesmo número autorizado, confirme a sessão e solicite um novo encerramento. Se não for possível, solicite reconciliação segura à operação.</p>}
   {data?.qrCode&&remaining>0&&<div className="mt-3 rounded-lg bg-white p-3">
    <img alt="QR Code temporário para conectar o WhatsApp" src={data.qrCode} className="mx-auto h-48 w-48" />
    <p className="mt-2 text-center text-sm text-slate-950">WhatsApp → Aparelhos conectados → Conectar aparelho. Expira em {remaining}s.</p>

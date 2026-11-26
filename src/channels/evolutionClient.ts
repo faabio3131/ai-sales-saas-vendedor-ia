@@ -143,16 +143,29 @@ export class EvolutionV2Client{
   return evolutionQr(await this.call(c,'GET','/instance/connect'));
  }
  async logout(c:EvolutionCredential):Promise<void>{
-  try{await this.call(c,'DELETE','/instance/logout');}
+  let receipt:Record<string,unknown>;
+  try{receipt=await this.call(c,'DELETE','/instance/logout');}
   catch(e){
-   if(!(e instanceof ApplicationError)||e.code!=='EVOLUTION_LOGOUT_HTTP_400')throw e;
+   if(!(e instanceof ApplicationError))throw e;
+   if(e.code==='EVOLUTION_RESPONSE_INVALID'||e.code==='EVOLUTION_RESPONSE_LIMIT')
+    throw channelError('EVOLUTION_LOGOUT_UNCONFIRMED','PROVIDER');
+   if(e.code!=='EVOLUTION_LOGOUT_HTTP_400')throw e;
    let observed:EvolutionState|undefined;
    // A readback failure, an open session or a foreign scope is NOT a logout.
    try{observed=await this.state(c);}catch{/* preserve rejection; never expose provider body */}
    if(observed==='close')throw channelError('EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED','CONFLICT');
    throw channelError('EVOLUTION_PROVIDER_REJECTED','PROVIDER');
   }
-  if(await this.state(c)!=='close')throw channelError('EVOLUTION_LOGOUT_UNCONFIRMED','PROVIDER');
+  // The audited V4 source emits this receipt only after awaiting logoutInstance.
+  // HTTP 2xx alone, an error envelope, or a close observation is insufficient.
+  const detail=receipt.response;
+  if(receipt.status!=='SUCCESS'||receipt.error!==false||
+   !detail||typeof detail!=='object'||Array.isArray(detail)||
+   (detail as Record<string,unknown>).message!=='Instance logged out')
+   throw channelError('EVOLUTION_LOGOUT_UNCONFIRMED','PROVIDER');
+  let state:EvolutionState;
+  try{state=await this.state(c);}catch{throw channelError('EVOLUTION_LOGOUT_UNCONFIRMED','PROVIDER');}
+  if(state!=='close')throw channelError('EVOLUTION_LOGOUT_UNCONFIRMED','PROVIDER');
  }
  /** No public send route. Caller must enforce contact consent and durable outbox. */
  async sendText(c:EvolutionCredential,recipient:string,text:string):Promise<string>{

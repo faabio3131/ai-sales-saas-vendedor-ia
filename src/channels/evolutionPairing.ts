@@ -205,8 +205,8 @@ export class EvolutionPairingService{
    // logout() requires a successful remote operation plus scoped close readback.
    await this.deps.store.finish(s,lease,'DISCONNECTED');return overview('DISCONNECTED');
   }catch(e){
-   if(e instanceof ApplicationError&&e.code==='EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'){
-    // A close observation after HTTP 400 is ambiguous, not a revocation receipt.
+   if(e instanceof ApplicationError&&['EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED','EVOLUTION_LOGOUT_UNCONFIRMED'].includes(e.code)){
+    // A close observation after HTTP 400 or an incomplete receipt is ambiguous.
     // Keep ownerPhone/reservation and Meta exclusion; only settle the operation lease.
     try{await this.deps.store.finish(s,lease,'UNKNOWN');}
     catch{await this.releaseAfterFailure(s,lease);}

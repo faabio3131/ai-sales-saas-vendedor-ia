@@ -104,6 +104,17 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
    await expect(api.logout(c)).rejects.toMatchObject({code:status===404?'EVOLUTION_INSTANCE_NOT_PROVISIONED':'EVOLUTION_PROVIDER_REJECTED'});
    expect(mock.mock.calls).toHaveLength(before+1);
   }
+  for(const invalid of [{},{status:'SUCCESS',error:true,response:{message:'Instance logged out'}},
+   {status:'SUCCESS',error:false,response:{message:'other operation'}},{status:'SUCCESS',error:false,response:[]}]){
+   const before=mock.mock.calls.length;
+   mock.mockResolvedValueOnce(response(invalid));
+   await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_UNCONFIRMED'});
+   expect(mock.mock.calls).toHaveLength(before+1);
+  }
+  mock.mockResolvedValueOnce(new Response('<html>not a receipt</html>',{status:200}));
+  await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_UNCONFIRMED'});
+  mock.mockResolvedValueOnce(response({status:'SUCCESS',error:false,response:{message:'Instance logged out'}})).mockRejectedValueOnce(Error('readback unavailable'));
+  await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_UNCONFIRMED'});
   mock.mockResolvedValueOnce(response({status:'SUCCESS',error:false,response:{message:'Instance logged out'}})).mockResolvedValueOnce(scoped('open'));
   await expect(api.logout(c)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_UNCONFIRMED'});
   mock.mockResolvedValueOnce(response({status:'SUCCESS',error:false,response:{message:'Instance logged out'}})).mockResolvedValueOnce(scoped('close'));
@@ -187,6 +198,21 @@ describe('Evolution primary channel — provider contract and isolated QR',()=>{
   expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'UNKNOWN',ownerPhone:c.expectedOwnerPhone,leaseId:'',leaseUntil:0});
   x.client.state.mockResolvedValue('close');
   expect(await x.service.status(ctx(),u)).toMatchObject({status:'UNKNOWN',connected:false});
+  // Reconnect and confirm only the existing authorized number before explicit logout.
+  expect(await x.service.connect(ctx(),u)).toMatchObject({status:'PAIRING'});
+  expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({ownerPhone:c.expectedOwnerPhone});
+  x.client.state.mockResolvedValue('open');
+  expect(await x.service.confirm(ctx(),u)).toMatchObject({status:'CONNECTED'});
+  const falseReceipt=vi.fn<typeof fetch>().mockResolvedValueOnce(response({}));
+  x.client.logout.mockImplementationOnce(async()=>new EvolutionV2Client(origin,falseReceipt).logout(c));
+  await expect(x.service.disconnect(ctx(),u)).rejects.toMatchObject({code:'EVOLUTION_LOGOUT_UNCONFIRMED'});
+  expect(await x.store.get({tenantId:t,unitId:u})).toMatchObject({status:'UNKNOWN',ownerPhone:c.expectedOwnerPhone});
+  const validReceipt=vi.fn<typeof fetch>()
+   .mockResolvedValueOnce(response({status:'SUCCESS',error:false,response:{message:'Instance logged out'}}))
+   .mockResolvedValueOnce(response({instance:{instanceName:c.instanceName,state:'close'}}));
+  x.client.logout.mockImplementationOnce(async()=>new EvolutionV2Client(origin,validReceipt).logout(c));
+  expect(await x.service.disconnect(ctx(),u)).toMatchObject({status:'DISCONNECTED'});
+  expect(await x.store.get({tenantId:t,unitId:u})).not.toHaveProperty('ownerPhone');
  });
  it('drops authenticated status and outgoing echoes before provider readback',async()=>{
   const x=setup();x.client.state.mockResolvedValue('open');await x.service.connect(ctx(),u);

@@ -1,7 +1,7 @@
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import {ProviderConnectionPanel} from '../src/ui/ProviderConnectionPanel';
-type Status='DISCONNECTED'|'PAIRING'|'CONNECTED';
+type Status='DISCONNECTED'|'PAIRING'|'CONNECTED'|'UNKNOWN';
 const root=createRoot(document.getElementById('app')!);
 const qr='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC1sAAAAASUVORK5CYII=';
 const calls:Array<{url:string;method:string;tenant:string;signal?:AbortSignal}>=[];
@@ -32,7 +32,7 @@ window.fetch=async(input,init)=>{
   state='CONNECTED';return overview(state);
  }
  if(url.endsWith('/disconnect')&&method==='POST'){
-  if(rejectLogout){rejectLogout=false;return json({ok:false,error:{code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'}},409);}
+  if(rejectLogout){rejectLogout=false;state='UNKNOWN';return json({ok:false,error:{code:'EVOLUTION_LOGOUT_RECONCILIATION_REQUIRED'}},409);}
   state='DISCONNECTED';return overview(state);
  }
  if(method==='GET')return overview(state);
@@ -111,7 +111,12 @@ async function run(){
   rejectLogout=true;
   await clickAction('Desconectar','POST','/main/disconnect');
   await settled(()=>card()?.querySelector('[role=alert]')?.textContent?.includes('encerramento da sessão não foi comprovado'),'unsafe logout not explained');
-  check(statusText()==='Último estado conhecido: Sessão conectada','ambiguous logout falsely displayed disconnected');
+  check(statusText()==='Último estado conhecido: Estado remoto não confirmado','ambiguous logout falsely displayed disconnected');
+  check(card()?.textContent?.includes('A troca de canal permanece bloqueada'),'reconciliation guidance missing');
+  await clickAction('Conectar WhatsApp','POST','/main/connect');
+  await settled(()=>!!card()?.querySelector('img'),'reconciliation QR missing');
+  await clickAction('Verificar conexão','POST','/main/confirm');
+  await settled(()=>statusText()==='Sessão conectada','reconciliation did not confirm same fixture');
   await clickAction('Desconectar','POST','/main/disconnect');
   await settled(()=>statusText()==='Desconectado','logout did not settle');
   check(dialogCount()===3,'logout confirmation not required');
