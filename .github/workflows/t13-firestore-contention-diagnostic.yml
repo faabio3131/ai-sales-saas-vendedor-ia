@@ -1,0 +1,42 @@
+name: T13 Firestore contention controlled experiment
+on:
+  push:
+    branches: [diagnose/t13-firestore-contention-20261126]
+permissions:
+  contents: read
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        reads: [original, batched]
+        emulator: [fresh, warmed]
+    env:
+      NODE_ENV: test
+      T10_FIRESTORE_EMULATOR: 'true'
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8089
+      FIREBASE_PROJECT_ID: demo-atendevende-t10
+      DIAG_READS: ${{ matrix.reads }}
+      DIAG_EMULATOR: ${{ matrix.emulator }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install immutable dependencies
+        run: npm ci
+      - name: Execute fixed diagnostic repetitions
+        run: bash scripts/diagnostics/t13-firestore-contention-probe.sh
+      - name: Preserve all diagnostic outcomes (including failures)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: contention-${{ matrix.reads }}-${{ matrix.emulator }}
+          path: diagnostic-evidence/
+          if-no-files-found: error
+          retention-days: 30
