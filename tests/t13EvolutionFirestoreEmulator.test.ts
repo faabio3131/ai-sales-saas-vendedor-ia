@@ -13,6 +13,14 @@ import {FirestoreConversationRepository} from '../src/conversations/firestoreRep
 const enabled=process.env.T10_FIRESTORE_EMULATOR==='true';
 if(enabled&&(process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:8089'||
  process.env.FIREBASE_PROJECT_ID!=='demo-atendevende-t10'||process.env.NODE_ENV!=='test'))throw Error('EVOLUTION_EMULATOR_UNSAFE');
+// Drain all contenders on failure, preserving every terminal rejection.
+async function settleConcurrent<T>(phase:string,operations:Promise<T>[]):Promise<T[]>{
+ const settled=await Promise.allSettled(operations);
+ console.log('FIRESTORE_CONCURRENCY '+JSON.stringify({phase,results:settled.map(r=>r.status==='fulfilled'?{status:r.status}:{status:r.status,code:r.reason?.code??'UNKNOWN',message:String(r.reason?.message??'').slice(0,240)})}));
+ const failures=settled.filter((r):r is PromiseRejectedResult=>r.status==='rejected');
+ if(failures.length)throw new AggregateError(failures.map(r=>r.reason),'FIRESTORE_CONCURRENT_PHASE_FAILED:'+phase);
+ return settled.map(r=>(r as PromiseFulfilledResult<T>).value);
+}
 describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outbound reservation',()=>{
  it('persists one conversation and message under concurrent duplicate webhook delivery, reserves one send',async()=>{
   const db=getFirestore(ensureFirebaseAdminApp());
@@ -25,7 +33,7 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   const event={externalMessageId:'fixture_1',sender:'5511999999999',text:'Olá',occurredAt:at};
   if(ownerPhone===event.sender)throw Error('fixture collision');
   const inbound=new FirestoreEvolutionStore(),store=new FirestoreEvolutionAttendanceStore(db);
-  const created=await Promise.all(Array.from({length:3},()=>inbound.persist(s,event.externalMessageId,event)));
+  const created=await settleConcurrent('duplicate-inbound',Array.from({length:3},()=>inbound.persist(s,event.externalMessageId,event)));
   expect(created.filter(Boolean)).toHaveLength(1);
   const ids=attendanceIds(s,event);
   const row=db.collection('evolutionInboundInbox').doc(ids.id);
@@ -35,7 +43,7 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   expect((await db.collection('conversations').doc(ids.conversationId).get()).data()).toMatchObject({tenantId:t,customerId:ids.customerId,handlingMode:'AI'});
   expect((await db.collection('messages').doc(ids.messageId).get()).data()).toMatchObject({tenantId:t,text:event.text,direction:'INBOUND'});
   now=Date.now();
-  const results=await Promise.all([store.claim(job,'claim-a',now+10),store.claim(job,'claim-b',now+10)]);
+  const results=await settleConcurrent('claim',[store.claim(job,'claim-a',now+10),store.claim(job,'claim-b',now+10)]);
   expect(results.filter(Boolean)).toHaveLength(1);
   const j=results.find(x=>x!==null)!;
   const profile:BusinessProfileRevision={...s,version:1,effectiveFrom:at,createdAt:at,createdBy:'fixture',
@@ -132,6 +140,47 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   await meta.write(next,0);
   expect((await meta.get(s.tenantId,s.unitId))?.status).toBe('ACTIVE');
  },60000);
+ it('keeps Meta activation and Evolution acquisition mutually exclusive under a real same-unit race',async()=>{
+  const db=getFirestore(ensureFirebaseAdminApp()),meta=new FirestoreWhatsAppConnectionStore(),evo=new FirestoreEvolutionStore();
+  for(let rep=1;rep<=3;rep++){
+   const s={tenantId:'evo_race_'+randomUUID().replace(/-/g,''),unitId:'main'};
+   const at=new Date().toISOString(),lease='race-'+randomUUID();
+   const phoneNumberId='1'+BigInt('0x'+randomUUID().replace(/-/g,'').slice(0,16)).toString();
+   const initial:WhatsAppConnection={...s,status:'DISABLED',phoneNumberId,wabaId:'123456789',version:1,createdAt:at,updatedAt:at};
+   const ref=db.collection('merchantEvolutionConnections').doc(channelDocId(s.tenantId,s.unitId));
+   await ref.create({...s,instanceName:evolutionInstance(s.tenantId,s.unitId),status:'DISCONNECTED',leaseId:'',leaseUntil:0,updatedAt:at});
+   await meta.write(initial,0);
+   const [m,e]=await Promise.allSettled([meta.write({...initial,status:'ACTIVE',version:2},1),evo.acquire(s,lease,true,'connect')]);
+   console.log('FIRESTORE_CHANNEL_RACE '+JSON.stringify({rep,meta:m.status,evolution:e.status,metaCode:m.status==='rejected'?m.reason?.code:undefined,evolutionCode:e.status==='rejected'?e.reason?.code:undefined}));
+   expect([m,e].filter(r=>r.status==='fulfilled')).toHaveLength(1);
+   const afterMeta=await meta.get(s.tenantId,s.unitId),afterEvo=(await ref.get()).data();
+   expect((await db.collection('whatsappPhoneReservations').doc(phoneNumberId).get()).data()).toMatchObject({...s,phoneNumberId});
+   if(m.status==='fulfilled'){
+    expect(e).toMatchObject({status:'rejected',reason:{code:'EVOLUTION_META_ACTIVE_CONFLICT'}});
+    expect(afterMeta).toMatchObject({status:'ACTIVE',version:2});
+    expect(afterEvo).toMatchObject({status:'DISCONNECTED',leaseId:'',leaseUntil:0});
+   }else{
+    expect(m).toMatchObject({status:'rejected',reason:{code:'CHANNEL_EVOLUTION_ACTIVE_CONFLICT'}});
+    expect(e.status).toBe('fulfilled');
+    expect(afterMeta).toMatchObject({status:'DISABLED',version:1});
+    expect(afterEvo).toMatchObject({status:'UNKNOWN',leaseId:lease});
+   }
+   expect(afterEvo?.ownerPhone).toBeUndefined();
+  }
+ },60000);
+ it('allows simultaneous Meta and Evolution lifecycle changes on distinct units',async()=>{
+  const db=getFirestore(ensureFirebaseAdminApp()),meta=new FirestoreWhatsAppConnectionStore(),evo=new FirestoreEvolutionStore();
+  const tenantId='evo_units_'+randomUUID().replace(/-/g,''),s={tenantId,unitId:'evolution'},m={tenantId,unitId:'meta'};
+  const at=new Date().toISOString(),lease='units-'+randomUUID();
+  const phoneNumberId='1'+BigInt('0x'+randomUUID().replace(/-/g,'').slice(0,16)).toString();
+  const next:WhatsAppConnection={...m,status:'ACTIVE',phoneNumberId,wabaId:'123456789',version:1,createdAt:at,updatedAt:at};
+  await settleConcurrent('distinct-units',[meta.write(next,0).then(()=>true),evo.acquire(s,lease,true,'connect')]);
+  expect(await meta.get(m.tenantId,m.unitId)).toMatchObject({status:'ACTIVE',version:1});
+  expect(await evo.get(s)).toMatchObject({status:'UNKNOWN',leaseId:lease});
+  expect(await meta.get(s.tenantId,s.unitId)).toBeNull();
+  expect(await evo.get(m)).toBeNull();
+  expect((await db.collection('whatsappPhoneReservations').doc(phoneNumberId).get()).data()).toMatchObject({...m,phoneNumberId});
+ },60000);
  it('finds expired leases behind active rows and quarantines only malformed jobs',async()=>{
   const db=getFirestore(ensureFirebaseAdminApp()),now=Date.now(),s={tenantId:'evo_recover_'+randomUUID().replace(/-/g,''),unitId:'main'};
   const inbox=db.collection('evolutionInboundInbox');
@@ -178,7 +227,7 @@ describe.skipIf(!enabled)('Evolution real Firestore atomic inbound, CRM and outb
   }
   await expect(recoverEvolutionOnly(project,{...env,NODE_ENV:'development'},now)).rejects.toMatchObject({code:'EVOLUTION_RECOVERY_SCOPE_OR_FLAGS_INVALID'});
   expect((await expired.row.get()).get('state')).toBe('RESERVED');
-  await Promise.all([recoverEvolutionOnly(project,env,now),recoverEvolutionOnly(project,env,now)]);
+  await settleConcurrent('reserved-recovery',[recoverEvolutionOnly(project,env,now),recoverEvolutionOnly(project,env,now)]);
   for(const x of corrupt){
    expect((await x.row.get()).data()).toMatchObject({state:'QUARANTINED',quarantineReason:'RECOVERY_OUTBOX_CONFLICT'});
    expect((await x.binding.get()).get('outboundLeaseId')).toBe(x.j.claimId);

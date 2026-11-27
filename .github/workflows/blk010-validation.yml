@@ -237,29 +237,24 @@ jobs:
           FIRESTORE_EMULATOR_HOST: 127.0.0.1:8089
           FIREBASE_PROJECT_ID: demo-atendevende-t10
         run: |
+          set -euo pipefail
           curl --fail --location --retry 3 --retry-delay 1 --output /tmp/firestore-emulator.jar https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.19.8.jar
           node scripts/t13FirestoreEmulatorIntegrity.mjs /tmp/firestore-emulator.jar
-          java -jar /tmp/firestore-emulator.jar --host 127.0.0.1 --port 8089 --project_id demo-atendevende-t10 --rules deploy/t10-scheduling.firestore.rules > /tmp/firestore-emulator.log 2>&1 &
-          PID=$!
-          trap 'cat /tmp/firestore-emulator.log; kill "$PID" >/dev/null 2>&1 || true' EXIT
-          READY=0
-          for i in {1..60}; do
-            if curl --silent --fail http://127.0.0.1:8089/ >/dev/null; then READY=1; break; fi
-            if ! kill -0 "$PID" 2>/dev/null; then break; fi
-            sleep 1
-          done
-          test "$READY" = 1
-          # Each suite has its own Vitest process. The T10 8-way transaction stress
-          # still runs in full, but cannot overlap T11/T12 clients on the same emulator.
-          npm test -- tests/t10FirestoreEmulator.test.ts
-          npm test -- tests/t11FirestoreEmulator.test.ts
-          npm test -- tests/t12FirestoreEmulator.test.ts
-          # Keep new T13 recovery emulator tests isolated from T10's 8-way
-          # transaction contention, so CI cannot manufacture emulator lock timeouts.
-          npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
-          npm test -- tests/t13EvolutionFirestoreEmulator.test.ts --coverage --coverage.provider=v8 --coverage.include='src/channels/evolution*.ts' --coverage.reporter=json-summary --coverage.reportsDirectory=coverage/evolution-emulator
+          bash -n scripts/t13FirestoreEmulatorHarness.sh
+          run_fresh() { bash scripts/t13FirestoreEmulatorHarness.sh "$@"; }
+          run_fresh t10 npm test -- tests/t10FirestoreEmulator.test.ts
+          run_fresh t11 npm test -- tests/t11FirestoreEmulator.test.ts
+          run_fresh t12 npm test -- tests/t12FirestoreEmulator.test.ts
+          run_fresh t13-recovery npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
+          run_fresh t13-evolution npm test -- tests/t13EvolutionFirestoreEmulator.test.ts --coverage --coverage.provider=v8 --coverage.include='src/channels/evolution*.ts' --coverage.reporter=json-summary --coverage.reportsDirectory=coverage/evolution-emulator
           node scripts/t13CoverageGate.mjs --evolution-emulator coverage/evolution-emulator/coverage-summary.json
-          npm test -- tests/t13FinancialEmulator.test.ts
+          run_fresh t13-financial npm test -- tests/t13FinancialEmulator.test.ts
+          # Fixed SDK-only control: 3/8 contenders x 3 repetitions x 4 cells.
+          for scope in shared disjoint; do
+            for reads in parallel batched; do
+              run_fresh "sdk-${scope}-${reads}" env DIAG_SCOPE="$scope" DIAG_READS="$reads" timeout 300s node scripts/t13FirestoreSdkContention.mjs
+            done
+          done
       - name: Evolution upload emulator coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
