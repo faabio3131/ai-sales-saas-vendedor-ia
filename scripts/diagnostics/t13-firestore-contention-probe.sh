@@ -10,6 +10,7 @@ test -z "${GOOGLE_APPLICATION_CREDENTIALS:-}"
 case "$DIAG_READS" in original|batched) ;; *) exit 2;; esac
 case "$DIAG_EMULATOR" in fresh|warmed) ;; *) exit 2;; esac
 mkdir -p diagnostic-evidence
+printf 'diagnostic-head=%s\nbase=%s\n' "$GITHUB_SHA" f7c0feebe54f604e7b939b2049f12afabeecf7d7 > diagnostic-evidence/identity.txt
 # Candidate production files, test, lock and rules must match the exact merged base.
 git diff --exit-code f7c0feebe54f604e7b939b2049f12afabeecf7d7 -- src tests package.json package-lock.json deploy
 node scripts/diagnostics/t13-firestore-contention-overlay.mjs "$DIAG_READS"
