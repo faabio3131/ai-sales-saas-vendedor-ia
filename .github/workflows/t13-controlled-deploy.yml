@@ -117,6 +117,6 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > "$TMP/hosts"
           REMOTE="$DEPLOY_USER@$DEPLOY_HOST"
           ssh -i "$TMP/key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" "$REMOTE" 'test -d /opt/atendevendeia-t13-runtime && test -w /opt/atendevendeia-t13-runtime && mkdir -p /opt/atendevendeia-t13-runtime/deploy'
-          scp -i "$TMP/key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" deploy/t13-production.compose.yaml deploy/payment-reconciler.compose.yaml "$REMOTE:/opt/atendevendeia-t13-runtime/deploy/"
+          scp -i "$TMP/key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" deploy/t13-production.compose.yaml deploy/payment-reconciler.compose.yaml deploy/t13-gemini-api.overlay.compose.yaml "$REMOTE:/opt/atendevendeia-t13-runtime/deploy/"
           scp -i "$TMP/key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" deploy/t13-controlled-deploy.sh "$REMOTE:/opt/atendevendeia-t13-runtime/"
           ssh -i "$TMP/key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$TMP/hosts" "$REMOTE" "cd /opt/atendevendeia-t13-runtime && T13_IMAGE_REF='$IMAGE_REF' T13_EXPECTED_SHA='$GITHUB_SHA' T13_EXPECTED_FIREBASE_PROJECT='$FIREBASE_PROJECT' bash ./t13-controlled-deploy.sh"

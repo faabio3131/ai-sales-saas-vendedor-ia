@@ -1,0 +1,62 @@
+# Candidate only: use with the V4 provider compose and verified image.
+# Migrations/generation are a bounded one-shot; no permanent UID0 provider.
+# Not attached to the production API until independent runtime qualification.
+services:
+  evolution-migrate:
+    image: "${EVOLUTION_PROVIDER_IMAGE:?Verified candidate image required}"
+    pull_policy: never
+    user: "0:0"
+    restart: "no"
+    init: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+    cpus: 1.5
+    env_file:
+      - "${EVOLUTION_PROVIDER_ENV_FILE:?Private environment file required}"
+    environment:
+      DOCKER_ENV: "true"
+      LOG_LEVEL: "ERROR"
+      LOG_BAILEYS: "error"
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        test "$$DATABASE_PROVIDER" = postgresql
+        test -n "$$DATABASE_URL"
+        test -n "$$AUTHENTICATION_API_KEY"
+        . ./Docker/scripts/deploy_database.sh
+        test -r /evolution/node_modules/.prisma/client/index.js
+        chown -R 0:1000 /evolution/node_modules/.prisma
+        chmod -R g+rX /evolution/node_modules/.prisma
+        case "$$(stat -c '%u:%g' /evolution/instances)" in
+          0:0) chmod 0700 /evolution/instances; chown 1000:1000 /evolution/instances ;;
+          1000:1000) test "$$(stat -c '%a' /evolution/instances)" = 700 ;;
+          *) exit 1 ;;
+        esac
+        echo EVOLUTION_MIGRATIONS_AND_CLIENT_READY
+    volumes:
+      - evolution_prisma_client:/evolution/node_modules/.prisma
+      - evolution_instances:/evolution/instances
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+    networks: [provider-backend]
+  evolution-provider:
+    user: "1000:1000"
+    read_only: true
+    entrypoint: ["node", "dist/main.js"]
+    environment:
+      DOCKER_ENV: "true"
+      HOME: /tmp
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - evolution_prisma_client:/evolution/node_modules/.prisma:ro
+    depends_on:
+      evolution-migrate:
+        condition: service_completed_successfully
+volumes:
+  evolution_prisma_client:
