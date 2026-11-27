@@ -1,0 +1,99 @@
+name: T13 Firestore version qualification (diagnostic only)
+on:
+  push:
+    branches: [diagnose/t13-firestore-version-qualification-20261126]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.19.8', '1.21.0']
+        repetition: [1, 2, 3]
+    env:
+      NODE_ENV: test
+      T10_FIRESTORE_EMULATOR: 'true'
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8089
+      FIREBASE_PROJECT_ID: demo-atendevende-t10
+      EMULATOR_VERSION: ${{ matrix.version }}
+      REPETITION: ${{ matrix.repetition }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install immutable dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Verify isolated diagnostic scope and pinned artifact
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostic-evidence
+          test "$GITHUB_REF" = refs/heads/diagnose/t13-firestore-version-qualification-20261126
+          git diff --exit-code ffac213fe752b89b0539f2a6445d7985e3102f0c -- src tests package.json package-lock.json deploy scripts/t13FirestoreEmulatorHarness.sh scripts/t13FirestoreSdkContention.mjs scripts/t13FirestoreEmulatorIntegrity.mjs
+          test -z "${GOOGLE_APPLICATION_CREDENTIALS:-}"
+          test -n "${JAVA_HOME_21_X64:-}"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+          case "$EMULATOR_VERSION" in
+            1.19.8) DIGEST=9d43599ed6151199e8d604dc87fac51218e49e5f3a48519b1ae560bbe5e3382d ;;
+            1.21.0) DIGEST=c3d3680a89d946a90a027365ea14c26c6472a162bcf37f099bbb1ebd66d25e8e ;;
+            *) exit 1 ;;
+          esac
+          curl --fail --location --retry 3 --retry-delay 1 --output /tmp/firestore-emulator.jar "https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v$EMULATOR_VERSION.jar"
+          printf '%s  %s\n' "$DIGEST" /tmp/firestore-emulator.jar | sha256sum --check
+          if [[ "$EMULATOR_VERSION" = 1.21.0 ]]; then
+            test "$(stat -c%s /tmp/firestore-emulator.jar)" = 138093843
+            # Runner-only overlay: keep the same harness and integrity logic.
+            sed -i "s/9d43599ed6151199e8d604dc87fac51218e49e5f3a48519b1ae560bbe5e3382d/$DIGEST/" scripts/t13FirestoreEmulatorIntegrity.mjs
+          fi
+          node scripts/t13FirestoreEmulatorIntegrity.mjs /tmp/firestore-emulator.jar
+          node scripts/t13FirestoreEmulatorIntegrity.mjs --self-test
+          printf 'version=%s\nsha256=%s\nrepetition=%s\nbase=ffac213fe752b89b0539f2a6445d7985e3102f0c\n' "$EMULATOR_VERSION" "$DIGEST" "$REPETITION" > diagnostic-evidence/manifest.txt
+      - name: Fixed acceptance and conflict-detection experiment
+        run: |
+          set -euo pipefail
+          java -version 2>&1 | tee diagnostic-evidence/java.log
+          status=0
+          run_fresh() {
+            local label=$1
+            shift
+            if bash scripts/t13FirestoreEmulatorHarness.sh "$label" "$@" 2>&1 | tee "diagnostic-evidence/$label.log"; then
+              echo "$label PASS" | tee -a diagnostic-evidence/results.txt
+            else
+              echo "$label FAIL" | tee -a diagnostic-evidence/results.txt
+              status=1
+            fi
+          }
+          run_fresh t10 npm test -- tests/t10FirestoreEmulator.test.ts
+          run_fresh t11 npm test -- tests/t11FirestoreEmulator.test.ts
+          run_fresh t12 npm test -- tests/t12FirestoreEmulator.test.ts
+          run_fresh t13-recovery npm test -- tests/t13RecoveryFirestoreEmulator.test.ts
+          run_fresh t13-evolution npm test -- tests/t13EvolutionFirestoreEmulator.test.ts --coverage --coverage.provider=v8 --coverage.include='src/channels/evolution*.ts' --coverage.reporter=json-summary --coverage.reportsDirectory=coverage/evolution-emulator
+          if node scripts/t13CoverageGate.mjs --evolution-emulator coverage/evolution-emulator/coverage-summary.json 2>&1 | tee diagnostic-evidence/coverage-gate.log; then
+            echo "coverage PASS" | tee -a diagnostic-evidence/results.txt
+          else
+            echo "coverage FAIL" | tee -a diagnostic-evidence/results.txt
+            status=1
+          fi
+          run_fresh t13-financial npm test -- tests/t13FinancialEmulator.test.ts
+          for scope in shared disjoint; do
+            for reads in parallel batched; do
+              run_fresh "sdk-$scope-$reads" env DIAG_SCOPE="$scope" DIAG_READS="$reads" timeout 300s node scripts/t13FirestoreSdkContention.mjs
+            done
+          done
+          run_fresh sdk-read-write-conflict timeout 90s node scripts/diagnostics/t13-firestore-read-write-conflict.mjs
+          exit "$status"
+      - name: Preserve evidence for each planned repetition
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qualification-${{ matrix.version }}-r${{ matrix.repetition }}
+          path: diagnostic-evidence/
+          if-no-files-found: error
+          retention-days: 30
