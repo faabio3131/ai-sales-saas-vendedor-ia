@@ -1,0 +1,58 @@
+name: T13 Firestore SDK-only contention counterproof
+on:
+  push:
+    branches: [diagnose/t13-firestore-sdk-only-20261126]
+permissions:
+  contents: read
+jobs:
+  sdk-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [shared, disjoint]
+        reads: [parallel, batched]
+    env:
+      NODE_ENV: test
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8089
+      FIREBASE_PROJECT_ID: demo-atendevende-t10
+      DIAG_SCOPE: ${{ matrix.scope }}
+      DIAG_READS: ${{ matrix.reads }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install immutable dependencies
+        run: npm ci
+      - name: SDK-only probe against pinned local emulator
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostic-evidence
+          test "$GITHUB_REF" = refs/heads/diagnose/t13-firestore-sdk-only-20261126
+          git diff --exit-code f7c0feebe54f604e7b939b2049f12afabeecf7d7 -- src tests package.json package-lock.json deploy
+          curl --fail --location --retry 3 --retry-delay 1 --output /tmp/firestore-emulator.jar https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.19.8.jar
+          node scripts/t13FirestoreEmulatorIntegrity.mjs /tmp/firestore-emulator.jar
+          java -jar /tmp/firestore-emulator.jar --host 127.0.0.1 --port 8089 --project_id demo-atendevende-t10 --rules deploy/t10-scheduling.firestore.rules > diagnostic-evidence/emulator.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" >/dev/null 2>&1 || true; wait "$PID" 2>/dev/null || true' EXIT
+          READY=0
+          for i in {1..60}; do
+            if curl --silent --fail http://127.0.0.1:8089/ >/dev/null; then READY=1; break; fi
+            if ! kill -0 "$PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          test "$READY" = 1
+          timeout 300s node scripts/diagnostics/t13-firestore-sdk-only.mjs | tee diagnostic-evidence/probe.log
+      - name: Preserve all evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sdk-only-${{ matrix.scope }}-${{ matrix.reads }}
+          path: diagnostic-evidence/
+          if-no-files-found: error
+          retention-days: 30
