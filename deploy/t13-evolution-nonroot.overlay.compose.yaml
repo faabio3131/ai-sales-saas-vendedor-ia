@@ -47,7 +47,16 @@ services:
   evolution-provider:
     user: "1000:1000"
     read_only: true
-    entrypoint: ["node", "dist/main.js"]
+    # V4 package.json is root-only (0600). Use an exact, private read-only copy.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        test -f /evolution/package.json && test ! -L /evolution/package.json
+        test "$(stat -c '%a %u:%g' /evolution/package.json)" = "400 1000:1000"
+        echo "00560ed4b68ce149ebc65a2cf2633c492b837f6567e3256c255f531e9a1c1f76  /evolution/package.json" | sha256sum -c -
+        exec node dist/main.js
+    command: []
     environment:
       DOCKER_ENV: "true"
       HOME: /tmp
@@ -55,6 +64,12 @@ services:
       - /tmp:rw,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=0700
     volumes:
       - evolution_prisma_client:/evolution/node_modules/.prisma:ro
+      - type: bind
+        source: "${EVOLUTION_PROVIDER_PACKAGE_JSON_FILE:?Verified V4 package manifest required}"
+        target: /evolution/package.json
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       evolution-migrate:
         condition: service_completed_successfully

@@ -126,7 +126,12 @@ jobs:
           export EVOLUTION_POSTGRES_PASSWORD_FILE="$TMP_EVO/pg" EVOLUTION_TLS_CERT_FILE="$TMP_EVO/server.crt" EVOLUTION_TLS_KEY_FILE="$TMP_EVO/server.key"
           export EVOLUTION_CA_FILE="$TMP_EVO/ca.crt" EVOLUTION_GEMINI_KEY_FILE="$TMP_EVO/ai"
           export EVOLUTION_GATEWAY_CONF="$PWD/deploy/t13-evolution-gateway.conf"
-          touch "$EVOLUTION_PROVIDER_ENV_FILE"
+          export EVOLUTION_PROVIDER_PACKAGE_JSON_FILE="$TMP_EVO/package.json"
+          touch "$EVOLUTION_PROVIDER_ENV_FILE" "$EVOLUTION_PROVIDER_PACKAGE_JSON_FILE"
+          bash -n deploy/t13-prepare-evolution-package.sh
+          if env -u EVOLUTION_PROVIDER_PACKAGE_JSON_FILE docker compose -f deploy/t13-evolution-provider.compose.yaml -f deploy/t13-evolution-nonroot.overlay.compose.yaml config --quiet 2>/dev/null; then
+            echo "Missing V4 package manifest must fail configuration" >&2; exit 1
+          fi
           docker compose -f deploy/t13-evolution-provider.compose.yaml config --format json > "$TMP_EVO/provider.json"
           docker compose -f deploy/t13-evolution-provider.compose.yaml -f deploy/t13-evolution-nonroot.overlay.compose.yaml config --format json > "$TMP_EVO/nonroot.json"
           export T13_GEMINI_API_KEY_FILE="$TMP_EVO/ai" T13_GEMINI_MODEL=gemini-fixture
@@ -155,7 +160,16 @@ jobs:
           const nonroot=load('nonroot'),runtime=nonroot.services['evolution-provider'],migration=nonroot.services['evolution-migrate'];
           assert.equal(runtime.user,'1000:1000');
           assert.equal(runtime.read_only,true);
-          assert.deepEqual(runtime.entrypoint,['node','dist/main.js']);
+          assert.deepEqual(runtime.entrypoint.slice(0,2),['/bin/sh','-ec']);
+          assert.ok(runtime.entrypoint[2].includes('exec node dist/main.js'));
+          assert.ok(runtime.entrypoint[2].includes('400 1000:1000'));
+          assert.ok(runtime.entrypoint[2].includes('00560ed4b68ce149ebc65a2cf2633c492b837f6567e3256c255f531e9a1c1f76'));
+          const manifest=runtime.volumes.find(v=>v.target==='/evolution/package.json');
+          assert.equal(manifest.type,'bind');
+          assert.equal(manifest.read_only,true);
+          assert.equal(manifest.bind.create_host_path,false);
+          assert.equal(manifest.source,root+'/package.json');
+          assert.ok(!migration.volumes.some(v=>v.target==='/evolution/package.json'));
           assert.equal(runtime.depends_on['evolution-migrate'].condition,'service_completed_successfully');
           assert.deepEqual(runtime.cap_drop,['ALL']);
           assert.equal(runtime.image,migration.image);
