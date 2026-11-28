@@ -126,8 +126,16 @@ jobs:
           export EVOLUTION_POSTGRES_PASSWORD_FILE="$TMP_EVO/pg" EVOLUTION_TLS_CERT_FILE="$TMP_EVO/server.crt" EVOLUTION_TLS_KEY_FILE="$TMP_EVO/server.key"
           export EVOLUTION_CA_FILE="$TMP_EVO/ca.crt" EVOLUTION_GEMINI_KEY_FILE="$TMP_EVO/ai"
           export EVOLUTION_GATEWAY_CONF="$PWD/deploy/t13-evolution-gateway.conf"
-          touch "$EVOLUTION_PROVIDER_ENV_FILE"
+          export EVOLUTION_PROVIDER_PACKAGE_JSON_FILE="$TMP_EVO/package.json"
+          touch "$EVOLUTION_PROVIDER_ENV_FILE" "$EVOLUTION_PROVIDER_PACKAGE_JSON_FILE"
+          bash -n deploy/t13-prepare-evolution-package.sh
+          if env -u EVOLUTION_PROVIDER_PACKAGE_JSON_FILE docker compose -f deploy/t13-evolution-provider.compose.yaml -f deploy/t13-evolution-nonroot.overlay.compose.yaml config --quiet 2>/dev/null; then
+            echo "Missing V4 package manifest must fail configuration" >&2; exit 1
+          fi
           docker compose -f deploy/t13-evolution-provider.compose.yaml config --format json > "$TMP_EVO/provider.json"
+          docker compose -f deploy/t13-evolution-provider.compose.yaml -f deploy/t13-evolution-nonroot.overlay.compose.yaml config --format json > "$TMP_EVO/nonroot.json"
+          export T13_GEMINI_API_KEY_FILE="$TMP_EVO/ai" T13_GEMINI_MODEL=gemini-fixture
+          docker compose -f deploy/t13-production.compose.yaml -f deploy/t13-gemini-api.overlay.compose.yaml config --format json > "$TMP_EVO/gemini.json"
           docker compose --profile evolution-attendance -f deploy/t13-evolution-attendance.compose.yaml config --format json > "$TMP_EVO/worker.json"
           docker compose -f deploy/t13-production.compose.yaml -f deploy/t13-evolution-api.overlay.compose.yaml config --format json > "$TMP_EVO/api.json"
           node - "$TMP_EVO" <<'NODE'
@@ -149,6 +157,38 @@ jobs:
           assert.equal(privateNet.external,true);
           assert.equal(privateNet.name,'t13-evolution-commercial-private');
           for(const k of ['EVOLUTION_PAIRING_ENABLED','EVOLUTION_INBOUND_ENABLED','EVOLUTION_ATTENDANCE_ENABLED','ATENDEVENDE_PILOT_LIVE_ENABLED','ATENDEVENDE_PILOT_GO_LIVE_APPROVED'])assert.equal(w.environment[k],'false');
+          const nonroot=load('nonroot'),runtime=nonroot.services['evolution-provider'],migration=nonroot.services['evolution-migrate'];
+          assert.equal(runtime.user,'1000:1000');
+          assert.equal(runtime.read_only,true);
+          assert.deepEqual(runtime.entrypoint.slice(0,2),['/bin/sh','-ec']);
+          assert.ok(runtime.entrypoint[2].includes('exec node dist/main.js'));
+          assert.ok(runtime.entrypoint[2].includes('400 1000:1000'));
+          assert.ok(runtime.entrypoint[2].includes('00560ed4b68ce149ebc65a2cf2633c492b837f6567e3256c255f531e9a1c1f76'));
+          const manifest=runtime.volumes.find(v=>v.target==='/evolution/package.json');
+          assert.equal(manifest.type,'bind');
+          assert.equal(manifest.read_only,true);
+          assert.equal(manifest.bind.create_host_path,false);
+          assert.equal(manifest.source,root+'/package.json');
+          assert.ok(!migration.volumes.some(v=>v.target==='/evolution/package.json'));
+          assert.equal(runtime.depends_on['evolution-migrate'].condition,'service_completed_successfully');
+          assert.deepEqual(runtime.cap_drop,['ALL']);
+          assert.equal(runtime.image,migration.image);
+          assert.equal(migration.user,'0:0');
+          assert.equal(migration.restart,'no');
+          assert.deepEqual(migration.cap_drop,['ALL']);
+          assert.deepEqual(migration.cap_add,['CHOWN']);
+          assert.deepEqual(Object.keys(migration.networks),['provider-backend']);
+          assert.equal(nonroot.networks['provider-backend'].internal,true);
+          assert.ok(runtime.volumes.some(v=>v.target==='/evolution/node_modules/.prisma'&&v.read_only));
+          assert.ok(migration.volumes.some(v=>v.target==='/evolution/node_modules/.prisma'&&!v.read_only));
+          for(const service of Object.values(nonroot.services))assert.ok(!service.ports||service.ports.length===0);
+          const g=load('gemini').services['atendevende-api'];
+          assert.equal(g.environment.GEMINI_API_KEY_FILE,'/run/secrets/atendevende/gemini');
+          assert.equal(g.environment.GEMINI_MODEL,'gemini-fixture');
+          assert.ok(!Object.hasOwn(g.environment,'GEMINI_API_KEY'));
+          assert.ok(g.volumes.some(v=>v.target==='/run/secrets/atendevende/gemini'&&v.read_only));
+          for(const k of ['EVOLUTION_PAIRING_ENABLED','EVOLUTION_INBOUND_ENABLED','ATENDEVENDE_PILOT_LIVE_ENABLED','ATENDEVENDE_PILOT_GO_LIVE_APPROVED'])assert.equal(g.environment[k],'false');
+          assert.equal(w.environment.GEMINI_API_KEY_FILE,'/run/evolution/gemini-key');
           const conf=fs.readFileSync('deploy/t13-evolution-gateway.conf','utf8');
           assert.ok(conf.includes('$http_apikey')&&conf.includes('return 401;')&&conf.includes('listen 127.0.0.1:8081;'));
           // Config/contract proof only. Runtime nginx -t, TLS and cross-instance token proof

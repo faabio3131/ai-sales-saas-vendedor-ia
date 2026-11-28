@@ -25,7 +25,10 @@ elif a[:1]==["pull"]: pass
 elif a[:1]==["inspect"]: print(((state.read_text() if state.exists() else image) if mode!="bad-worker-digest" or a[-1]!="payment-reconciler" else image+"bad")+" healthy")
 elif a[:1]==["compose"]:
     assert a[1:3]==["-p","atendevende-t13"]
-    cmd=a[7:]
+    i=3
+    while i<len(a) and a[i]=="-f": i+=2
+    cmd=a[i:]
+    if cmd[:1]==["run"] and mode=="gemini-fail": sys.exit(1)
     if cmd[:2]==["ps","-aq"]:
         if mode=="untracked": print("unknown")
     elif cmd[:2]==["ps","-q"]: print(cmd[-1])
@@ -37,11 +40,11 @@ elif a[:1]==["compose"]:
 else: sys.exit(9)
 '''
 class RolloutTests(unittest.TestCase):
-    def run_case(self,mode="",authority=True,previous=False,project="demo-test",web_project="demo-test",web_key="fixture-web-public"):
+    def run_case(self,mode="",authority=True,previous=False,project="demo-test",web_project="demo-test",web_key="fixture-web-public",gemini=False,gemini_mode=0o600):
         with tempfile.TemporaryDirectory() as t:
             root=pathlib.Path(t); bin_dir=root/"bin"; bin_dir.mkdir()
             deploy=root/"deploy"; deploy.mkdir()
-            for n in ("t13-production.compose.yaml","payment-reconciler.compose.yaml"):
+            for n in ("t13-production.compose.yaml","payment-reconciler.compose.yaml","t13-gemini-api.overlay.compose.yaml"):
                 (deploy/n).touch()
             for n in ("session","firebase"):
                 (root/n).write_text("fixture"); (root/n).chmod(0o600)
@@ -51,6 +54,9 @@ class RolloutTests(unittest.TestCase):
                 "VITE_FIREBASE_PROJECT_ID="+web_project+"\nVITE_FIREBASE_APP_ID=1:123:web:abc\n"
                 "T13_SESSION_SECRET_FILE="+str(root/"session")+"\nPAYMENT_FIREBASE_CREDENTIAL_FILE="+str(root/"firebase")+"\n"
                 "T13_WORKER_AUTHORITY_CONFIRMED="+str(authority).lower()+"\n")
+            if gemini:
+                key=root/"gemini"; key.write_text("synthetic-private-key-fixture-only"); key.chmod(gemini_mode)
+                with envfile.open("a") as f: f.write("T13_GEMINI_API_KEY_FILE="+str(key)+"\nT13_GEMINI_MODEL=gemini-fixture\n")
             envfile.chmod(0o600)
             state=root/".t13-certified-image"
             if previous: state.write_text(OLD+"\n")
@@ -63,6 +69,24 @@ class RolloutTests(unittest.TestCase):
                 "T13_IMAGE_REF":IMAGE,"T13_EXPECTED_SHA":SHA,"T13_EXPECTED_FIREBASE_PROJECT":project,"MOCK_LOG":str(log),"MOCK_MODE":mode,
                 **({"MOCK_PREVIOUS":OLD} if previous else {})},capture_output=True,text=True,timeout=15)
             return proc, state.read_text().strip() if state.exists() else None, log.read_text() if log.exists() else ""
+    def test_gemini_preflight_precedes_service_mutation(self):
+        p,state,log=self.run_case(gemini=True)
+        self.assertEqual(p.returncode,0,p.stderr)
+        self.assertEqual(state,IMAGE)
+        self.assertIn("run --rm --no-deps -T --entrypoint node atendevende-api dist/t13-gemini-smoke.cjs",log)
+        self.assertLess(log.index(" run --rm"),log.index(" stop payment-reconciler"))
+    def test_gemini_failure_does_not_stop_existing_services(self):
+        p,state,log=self.run_case(mode="gemini-fail",previous=True,gemini=True)
+        self.assertNotEqual(p.returncode,0)
+        self.assertEqual(state,OLD)
+        self.assertNotIn(" stop payment-reconciler",log)
+        self.assertNotIn(" up -d",log)
+    def test_gemini_public_file_rejected_before_rollout(self):
+        p,state,log=self.run_case(gemini=True,gemini_mode=0o644)
+        self.assertNotEqual(p.returncode,0)
+        self.assertIsNone(state)
+        self.assertIn("T13_GEMINI_PRIVATE_FILE_UNSAFE",p.stderr)
+        self.assertNotIn(" up -d",log)
     def test_success(self):
         p,state,log=self.run_case()
         self.assertEqual(p.returncode,0,p.stderr)

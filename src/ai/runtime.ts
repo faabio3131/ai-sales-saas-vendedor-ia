@@ -13,6 +13,12 @@ export const GEMINI_RUNTIME_CAPABILITIES: readonly AICapability[] = [
   'GENERAL_REASONING',
 ];
 
+/** Dedicated operational smoke: never route to a fallback and call it Gemini. */
+export function createGeminiSmokeRouter(env:NodeJS.ProcessEnv=process.env):AIRouterInterface {
+  const transport=createGeminiHttpTransportFromEnv(env);
+  return new ResilientAIRouter(transport?[new GeminiAdapter(transport,GEMINI_RUNTIME_CAPABILITIES)]:[],{timeoutMs:15000});
+}
+
 /** Python S2S route first when configured, Gemini second, safe deterministic SalesEngine last. */
 export function createRuntimeAIRouter(
   env:NodeJS.ProcessEnv=process.env,

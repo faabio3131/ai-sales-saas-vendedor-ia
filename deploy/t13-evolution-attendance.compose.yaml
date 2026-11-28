@@ -17,7 +17,7 @@ services:
       PUBLIC_APP_URL: https://app.atendevendeia.com.br
       EVOLUTION_API_ORIGIN: https://evolution-app.atendevendeia.com.br
       NODE_EXTRA_CA_CERTS: /run/evolution/ca.crt
-      EVOLUTION_GEMINI_SECRET_FILE: /run/evolution/gemini-key
+      GEMINI_API_KEY_FILE: /run/evolution/gemini-key
       GEMINI_MODEL: "${EVOLUTION_GEMINI_MODEL:-gemini-3.1-flash-lite}"
       EVOLUTION_PAIRING_ENABLED: "false"
       EVOLUTION_INBOUND_ENABLED: "false"

@@ -1,5 +1,6 @@
 import { GeminiAdapter } from '../ai/geminiAdapter';
-import { createGeminiHttpTransportFromEnv } from '../ai/geminiHttpTransport';
+import { GeminiHttpTransport } from '../ai/geminiHttpTransport';
+import { geminiRuntimeSecret } from '../ai/geminiRuntimeSecret';
 import { GEMINI_RUNTIME_CAPABILITIES } from '../ai/runtime';
 
 export interface AIRealReadinessReport {
@@ -21,21 +22,20 @@ export interface AIRealReadinessDependencies {
 export async function evaluateAIRealReadiness(
   deps: AIRealReadinessDependencies = { env: process.env },
 ): Promise<AIRealReadinessReport> {
-  const apiKeyConfigured = Boolean(deps.env.GEMINI_API_KEY?.trim());
+  let apiKey: string | null = null;
+  try { apiKey = geminiRuntimeSecret(deps.env); } catch { /* invalid mount: fail closed */ }
+  const apiKeyConfigured = Boolean(apiKey);
   const model = deps.env.GEMINI_MODEL?.trim() || null;
   const modelConfigured = Boolean(model);
   let providerReachable = false;
 
-  if (apiKeyConfigured && modelConfigured) {
+  if (apiKey && model) {
     try {
       if (deps.probeProvider) {
         providerReachable = await deps.probeProvider();
       } else {
-        const transport = createGeminiHttpTransportFromEnv(deps.env);
-        if (transport) {
-          const adapter = new GeminiAdapter(transport, GEMINI_RUNTIME_CAPABILITIES);
-          providerReachable = (await adapter.healthCheck()).ok;
-        }
+        const adapter = new GeminiAdapter(new GeminiHttpTransport({apiKey,model}), GEMINI_RUNTIME_CAPABILITIES);
+        providerReachable = (await adapter.healthCheck()).ok;
       }
     } catch {
       providerReachable = false;

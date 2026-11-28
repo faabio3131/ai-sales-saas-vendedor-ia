@@ -1,0 +1,8 @@
+# Optional private Gemini mount. Load only in the governed rollout, never in PR runtime.
+services:
+  atendevende-api:
+    environment:
+      GEMINI_API_KEY_FILE: /run/secrets/atendevende/gemini
+      GEMINI_MODEL: "${T13_GEMINI_MODEL:?Approved Gemini model required}"
+    volumes:
+      - "${T13_GEMINI_API_KEY_FILE:?Private Gemini file required}:/run/secrets/atendevende/gemini:ro"

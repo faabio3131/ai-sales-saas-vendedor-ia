@@ -76,7 +76,20 @@ IMAGE_REVISION=$(docker image inspect --format '{{index .Config.Labels "org.open
 export ATENDEVENDE_IMAGE="$T13_IMAGE_REF"
 WORKER_COMPOSE='deploy/payment-reconciler.compose.yaml'
 [[ -f "$WORKER_COMPOSE" ]] || { echo 'PAYMENT_WORKER_COMPOSE_MISSING' >&2; exit 1; }
-compose(){ docker compose -p atendevende-t13 -f "$COMPOSE" -f "$WORKER_COMPOSE" "$@"; }
+COMPOSE_ARGS=(-p atendevende-t13 -f "$COMPOSE" -f "$WORKER_COMPOSE")
+GEMINI_CONFIGURED=0
+if [[ -n "${T13_GEMINI_API_KEY_FILE:-}" || -n "${T13_GEMINI_MODEL:-}" ]]; then
+ [[ -n "${T13_GEMINI_API_KEY_FILE:-}" && "${T13_GEMINI_MODEL:-}" =~ ^gemini-[a-z0-9][a-z0-9.-]{0,78}$ ]] ||
+  { echo T13_GEMINI_CONFIGURATION_INCOMPLETE >&2; exit 1; }
+ [[ "$T13_GEMINI_API_KEY_FILE" == /* && -f "$T13_GEMINI_API_KEY_FILE" && ! -L "$T13_GEMINI_API_KEY_FILE" ]] ||
+  { echo T13_GEMINI_PRIVATE_FILE_REQUIRED >&2; exit 1; }
+ [[ "$(stat -c '%a' "$T13_GEMINI_API_KEY_FILE")" =~ ^(400|600)$ ]] ||
+  { echo T13_GEMINI_PRIVATE_FILE_UNSAFE >&2; exit 1; }
+ [[ -f deploy/t13-gemini-api.overlay.compose.yaml ]] || { echo T13_GEMINI_OVERLAY_MISSING >&2; exit 1; }
+ COMPOSE_ARGS+=(-f deploy/t13-gemini-api.overlay.compose.yaml)
+ GEMINI_CONFIGURED=1
+fi
+compose(){ docker compose "${COMPOSE_ARGS[@]}" "$@"; }
 PORT="${ATENDEVENDE_PRODUCTION_PORT:-18080}"
 [[ "$PORT" =~ ^[0-9]{2,5}$ ]] && (( 10#$PORT >= 1024 && 10#$PORT <= 65535 )) || { echo INVALID_API_PORT >&2; exit 1; }
 [[ "$PORT" == 18080 ]] || { echo T13_UNEXPECTED_PORT >&2; exit 1; }
@@ -112,6 +125,11 @@ if [[ -n "$PREVIOUS" ]]; then
  ready "$PREVIOUS" || { echo T13_PREVIOUS_RUNTIME_NOT_HEALTHY >&2; exit 1; }
 fi
 compose pull
+# Probe the exact signed image, isolated from the running API/worker.
+# A key/model/provider failure must stop BEFORE stopping any live service.
+if (( GEMINI_CONFIGURED )); then
+ compose run --rm --no-deps -T --entrypoint node atendevende-api dist/t13-gemini-smoke.cjs
+fi
 changed=0
 committed=0
 recover(){

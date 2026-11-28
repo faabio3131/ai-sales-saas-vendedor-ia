@@ -1,4 +1,5 @@
 import { AIRequest } from './contracts';
+import {geminiRuntimeSecret} from './geminiRuntimeSecret';
 import { GeminiTransport } from './geminiAdapter';
 
 export interface GeminiHttpTransportOptions {
@@ -149,7 +150,7 @@ export class GeminiHttpTransport implements GeminiTransport {
 }
 
 export function createGeminiHttpTransportFromEnv(env: NodeJS.ProcessEnv = process.env): GeminiHttpTransport | null {
-  const apiKey = env.GEMINI_API_KEY?.trim() ?? '';
+  const apiKey = geminiRuntimeSecret(env);
   const model = env.GEMINI_MODEL?.trim() ?? '';
   if (!apiKey || !model) return null;
   return new GeminiHttpTransport({ apiKey, model });
