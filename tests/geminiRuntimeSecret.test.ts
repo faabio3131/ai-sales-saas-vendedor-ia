@@ -3,7 +3,9 @@ import {mkdtempSync,writeFileSync,chmodSync,symlinkSync,mkdirSync,rmSync} from '
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {geminiRuntimeSecret} from '../src/ai/geminiRuntimeSecret';
-import {createGeminiHttpTransportFromEnv} from '../src/ai/geminiHttpTransport';
+import {GeminiHttpTransport,createGeminiHttpTransportFromEnv} from '../src/ai/geminiHttpTransport';
+import {GeminiAdapter} from '../src/ai/geminiAdapter';
+import {ResilientAIRouter} from '../src/ai/resilientRouter';
 import {evaluateAIRealReadiness} from '../src/operations/aiRealReadiness';
 import {runGeminiOperationalSmoke} from '../src/operations/geminiOperationalSmoke';
 import type {AIResponse,AIRouterInterface} from '../src/ai/contracts';
@@ -64,7 +66,32 @@ describe('Gemini connectivity cannot be certified by a fallback',()=>{
   const r=router(success),report=await runGeminiOperationalSmoke('fixture',r);
   expect(report).toMatchObject({status:'READY',provider:'gemini',generated:true,expectedMarkerObserved:true,secretsExposed:false});
   expect(report).not.toHaveProperty('content');
-  expect(r.execute).toHaveBeenCalledWith(expect.objectContaining({tenantId:'fixture',maxOutputTokens:32}));
+  expect(r.execute).toHaveBeenCalledWith(expect.objectContaining({tenantId:'fixture',maxOutputTokens:512}));
+ });
+ it('reproduces the real token-budget regression through transport, adapter and router',async()=>{
+  const fetchImpl=vi.fn(async (_url:RequestInfo|URL,init?:RequestInit)=>{
+   const body=JSON.parse(String(init?.body));
+   const enough=body.generation_config?.max_output_tokens===512;
+   return new Response(JSON.stringify({
+    model:'gemini-3.8-flash',status:enough?'completed':'incomplete',
+    steps:[
+     {type:'thought',content:[{type:'text',text:'internal reasoning must not be returned'}]},
+     {type:'model_output',content:[{type:'text',text:enough?'VENDEDOR_IA_AI_OK':'VENDED'}]}
+    ],
+    usage:{total_thought_tokens:enough?119:26,total_output_tokens:enough?9:2}
+   }),{status:200});
+  });
+  const transport=new GeminiHttpTransport({apiKey:FIXTURE,model:'gemini-3.8-flash',fetchImpl});
+  const r=new ResilientAIRouter([new GeminiAdapter(transport,['FAST_CHAT'])]);
+  const insufficient=await r.execute({tenantId:'fixture',capability:'FAST_CHAT',input:'Return exactly: VENDEDOR_IA_AI_OK',maxOutputTokens:32});
+  expect(insufficient).toMatchObject({ok:true,data:{finishReason:'incomplete',content:'VENDED'}});
+  const report=await runGeminiOperationalSmoke('fixture',r);
+  expect(report).toMatchObject({status:'READY',provider:'gemini',model:'gemini-3.8-flash',outputTokens:9,expectedMarkerObserved:true,secretsExposed:false});
+  expect(report).not.toHaveProperty('content');
+  expect(JSON.stringify(report)).not.toContain('internal reasoning');
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  const body=JSON.parse(String(fetchImpl.mock.calls[1][1]?.body));
+  expect(body).toMatchObject({store:false,generation_config:{max_output_tokens:512}});
  });
  it('rejects fallback, wrong marker, incomplete and failed results',async()=>{
   for(const patch of [{provider:'cognitive'},{content:'wrong-marker'},{finishReason:'incomplete'},{model:''}]){
